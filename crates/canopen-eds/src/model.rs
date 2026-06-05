@@ -10,6 +10,7 @@ pub struct EdsFile {
 }
 
 /// EDS main entry (index).
+#[derive(Debug, Clone)]
 pub struct EdsEntry {
     pub index: u16,
     pub parameter_name: String,
@@ -18,6 +19,7 @@ pub struct EdsEntry {
 }
 
 /// EDS sub-entry.
+#[derive(Debug, Clone)]
 pub struct EdsSubEntry {
     pub index: u16,
     pub subindex: u8,

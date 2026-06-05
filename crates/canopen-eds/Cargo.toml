@@ -7,5 +7,4 @@ license.workspace = true
 
 [dependencies]
 opencan-canopen-core = { path = "../canopen-core" }
-ini = { workspace = true }
 thiserror = { workspace = true }
