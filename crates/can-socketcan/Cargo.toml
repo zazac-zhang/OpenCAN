@@ -8,4 +8,7 @@ license.workspace = true
 [dependencies]
 opencan-can-traits = { path = "../can-traits" }
 thiserror = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
 tokio = { workspace = true }
+socketcan = { version = "3.5", features = ["tokio"] }
