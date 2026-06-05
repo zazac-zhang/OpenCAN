@@ -103,6 +103,8 @@ pub struct EntryInfo {
 /// OD value types.
 #[derive(Debug, Clone, PartialEq)]
 pub enum OdValue {
+    /// No value (entry exists but is empty, or SDO returned no data).
+    None,
     Boolean(bool),
     Integer8(i8),
     Integer16(i16),
@@ -121,28 +123,30 @@ pub enum OdValue {
 
 impl OdValue {
     /// Get the data type of this value.
-    pub fn data_type(&self) -> DataType {
+    pub fn data_type(&self) -> Option<DataType> {
         match self {
-            Self::Boolean(_) => DataType::Boolean,
-            Self::Integer8(_) => DataType::Integer8,
-            Self::Integer16(_) => DataType::Integer16,
-            Self::Integer32(_) => DataType::Integer32,
-            Self::Integer64(_) => DataType::Integer64,
-            Self::Unsigned8(_) => DataType::Unsigned8,
-            Self::Unsigned16(_) => DataType::Unsigned16,
-            Self::Unsigned32(_) => DataType::Unsigned32,
-            Self::Unsigned64(_) => DataType::Unsigned64,
-            Self::Real32(_) => DataType::Real32,
-            Self::Real64(_) => DataType::Real64,
-            Self::VisibleString(_) => DataType::VisibleString,
-            Self::OctetString(_) => DataType::OctetString,
-            Self::Domain(_) => DataType::Domain,
+            Self::None => None,
+            Self::Boolean(_) => Some(DataType::Boolean),
+            Self::Integer8(_) => Some(DataType::Integer8),
+            Self::Integer16(_) => Some(DataType::Integer16),
+            Self::Integer32(_) => Some(DataType::Integer32),
+            Self::Integer64(_) => Some(DataType::Integer64),
+            Self::Unsigned8(_) => Some(DataType::Unsigned8),
+            Self::Unsigned16(_) => Some(DataType::Unsigned16),
+            Self::Unsigned32(_) => Some(DataType::Unsigned32),
+            Self::Unsigned64(_) => Some(DataType::Unsigned64),
+            Self::Real32(_) => Some(DataType::Real32),
+            Self::Real64(_) => Some(DataType::Real64),
+            Self::VisibleString(_) => Some(DataType::VisibleString),
+            Self::OctetString(_) => Some(DataType::OctetString),
+            Self::Domain(_) => Some(DataType::Domain),
         }
     }
 
     /// Encode value to bytes (little-endian).
     pub fn to_bytes(&self) -> Vec<u8> {
         match self {
+            Self::None => Vec::new(),
             Self::Boolean(v) => vec![*v as u8],
             Self::Integer8(v) => vec![*v as u8],
             Self::Integer16(v) => v.to_le_bytes().to_vec(),
@@ -230,7 +234,7 @@ impl TryFrom<OdValue> for bool {
             OdValue::Boolean(b) => Ok(b),
             _ => Err(crate::error::OdError::TypeMismatch {
                 expected: DataType::Boolean,
-                actual: v.data_type(),
+                actual: v.data_type().unwrap_or(DataType::Boolean),
             }),
         }
     }
@@ -243,7 +247,7 @@ impl TryFrom<OdValue> for u8 {
             OdValue::Unsigned8(v) => Ok(v),
             _ => Err(crate::error::OdError::TypeMismatch {
                 expected: DataType::Unsigned8,
-                actual: v.data_type(),
+                actual: v.data_type().unwrap_or(DataType::Boolean),
             }),
         }
     }
@@ -256,7 +260,7 @@ impl TryFrom<OdValue> for u16 {
             OdValue::Unsigned16(v) => Ok(v),
             _ => Err(crate::error::OdError::TypeMismatch {
                 expected: DataType::Unsigned16,
-                actual: v.data_type(),
+                actual: v.data_type().unwrap_or(DataType::Boolean),
             }),
         }
     }
@@ -269,7 +273,7 @@ impl TryFrom<OdValue> for u32 {
             OdValue::Unsigned32(v) => Ok(v),
             _ => Err(crate::error::OdError::TypeMismatch {
                 expected: DataType::Unsigned32,
-                actual: v.data_type(),
+                actual: v.data_type().unwrap_or(DataType::Boolean),
             }),
         }
     }
@@ -282,7 +286,7 @@ impl TryFrom<OdValue> for i16 {
             OdValue::Integer16(v) => Ok(v),
             _ => Err(crate::error::OdError::TypeMismatch {
                 expected: DataType::Integer16,
-                actual: v.data_type(),
+                actual: v.data_type().unwrap_or(DataType::Boolean),
             }),
         }
     }
@@ -295,7 +299,7 @@ impl TryFrom<OdValue> for i32 {
             OdValue::Integer32(v) => Ok(v),
             _ => Err(crate::error::OdError::TypeMismatch {
                 expected: DataType::Integer32,
-                actual: v.data_type(),
+                actual: v.data_type().unwrap_or(DataType::Boolean),
             }),
         }
     }
@@ -317,8 +321,7 @@ pub trait ObjectDictionary: Send {
 /// A CanDriverAdapter bridges the two.
 pub trait CanDriver: Send {
     fn send(&mut self, frame: &crate::frame::CanOpenFrame) -> Result<(), crate::error::CanOpenError>;
-    fn recv(&mut self) -> Result<crate::frame::CanOpenFrame, crate::error::CanOpenError>;
-    fn recv_async(&mut self) -> impl std::future::Future<Output = Result<crate::frame::CanOpenFrame, crate::error::CanOpenError>> + Send;
+    fn recv(&mut self) -> impl std::future::Future<Output = Result<crate::frame::CanOpenFrame, crate::error::CanOpenError>> + Send;
 }
 
 #[cfg(test)]
@@ -338,7 +341,7 @@ mod tests {
     #[test]
     fn test_od_value_conversions() {
         let val: OdValue = 42u16.into();
-        assert_eq!(val.data_type(), DataType::Unsigned16);
+        assert_eq!(val.data_type(), Some(DataType::Unsigned16));
 
         let extracted: u16 = val.try_into().unwrap();
         assert_eq!(extracted, 42u16);

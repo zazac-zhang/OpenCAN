@@ -6,9 +6,10 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-opencan-canopen-core = { path = "../canopen-core" }
+opencan-canopen-core = { path = "../canopen-core", features = ["testing"] }
 opencan-can-traits = { path = "../can-traits" }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "time"] }

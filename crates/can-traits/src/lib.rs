@@ -3,39 +3,75 @@
 //! Unified CAN bus trait abstraction for OpenCAN.
 //!
 //! This crate provides:
-//! - [`CanBus`] trait for physical CAN bus I/O
+//! - [`CanBus`] trait for physical CAN bus I/O (trait-object safe)
 //! - [`CanBusFactory`] trait for dynamic backend creation
-//! - [`CanBusDyn`] trait for trait-object based usage in GUI
 //! - CAN frame types (Classic and FD)
 
 pub mod error;
 
-use std::time::Instant;
+use std::future::Future;
 
 /// CAN bus trait — physical layer interface.
 ///
-/// Each hardware backend implements this trait.
-/// For trait-object based usage in GUI, see [`CanBusDyn`].
+/// **Trait-object safe**: all methods can be called via `Box<dyn CanBus>`.
+/// Construction is handled by [`CanBusFactory`], not this trait.
 pub trait CanBus: Send + Sync + 'static {
+    /// Send a CAN frame.
     fn send(&self, frame: &CanFrame) -> Result<(), error::CanError>;
-    fn recv(&self) -> Result<CanFrame, error::CanError>;
-    fn state(&self) -> CanState;
-    fn set_bitrate(&self, bitrate: CanBitrate) -> Result<(), error::CanError>;
-}
 
-/// Dynamic dispatch version of CanBus for GUI layer.
-pub trait CanBusDyn: Send + Sync {
-    fn send(&self, frame: &CanFrame) -> Result<(), error::CanError>;
-    fn recv(&self) -> Result<CanFrame, error::CanError>;
+    /// Receive a CAN frame (async).
+    fn recv(&self) -> impl Future<Output = Result<CanFrame, error::CanError>> + Send;
+
+    /// Get current bus state.
     fn state(&self) -> CanState;
+
+    /// Set bus bitrate (if supported).
     fn set_bitrate(&self, bitrate: CanBitrate) -> Result<(), error::CanError>;
 }
 
 /// Factory for creating CAN bus instances dynamically.
-pub trait CanBusFactory: Send + Sync {
+///
+/// Each hardware backend implements this trait.
+/// GUI uses `Box<dyn CanBusFactory>` to support runtime backend selection.
+pub trait CanBusFactory: Send + Sync + 'static {
+    /// Open a CAN bus channel.
     fn open(&self, channel: &str, config: &CanConfig) -> Result<Box<dyn CanBusDyn>, error::CanError>;
+
+    /// Backend name (e.g. "SocketCAN", "Kvaser", "PCAN").
     fn name(&self) -> &str;
+
+    /// List available channels.
     fn available_channels(&self) -> Vec<String>;
+}
+
+/// Dynamic dispatch version of CanBus.
+///
+/// This is the trait object that GUI layer uses.
+/// Blanket impl provided for all `T: CanBus`.
+pub trait CanBusDyn: Send + Sync {
+    fn send(&self, frame: &CanFrame) -> Result<(), error::CanError>;
+    fn recv(&self) -> std::pin::Pin<Box<dyn Future<Output = Result<CanFrame, error::CanError>> + Send + '_>>;
+    fn state(&self) -> CanState;
+    fn set_bitrate(&self, bitrate: CanBitrate) -> Result<(), error::CanError>;
+}
+
+/// Blanket impl: any `T: CanBus` can be used as `CanBusDyn`.
+impl<T: CanBus> CanBusDyn for T {
+    fn send(&self, frame: &CanFrame) -> Result<(), error::CanError> {
+        CanBus::send(self, frame)
+    }
+
+    fn recv(&self) -> std::pin::Pin<Box<dyn Future<Output = Result<CanFrame, error::CanError>> + Send + '_>> {
+        Box::pin(CanBus::recv(self))
+    }
+
+    fn state(&self) -> CanState {
+        CanBus::state(self)
+    }
+
+    fn set_bitrate(&self, bitrate: CanBitrate) -> Result<(), error::CanError> {
+        CanBus::set_bitrate(self, bitrate)
+    }
 }
 
 /// CAN bus state.
@@ -72,34 +108,42 @@ impl CanFrame {
 
     pub fn data(&self) -> &[u8] {
         match self {
-            Self::Classic(f) => &f.data,
+            Self::Classic(f) => &f.data[..f.len as usize],
             Self::Fd(f) => &f.data,
         }
     }
 
-    pub fn timestamp(&self) -> Option<Instant> {
+    pub fn timestamp_us(&self) -> Option<u64> {
         match self {
-            Self::Classic(f) => f.timestamp,
-            Self::Fd(f) => f.timestamp,
+            Self::Classic(f) => f.timestamp_us,
+            Self::Fd(f) => f.timestamp_us,
         }
     }
 }
 
 /// CAN 2.0 classic frame.
+///
+/// Uses fixed `[u8; 8]` + `len` instead of `Vec<u8>` to avoid heap allocation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClassicFrame {
     pub id: CanId,
-    pub data: Vec<u8>,        // max 8 bytes
-    pub timestamp: Option<Instant>,
+    pub data: [u8; 8],
+    pub len: u8,
+    /// Timestamp in microseconds (from hardware or software clock).
+    /// Format is backend-dependent. None if not available.
+    pub timestamp_us: Option<u64>,
 }
 
 impl ClassicFrame {
-    pub fn new(id: CanId, data: Vec<u8>) -> Self {
-        Self { id, data, timestamp: None }
+    pub fn new(id: CanId, data: &[u8]) -> Self {
+        let len = data.len().min(8) as u8;
+        let mut buf = [0u8; 8];
+        buf[..len as usize].copy_from_slice(&data[..len as usize]);
+        Self { id, data: buf, len, timestamp_us: None }
     }
 
-    pub fn with_timestamp(mut self, ts: Instant) -> Self {
-        self.timestamp = Some(ts);
+    pub fn with_timestamp(mut self, ts_us: u64) -> Self {
+        self.timestamp_us = Some(ts_us);
         self
     }
 }
@@ -108,9 +152,9 @@ impl ClassicFrame {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FdFrame {
     pub id: CanId,
-    pub data: Vec<u8>,        // max 64 bytes
+    pub data: Vec<u8>,
     pub flags: FdFlags,
-    pub timestamp: Option<Instant>,
+    pub timestamp_us: Option<u64>,
 }
 
 /// CAN FD flags.

@@ -23,10 +23,9 @@ impl<B: CanBus> CanDriverAdapter<B> {
     }
 
     fn canopen_to_can(frame: &CanOpenFrame) -> CanFrame {
-        // CANOpen uses standard 11-bit COB-ID
         CanFrame::Classic(opencan_can_traits::ClassicFrame::new(
             CanId::Standard(frame.cob_id),
-            frame.data.to_vec(),
+            &frame.data,
         ))
     }
 
@@ -42,11 +41,9 @@ impl<B: CanBus> CanDriverAdapter<B> {
                     }
                 };
                 let mut data = [0u8; 8];
-                let len = f.data.len().min(8);
+                let len = f.len.min(8) as usize;
                 data[..len].copy_from_slice(&f.data[..len]);
-                Ok(CanOpenFrame::new(cob_id, data).with_timestamp(
-                    f.timestamp.unwrap_or_else(std::time::Instant::now)
-                ))
+                Ok(CanOpenFrame::new(cob_id, data))
             }
             CanFrame::Fd(_) => {
                 Err(CanOpenError::Protocol(
@@ -63,16 +60,8 @@ impl<B: CanBus> CanDriver for CanDriverAdapter<B> {
         self.bus.send(&can_frame).map_err(|e| CanOpenError::Can(opencan_canopen_core::error::CanError::Io(e.to_string())))
     }
 
-    fn recv(&mut self) -> Result<CanOpenFrame, CanOpenError> {
-        let can_frame = self.bus.recv().map_err(|e| CanOpenError::Can(opencan_canopen_core::error::CanError::Io(e.to_string())))?;
-        Self::can_to_canopen(&can_frame)
-    }
-
-    async fn recv_async(&mut self) -> Result<CanOpenFrame, CanOpenError> {
-        // For now, use blocking recv
-        // Real implementation would use tokio::task::spawn_blocking
-        // or an async-native CanBus implementation
-        let can_frame = self.bus.recv().map_err(|e| CanOpenError::Can(opencan_canopen_core::error::CanError::Io(e.to_string())))?;
+    async fn recv(&mut self) -> Result<CanOpenFrame, CanOpenError> {
+        let can_frame = self.bus.recv().await.map_err(|e| CanOpenError::Can(opencan_canopen_core::error::CanError::Io(e.to_string())))?;
         Self::can_to_canopen(&can_frame)
     }
 }
