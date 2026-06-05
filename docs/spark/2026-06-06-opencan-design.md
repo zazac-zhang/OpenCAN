@@ -1,0 +1,501 @@
+# OpenCAN 设计文档
+
+> 日期: 2026-06-06
+> 状态: Draft
+
+## 1. 概述
+
+OpenCAN 是一个 CAN/CANOpen 调试工具 GUI 应用，支持：
+
+- **CAN 硬件适配** — Linux SocketCAN、Kvaser、Peak PCAN、ZLG 致远电子
+- **CANOpen 协议栈** — DS301 (NMT/SDO/PDO/EMCY/Heartbeat) + DS402 运动控制
+- **GUI 界面** — 基于 iced 的跨平台桌面应用 (Windows + Linux)
+- **纯 Rust 实现** — CANOpen 协议栈作为可独立发布的 crate，零 FFI
+
+**设计原则：优先使用成熟库。**
+
+## 2. 整体架构
+
+```
+OpenCAN (Cargo Workspace)
+│
+├── crates/
+│   ├── can-traits/             ← 统一 CAN trait 抽象
+│   ├── can-socketcan/          ← Linux SocketCAN 后端 (socketcan-rs)
+│   ├── can-kvaser/             ← Kvaser CANlib 后端
+│   ├── can-pcan/               ← Peak PCAN 后端
+│   ├── can-zlg/                ← ZLG 致远后端
+│   ├── canopen/                ← 纯 Rust CANOpen 协议栈 (可独立发布)
+│   │   ├── canopen-core/       ← 核心 traits + 对象字典 [no_std]
+│   │   ├── canopen-ds301/      ← DS301 协议实现
+│   │   ├── canopen-ds402/      ← DS402 运动控制
+│   │   └── canopen-eds/        ← EDS 文件解析 (可选)
+│   └── gui/                    ← iced 主应用
+└── vendor/                     ← (仅硬件 SDK 头文件/库文件)
+```
+
+## 3. 核心依赖选择
+
+| 组件 | 选用库 | 理由 |
+|---|---|---|
+| CAN 收发 (Linux) | `socketcan-rs` 3.5.0 | 最成熟的 Rust SocketCAN 库，async/tokio 支持 |
+| CAN 收发 (Windows) | 各厂商 C SDK (FFI) | 无成熟 Rust 替代，直接绑定最可靠 |
+| CANOpen 协议栈 | 纯 Rust 自研 | Rust 生态无成熟方案，作为可发布 crate 实现 |
+| EDS 解析 | `ini` crate + 自研模型 | EDS 是 INI 格式，解析简单 |
+| GUI | `iced` | Elm 架构，原生异步支持 (Command/Subscription)，跨平台 |
+| 异步运行时 | `tokio` | socketcan-rs 原生支持，生态最成熟 |
+| 错误处理 | `thiserror` | 成熟的 derive 宏，统一错误类型 |
+
+## 4. CAN Trait 抽象层
+
+### 统一接口
+
+```rust
+pub trait CanBus: Send + Sync + 'static {
+    fn open(channel: &str) -> Result<Self> where Self: Sized;
+    fn send(&self, frame: &CanFrame) -> Result<()>;
+    fn recv(&self) -> Result<CanFrame>;
+    async fn recv_async(&self) -> Result<CanFrame>;
+    fn state(&self) -> CanState;
+    fn set_bitrate(&self, bitrate: CanBitrate) -> Result<()>;
+}
+
+pub enum CanFrame {
+    Classic(ClassicFrame),    // CAN 2.0 (标准/扩展帧)
+    Fd(FdFrame),              // CAN FD
+}
+
+pub struct ClassicFrame {
+    pub id: CanId,
+    pub data: Vec<u8>,        // max 8 bytes
+    pub timestamp: Option<Instant>,
+}
+
+pub struct FdFrame {
+    pub id: CanId,
+    pub data: Vec<u8>,        // max 64 bytes
+    pub flags: FdFlags,       // BRS, ESI
+    pub timestamp: Option<Instant>,
+}
+
+pub enum CanId {
+    Standard(u16),            // 11-bit
+    Extended(u32),            // 29-bit
+}
+
+pub struct CanBitrate {
+    pub nominal: u32,         // 仲裁段波特率 (如 500_000)
+    pub data: Option<u32>,    // 数据段波特率 (CAN FD, 如 2_000_000)
+}
+```
+
+### 各后端实现策略
+
+| 后端 | 实现方式 | 成熟度 |
+|---|---|---|
+| **SocketCAN** | 依赖 `socketcan-rs` 3.5，包装其 `CanSocket` / `tokio::CanSocket` | ✅ 成熟 |
+| **Kvaser** | 依赖 `can-hal-kvaser` + 补充 FFI Kvaser CANlib | ⚠️ 基础可用 |
+| **PCAN** | FFI 绑定 PCAN-Basic C API (bindgen) | 🔧 自研绑定 |
+| **ZLG** | FFI 绑定 ZLG 厂商 SDK (bindgen) | 🔧 自研绑定 |
+
+### Feature Flag 切换
+
+```toml
+# crates/gui/Cargo.toml
+[features]
+default = ["socketcan"]
+socketcan = ["opencan-can-socketcan"]
+kvaser = ["opencan-can-kvaser"]
+pcan = ["opencan-can-pcan"]
+zlg = ["opencan-can-zlg"]
+eds = ["opencan-eds"]
+```
+
+## 5. CANOpen 协议栈 (纯 Rust)
+
+### Crate 拆分
+
+```
+canopen/
+├── canopen-core/                 ← 核心 traits + 对象字典 [no_std], 零依赖
+├── canopen-ds301/                ← DS301 协议实现 (NMT/SDO/PDO/EMCY/Heartbeat)
+├── canopen-ds402/                ← DS402 运动控制 (状态机 + 操作模式)
+└── canopen-eds/                  ← EDS 文件解析 (可选)
+```
+
+**依赖关系：**
+
+```
+canopen-ds402 → canopen-ds301 → canopen-core
+canopen-eds   → (独立, 仅依赖标准库)
+```
+
+### canopen-core — 核心 traits
+
+```rust
+// CAN 帧抽象
+pub trait CanDriver: Send {
+    fn send(&mut self, frame: &CanOpenFrame) -> Result<(), CanOpenError>;
+    fn recv(&mut self) -> Result<CanOpenFrame, CanOpenError>;
+    async fn recv_async(&mut self) -> Result<CanOpenFrame, CanOpenError>;
+}
+
+pub struct CanOpenFrame {
+    pub cob_id: CobId,
+    pub data: [u8; 8],
+}
+
+pub struct CobId {
+    pub function: FunctionCode,
+    pub node_id: u8,  // 0-127
+}
+
+#[repr(u16)]
+pub enum FunctionCode {
+    Nmt       = 0x000,
+    Sync      = 0x080,
+    Emergency = 0x080,
+    Timestamp = 0x100,
+    Tpdo1     = 0x180,
+    Rpdo1     = 0x200,
+    Tpdo2     = 0x280,
+    Rpdo2     = 0x300,
+    Tpdo3     = 0x380,
+    Rpdo3     = 0x400,
+    Tpdo4     = 0x480,
+    Rpdo4     = 0x500,
+    SdoServer = 0x580,
+    SdoClient = 0x600,
+    Heartbeat = 0x700,
+}
+
+// 对象字典
+pub trait ObjectDictionary: Send {
+    fn read(&self, index: u16, subindex: u8) -> Result<OdValue, OdError>;
+    fn write(&mut self, index: u16, subindex: u8, value: OdValue) -> Result<(), OdError>;
+    fn entry_info(&self, index: u16, subindex: u8) -> Result<EntryInfo, OdError>;
+}
+
+#[derive(Debug, Clone)]
+pub enum OdValue {
+    Boolean(bool),
+    Integer8(i8), Integer16(i16), Integer32(i32), Integer64(i64),
+    Unsigned8(u8), Unsigned16(u16), Unsigned32(u32), Unsigned64(u64),
+    Real32(f32), Real64(f64),
+    VisibleString(String),
+    OctetString(Vec<u8>),
+    Domain(Vec<u8>),
+}
+```
+
+### canopen-ds301 — 协议实现
+
+**SDO 客户端：**
+
+```rust
+pub struct SdoClient<C: CanDriver> {
+    can: C,
+    timeout: Duration,
+}
+
+impl<C: CanDriver> SdoClient<C> {
+    pub async fn upload<T: OdEntry>(&mut self, node_id: u8, index: u16, subindex: u8) -> Result<T, SdoError>;
+    pub async fn download<T: OdEntry>(&mut self, node_id: u8, index: u16, subindex: u8, value: T) -> Result<(), SdoError>;
+}
+```
+
+**NMT 主站：**
+
+```rust
+pub struct NmtMaster;
+impl NmtMaster {
+    pub async fn start_remote_node(&self, node_id: u8) -> Result<()>;
+    pub async fn stop_remote_node(&self, node_id: u8) -> Result<()>;
+    pub async fn reset_node(&self, node_id: u8) -> Result<()>;
+    pub async fn reset_communication(&self, node_id: u8) -> Result<()>;
+}
+```
+
+**Heartbeat 消费者：**
+
+```rust
+pub struct HeartbeatConsumer;
+impl HeartbeatConsumer {
+    pub fn update(&mut self, hb: &HeartbeatFrame) -> bool;
+    pub fn is_alive(&self, node_id: u8) -> bool;
+    pub fn check_timeouts(&self) -> Vec<(u8, Duration)>;
+}
+```
+
+**主循环：**
+
+```rust
+pub struct CanopenStack<C: CanDriver> { /* ... */ }
+
+impl<C: CanDriver> CanopenStack<C> {
+    pub async fn process(&mut self) -> Result<Vec<CanEvent>, CanOpenError>;
+}
+
+pub enum CanEvent {
+    HeartbeatChanged { node_id: u8, alive: bool },
+    HeartbeatTimeout { node_id: u8 },
+    Emergency { node_id: u8, error_code: u16 },
+    PdoReceived { pdo: PdoFrame },
+    SdoComplete { request_id: u64, result: Result<OdValue, SdoError> },
+}
+```
+
+**节点自动扫描：**
+
+```rust
+pub async fn scan_nodes<C: CanDriver>(stack: &mut CanopenStack<C>) -> Result<Vec<u8>, CanOpenError>;
+```
+
+### canopen-ds402 — 运动控制
+
+**状态机：**
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Ds402State {
+    NotReadyToSwitchOn,
+    SwitchOnDisabled,
+    ReadyToSwitchOn,
+    SwitchedOn,
+    OperationEnabled,
+    QuickStopActive,
+    FaultReactionActive,
+    Fault,
+}
+
+pub enum OperationMode {
+    ProfilePosition,
+    ProfileVelocity,
+    ProfileTorque,
+    CyclicSyncPosition,
+    CyclicSyncVelocity,
+    CyclicSyncTorque,
+    Homing,
+}
+```
+
+**设备接口：**
+
+```rust
+pub struct Ds402Device<C: CanDriver> {
+    sdo: SdoClient<C>,
+    node_id: u8,
+}
+
+impl<C: CanDriver> Ds402Device<C> {
+    pub async fn state(&mut self) -> Result<Ds402State, Ds402Error>;
+    pub async fn shutdown(&mut self) -> Result<()>;
+    pub async fn switch_on(&mut self) -> Result<()>;
+    pub async fn enable_operation(&mut self) -> Result<()>;
+    pub async fn disable_voltage(&mut self) -> Result<()>;
+    pub async fn quick_stop(&mut self) -> Result<()>;
+    pub async fn fault_reset(&mut self) -> Result<()>;
+
+    pub async fn set_mode(&mut self, mode: OperationMode) -> Result<()>;
+    pub async fn set_target_position(&mut self, pos: i32) -> Result<()>;
+    pub async fn actual_position(&mut self) -> Result<i32>;
+    pub async fn set_target_velocity(&mut self, vel: i32) -> Result<()>;
+    pub async fn actual_velocity(&mut self) -> Result<i32>;
+    pub async fn set_target_torque(&mut self, tq: i16) -> Result<()>;
+    pub async fn actual_torque(&mut self) -> Result<i16>;
+}
+```
+
+**Crate 层级：DS402 不是独立 crate，而是 `canopen-ds402` crate，依赖 `canopen-ds301`。** 每个操作模式是独立文件，可通过 feature flag 选择：
+
+```toml
+[features]
+default = ["ds402"]
+ds402 = []
+ds402-pp = ["ds402"]
+ds402-pv = ["ds402"]
+ds402-csp = ["ds402"]
+```
+
+### 错误处理
+
+```rust
+#[derive(Error, Debug)]
+pub enum CanOpenError {
+    #[error("CAN bus error: {0}")]
+    Can(#[from] CanError),
+    #[error("SDO abort: {code:#06x} - {reason}")]
+    SdoAbort { code: u32, reason: &'static str },
+    #[error("SDO timeout after {0:?}")]
+    SdoTimeout(Duration),
+    #[error("Object dictionary error: {0}")]
+    Od(#[from] OdError),
+    #[error("DS402 state transition invalid: {from:?} -> {to:?}")]
+    Ds402InvalidTransition { from: Ds402State, to: Ds402State },
+    #[error("DS402 fault: code={code:#06x}, register={register:#04x}")]
+    Ds402Fault { code: u16, register: u8 },
+}
+```
+
+SDO Abort Codes (DS301 Table 35) 完整映射已内置，可直接输出可读的错误原因。
+
+## 6. EDS 解析 (可选)
+
+**定位：可选辅助模块，不作为核心依赖。** 无 EDS 时用户可通过 SDO 手动读写，有 EDS 时自动填充 OD 描述。
+
+```toml
+# crates/gui/Cargo.toml
+[features]
+eds = ["opencan-eds"]  # 可选，不默认启用
+```
+
+**精简范围，只解析调试关注的字段：**
+
+```rust
+pub struct EdsFile {
+    pub file_info: FileInfo,
+    pub device_info: DeviceInfo,
+    pub dummy_usage: DummyUsage,
+    pub entries: BTreeMap<u16, EdsEntry>,
+    pub sub_entries: BTreeMap<(u16, u8), EdsSubEntry>,
+}
+
+pub struct EdsEntry {
+    pub index: u16,
+    pub subindex: u8,
+    pub parameter_name: String,
+    pub data_type: Option<u16>,
+    pub access_type: Option<AccessType>,
+    pub default_value: Option<String>,
+    pub pdo_mapping: Option<bool>,
+}
+```
+
+忽略的字段：ObjectType, LowLimit, HighLimit, ObjFlags, CompactPDO 等。
+
+## 7. GUI (iced)
+
+### Elm 架构
+
+```rust
+fn main() -> iced::Result {
+    iced::application("OpenCAN", App::update, App::view)
+        .subscription(App::subscription)
+        .run()
+}
+
+struct App {
+    connection: Option<Connection>,
+    nodes: BTreeMap<u8, NodeState>,
+    selected_node: Option<u8>,
+    current_view: View,
+    log_entries: Vec<LogEntry>,
+    ds402_state: Option<Ds402Panel>,
+}
+```
+
+### 异步模型 — 无需桥接层
+
+```rust
+// CAN 帧接收: iced subscription 直接对接 tokio stream
+fn subscription(&self) -> iced::Subscription<Message> {
+    match &self.connection {
+        Some(conn) => can_frame_stream(conn.clone()),
+        None => iced::Subscription::none(),
+    }
+}
+
+// SDO 操作: iced::Command::perform 直接发起异步任务
+fn update(&mut self, message: Message) -> iced::Command<Message> {
+    match message {
+        Message::SdoRead { node_id, index, subindex } => {
+            let stack = self.stack.clone();
+            iced::Command::perform(
+                sdo_upload(stack, node_id, index, subindex),
+                Message::SdoReadResult,
+            )
+        }
+        // ...
+    }
+}
+```
+
+### 页面结构
+
+| 页面 | 功能 |
+|---|---|
+| **网络概览** | 节点列表 + 状态卡片 + NMT 控制 |
+| **节点详情** | OD 浏览器 + SDO 读写表单 |
+| **DS402 面板** | 状态机图 + 控制按钮 + 实时数据曲线 |
+| **PDO 监控** | PDO 实时表格 |
+| **CAN 日志** | 帧日志 + 过滤/搜索 |
+
+### 界面布局
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  菜单栏:  连接  CANOpen  视图  工具  帮助                    │
+├────────┬────────────────────────────────────────────────────┤
+│        │  ┌─ 标签页 ──────────────────────────────────────┐ │
+│ 侧边栏 │  │  网络概览  │  节点详情  │  PDO 监控  │  日志   │ │
+│        │  ├───────────┴───────────┴──────────┴───────────┤ │
+│ 硬件   │  │                                               │ │
+│ 连接   │  │              主内容区域                         │ │
+│ 状态   │  │                                               │ │
+│ 节点   │  │                                               │ │
+│ 列表   │  │                                               │ │
+│        │  └───────────────────────────────────────────────┘ │
+├────────┴────────────────────────────────────────────────────┤
+│  状态栏:  硬件状态 │ 总线负载 │ 错误计数 │ 帧率              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## 8. 测试策略
+
+| 层 | 测试内容 | 方式 |
+|---|---|---|
+| 帧编解码 | SDO/PDO/NMT/Heartbeat/Emergency 编码解码 | 纯单元测试 |
+| DS402 状态机 | 所有状态转换路径 + 异常路径 | 状态表驱动测试 |
+| SDO 客户端 | expedited/segmented 传输、超时、abort | MockCanDriver |
+| Heartbeat | 生产者/消费者、超时检测 | MockCanDriver + tokio::time |
+| EDS 解析 | 各类 EDS 文件 + 边界情况 | 样本 EDS 文件 |
+| 集成 | 完整 SDO 读写、NMT 控制流程 | MockCanDriver |
+| 端到端 | GUI → 协议栈 → 硬件 | Linux vcan0 / 真实设备 |
+
+**MockCanDriver：** 用于测试的 mock 实现，预置响应帧，记录发送帧。
+
+## 9. 开发阶段
+
+| Phase | 内容 | 预计时间 |
+|---|---|---|
+| **Phase 1** | canopen-core + can-traits + MockCanDriver + 单元测试 | 1-2 周 |
+| **Phase 2** | canopen-ds301 (SDO/NMT/Heartbeat/EMCY) + 集成测试 | 2-3 周 |
+| **Phase 3** | canopen-ds402 + canopen-eds | 1-2 周 |
+| **Phase 4** | 硬件后端 (SocketCAN/PCAN/Kvaser/ZLG) + 端到端测试 | 2-3 周 |
+| **Phase 5** | GUI (iced) + 全部页面 | 3-4 周 |
+
+## 10. CI/CD
+
+```yaml
+# .github/workflows/ci.yml
+jobs:
+  test:
+    strategy:
+      matrix:
+        features: ["socketcan", "pcan", "kvaser", "zlg", ""]
+    steps:
+      - cargo test --workspace
+      - cargo test --workspace --features ${{ matrix.features }}
+
+  lint:
+    steps:
+      - cargo clippy --workspace -- -D warnings
+      - cargo fmt --check
+
+  vcan-test:   # Linux-only 端到端
+    runs-on: ubuntu-latest
+    steps:
+      - sudo ip link add dev vcan0 type vcan
+      - sudo ip link set up vcan0
+      - cargo test --workspace --features socketcan -- --ignored
+```
