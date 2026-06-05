@@ -1,7 +1,6 @@
 //! CANOpen stack — main loop and event processing.
 
 use opencan_canopen_core::CanDriver;
-use opencan_canopen_core::error::CanOpenError;
 use opencan_canopen_core::frame::{CanOpenFrame, FrameClass, classify_frame, PdoFrame};
 
 use crate::heartbeat::HeartbeatConsumer;

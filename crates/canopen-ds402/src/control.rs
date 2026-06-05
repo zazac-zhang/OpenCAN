@@ -4,7 +4,7 @@
 
 use opencan_canopen_core::{CanDriver, CanOpenError, OdValue};
 use opencan_canopen_ds301::SdoClient;
-use super::state_machine::{Ds402State, OperationMode, ControlWord, StatusWord};
+use super::state_machine::{Ds402State, OperationMode, ControlWord};
 
 /// DS402 motion control device.
 ///
