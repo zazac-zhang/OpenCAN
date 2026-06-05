@@ -380,8 +380,8 @@ impl SdoResponse {
             // Abort
             let code = u32::from_le_bytes([frame.data[4], frame.data[5], frame.data[6], frame.data[7]]);
             SdoResponseData::Abort { code }
-        } else if cmd & 0xE0 == 0x60 {
-            // Initiate upload response (cs=3)
+        } else if cmd & 0xE0 == 0x40 {
+            // Initiate upload response (cs=2)
             let expedited = cmd & 0x02 != 0;
             let size_indicated = cmd & 0x01 != 0;
 
@@ -609,7 +609,7 @@ mod tests {
     #[test]
     fn test_sdo_expedited_upload_response() {
         let mut frame = CanOpenFrame::new(0x583, [0u8; 8]);
-        frame.data[0] = 0x63; // cs=3 (initiate upload response), expedited, 4 bytes
+        frame.data[0] = 0x43; // cs=2 (initiate upload response), expedited, 4 bytes
         frame.data[1] = 0x00;
         frame.data[2] = 0x10; // index 0x1000
         frame.data[3] = 0x00; // subindex 0

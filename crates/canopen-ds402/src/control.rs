@@ -24,6 +24,7 @@ impl<C: CanDriver> Ds402Device<C> {
         let value = self.sdo.upload(self.node_id, 0x6041, 0).await?;
         let word: u16 = match value {
             OdValue::Unsigned16(v) => v,
+            OdValue::Unsigned32(v) => v as u16, // Handle 4-byte response
             other => return Err(CanOpenError::Protocol(
                 format!("Invalid status word type: {:?}", other)
             )),
@@ -112,6 +113,7 @@ impl<C: CanDriver> Ds402Device<C> {
     pub async fn actual_position(&mut self) -> Result<i32, CanOpenError> {
         match self.sdo.upload(self.node_id, 0x6064, 0).await? {
             OdValue::Integer32(v) => Ok(v),
+            OdValue::Unsigned32(v) => Ok(v as i32),
             other => Err(CanOpenError::Protocol(format!("Invalid position: {:?}", other))),
         }
     }
@@ -127,6 +129,7 @@ impl<C: CanDriver> Ds402Device<C> {
     pub async fn actual_velocity(&mut self) -> Result<i32, CanOpenError> {
         match self.sdo.upload(self.node_id, 0x606C, 0).await? {
             OdValue::Integer32(v) => Ok(v),
+            OdValue::Unsigned32(v) => Ok(v as i32),
             other => Err(CanOpenError::Protocol(format!("Invalid velocity: {:?}", other))),
         }
     }

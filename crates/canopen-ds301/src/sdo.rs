@@ -261,7 +261,7 @@ mod tests {
         // Device Type 0x1000 = 0x00020192 (CANOpen device)
         mock.enqueue(opencan_canopen_core::frame::CanOpenFrame::new(
             0x583,
-            [0x63, 0x00, 0x10, 0x00, 0x92, 0x01, 0x02, 0x00],
+            [0x43, 0x00, 0x10, 0x00, 0x92, 0x01, 0x02, 0x00],
         ));
 
         let mut client = SdoClient::new(mock, Duration::from_secs(1));
@@ -330,10 +330,10 @@ mod tests {
     async fn test_sdo_segmented_upload() {
         let mut mock = MockCanDriver::new();
 
-        // Pre-load: segmented initiated response (cs=3, not expedited, size indicated)
-        // 0x61 = 0b0110_0001 → cs=3 (0b011), e=0, s=1
+        // Pre-load: segmented initiated response (cs=2, not expedited, size indicated)
+        // 0x41 = 0b0100_0001 → cs=2 (0b010), e=0, s=1
         let mut data = [0u8; 8];
-        data[0] = 0x61;
+        data[0] = 0x41;
         data[1] = 0x00; data[2] = 0x10; // index 0x1000
         data[3] = 0x00; // subindex
         data[4] = 20; data[5] = 0; data[6] = 0; data[7] = 0; // size = 20

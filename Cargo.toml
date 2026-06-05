@@ -11,6 +11,7 @@ members = [
     "crates/canopen-eds",
     "crates/gui",
 ]
+exclude = []
 resolver = "2"
 
 [workspace.package]
