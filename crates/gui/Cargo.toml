@@ -5,6 +5,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[[bin]]
+name = "opencan"
+path = "src/main.rs"
+
 [dependencies]
 opencan-can-traits = { path = "../can-traits" }
 opencan-canopen-core = { path = "../canopen-core" }
@@ -19,10 +23,13 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
+# GUI framework
+iced = { version = "0.13", features = ["tokio"] }
+
 [features]
-default = ["socketcan"]
-socketcan = ["opencan-can-socketcan"]
-kvaser = ["opencan-can-kvaser"]
-pcan = ["opencan-can-pcan"]
-zlg = ["opencan-can-zlg"]
-eds = ["opencan-canopen-eds"]
+default = []
+socketcan = ["dep:opencan-can-socketcan"]
+kvaser = ["dep:opencan-can-kvaser"]
+pcan = ["dep:opencan-can-pcan"]
+zlg = ["dep:opencan-can-zlg"]
+eds = ["dep:opencan-canopen-eds"]
