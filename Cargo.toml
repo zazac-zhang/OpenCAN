@@ -1,0 +1,40 @@
+[workspace]
+members = [
+    "crates/can-traits",
+    "crates/can-socketcan",
+    "crates/can-kvaser",
+    "crates/can-pcan",
+    "crates/can-zlg",
+    "crates/canopen-core",
+    "crates/canopen-ds301",
+    "crates/canopen-ds402",
+    "crates/canopen-eds",
+    "crates/gui",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/pony/OpenCAN"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Error handling
+thiserror = "2"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# EDS parsing
+ini = "1.3"
+
+# Testing
+mockall = "0.13"

@@ -1,0 +1,14 @@
+[package]
+name = "opencan-canopen-ds301"
+description = "CANOpen DS301 protocol implementation (NMT/SDO/PDO/EMCY/Heartbeat)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+opencan-canopen-core = { path = "../canopen-core" }
+opencan-can-traits = { path = "../can-traits" }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]

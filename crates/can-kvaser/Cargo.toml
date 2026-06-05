@@ -1,0 +1,10 @@
+[package]
+name = "opencan-can-kvaser"
+description = "Kvaser CANlib backend for OpenCAN"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+opencan-can-traits = { path = "../can-traits" }
+thiserror = { workspace = true }

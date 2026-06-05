@@ -1,0 +1,11 @@
+[package]
+name = "opencan-canopen-eds"
+description = "EDS (Electronic Data Sheet) file parser for CANOpen"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+opencan-canopen-core = { path = "../canopen-core" }
+ini = { workspace = true }
+thiserror = { workspace = true }

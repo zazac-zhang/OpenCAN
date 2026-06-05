@@ -1,0 +1,12 @@
+[package]
+name = "opencan-canopen-core"
+description = "Core traits and types for CANOpen protocol stack"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
