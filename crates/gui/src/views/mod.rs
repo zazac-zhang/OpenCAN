@@ -7,6 +7,7 @@ mod detail_panel;
 mod dialog;
 pub mod can;
 pub mod canopen;
+pub mod context_menu;
 
 // Re-export main views
 pub use toolbar::toolbar;

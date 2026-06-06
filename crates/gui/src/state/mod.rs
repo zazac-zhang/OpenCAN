@@ -82,6 +82,9 @@ pub struct App {
     pub detail_panel_width: u16,
     pub is_dragging: bool,
     pub drag_target: Option<DragTarget>,
+
+    // Context menu state
+    pub context_menu: crate::views::context_menu::ContextMenu,
 }
 
 /// SDO history entry.
@@ -176,6 +179,9 @@ impl Default for App {
             detail_panel_width: 200,
             is_dragging: false,
             drag_target: None,
+
+            // Context menu state
+            context_menu: crate::views::context_menu::ContextMenu::default(),
         }
     }
 }
