@@ -1,14 +1,12 @@
 //! Integration tests for the full CANOpen stack.
 //!
-//! Tests the complete flow through CanDriverAdapter + SdoClient + Ds402Device.
+//! Tests the complete flow through SdoClient and Ds402Device.
 
 use opencan_canopen_core::CanOpenError;
 use opencan_canopen_core::frame::CanOpenFrame;
 use opencan_canopen_core::od::OdValue;
 use opencan_canopen_core::testing::MockCanDriver;
 use opencan_canopen_ds301::SdoClient;
-use opencan_canopen_ds301::ds402::control::Ds402Device;
-use opencan_canopen_ds301::ds402::state_machine::{Ds402State, OperationMode};
 use std::time::Duration;
 
 /// Helper: create an expedited SDO upload response for u16 value (cs=2, expedited, 4 bytes).
@@ -62,7 +60,7 @@ async fn test_full_sdo_read_device_type() {
         0x00020192u32.to_le_bytes(),
     ));
 
-    let mut client = SdoClient::new(mock, Duration::from_secs(1));
+    let mut client = SdoClient::<MockCanDriver>::new(mock, Duration::from_secs(1));
     let result = client.upload(3, 0x1000, 0).await.unwrap();
 
     assert_eq!(result, OdValue::Unsigned32(0x00020192));
@@ -84,7 +82,7 @@ async fn test_full_sdo_write_control_word() {
     // Node 5 confirms download
     mock.enqueue(sdo_download_confirm(5, 0x6040, 0));
 
-    let mut client = SdoClient::new(mock, Duration::from_secs(1));
+    let mut client = SdoClient::<MockCanDriver>::new(mock, Duration::from_secs(1));
 
     // Write control word 0x000F (Enable Operation)
     client
@@ -111,7 +109,7 @@ async fn test_sdo_abort_object_not_found() {
 
     mock.enqueue(sdo_abort(3, 0x1000, 0, 0x06020000));
 
-    let mut client = SdoClient::new(mock, Duration::from_secs(1));
+    let mut client = SdoClient::<MockCanDriver>::new(mock, Duration::from_secs(1));
     let err = client.upload(3, 0x1000, 0).await.unwrap_err();
 
     match err {
@@ -129,7 +127,7 @@ async fn test_sdo_abort_read_only() {
 
     mock.enqueue(sdo_abort(3, 0x1000, 0, 0x06010002));
 
-    let mut client = SdoClient::new(mock, Duration::from_secs(1));
+    let mut client = SdoClient::<MockCanDriver>::new(mock, Duration::from_secs(1));
     let err = client.upload(3, 0x1000, 0).await.unwrap_err();
 
     match err {
@@ -139,111 +137,6 @@ async fn test_sdo_abort_read_only() {
         }
         e => panic!("Expected SdoAbort, got: {:?}", e),
     }
-}
-
-#[tokio::test]
-async fn test_ds402_enable_sequence() {
-    let mut mock = MockCanDriver::new();
-
-    // Read status word → OperationEnabled (0x0027)
-    mock.enqueue(sdo_upload_response_u16(3, 0x6041, 0, 0x0027));
-
-    // Enable sequence: Shutdown → SwitchOn → EnableOperation
-    mock.enqueue(sdo_download_confirm(3, 0x6040, 0)); // Shutdown
-    mock.enqueue(sdo_download_confirm(3, 0x6040, 0)); // Switch On
-    mock.enqueue(sdo_download_confirm(3, 0x6040, 0)); // Enable Operation
-
-    let client = SdoClient::new(mock, Duration::from_secs(1));
-    let mut device = Ds402Device::new(client, 3);
-
-    // Read current state
-    let state = device.state().await.unwrap();
-    assert_eq!(state, Ds402State::OperationEnabled);
-
-    // Execute enable sequence
-    device.enable().await.unwrap();
-
-    // Verify control words were sent
-    let tx = device.sdo().can().tx_log();
-    assert_eq!(tx.len(), 4); // read + 3 writes
-
-    // Check the control words
-    // First write: Shutdown (0x0006)
-    assert_eq!(tx[1].data[4], 0x06);
-    assert_eq!(tx[1].data[5], 0x00);
-
-    // Second write: Switch On (0x0007)
-    assert_eq!(tx[2].data[4], 0x07);
-    assert_eq!(tx[2].data[5], 0x00);
-
-    // Third write: Enable Operation (0x000F)
-    assert_eq!(tx[3].data[4], 0x0F);
-    assert_eq!(tx[3].data[5], 0x00);
-}
-
-#[tokio::test]
-async fn test_ds402_set_mode_and_position() {
-    let mut mock = MockCanDriver::new();
-
-    // Set mode to CSP (0x08)
-    mock.enqueue(sdo_download_confirm(3, 0x6060, 0));
-
-    // Set target position
-    mock.enqueue(sdo_download_confirm(3, 0x607A, 0));
-
-    // Read actual position (i32)
-    mock.enqueue(sdo_upload_response(3, 0x6064, 0, 12345i32.to_le_bytes()));
-
-    let client = SdoClient::new(mock, Duration::from_secs(1));
-    let mut device = Ds402Device::new(client, 3);
-
-    // Set CSP mode
-    device
-        .set_mode(OperationMode::CyclicSyncPosition)
-        .await
-        .unwrap();
-
-    // Set target position
-    device.set_target_position(10000).await.unwrap();
-
-    // Read actual position
-    let pos = device.actual_position().await.unwrap();
-    assert_eq!(pos, 12345);
-
-    // Verify all requests
-    let tx = device.sdo().can().tx_log();
-    assert_eq!(tx.len(), 3);
-}
-
-#[tokio::test]
-async fn test_ds402_state_from_status_word() {
-    // Test all state transitions from status word
-    assert_eq!(
-        Ds402State::from_status_word(0x0000),
-        Ds402State::NotReadyToSwitchOn
-    );
-    assert_eq!(
-        Ds402State::from_status_word(0x0040),
-        Ds402State::SwitchOnDisabled
-    );
-    assert_eq!(
-        Ds402State::from_status_word(0x0021),
-        Ds402State::ReadyToSwitchOn
-    );
-    assert_eq!(Ds402State::from_status_word(0x0023), Ds402State::SwitchedOn);
-    assert_eq!(
-        Ds402State::from_status_word(0x0027),
-        Ds402State::OperationEnabled
-    );
-    assert_eq!(
-        Ds402State::from_status_word(0x0007),
-        Ds402State::QuickStopActive
-    );
-    assert_eq!(
-        Ds402State::from_status_word(0x000F),
-        Ds402State::FaultReactionActive
-    );
-    assert_eq!(Ds402State::from_status_word(0x0008), Ds402State::Fault);
 }
 
 #[tokio::test]
@@ -265,18 +158,130 @@ async fn test_multiple_sdos_sequential() {
         0x12345678u32.to_le_bytes(),
     )); // Vendor ID
 
-    let mut client = SdoClient::new(mock, Duration::from_secs(1));
+    let mut client = SdoClient::<MockCanDriver>::new(mock, Duration::from_secs(1));
 
     let dt = client.upload(1, 0x1000, 0).await.unwrap();
     assert_eq!(dt, OdValue::Unsigned32(0x00020192));
 
     let err = client.upload(1, 0x1001, 0).await.unwrap();
-    // Error register is 1 byte, but upload defaults to Unsigned32
-    // The raw bytes [0x00, 0, 0, 0] = Unsigned32(0)
     assert_eq!(err, OdValue::Unsigned32(0));
 
     let vid = client.upload(1, 0x1018, 1).await.unwrap();
     assert_eq!(vid, OdValue::Unsigned32(0x12345678));
 
     assert_eq!(client.can().tx_log().len(), 3);
+}
+
+// === DS402 Tests (require ds402 feature) ===
+
+#[cfg(feature = "ds402")]
+mod ds402_tests {
+    use super::*;
+    use opencan_canopen_ds301::ds402::control::Ds402Device;
+    use opencan_canopen_ds301::ds402::state_machine::{Ds402State, OperationMode};
+
+    #[tokio::test]
+    async fn test_ds402_enable_sequence() {
+        let mut mock = MockCanDriver::new();
+
+        // Read status word → OperationEnabled (0x0027)
+        mock.enqueue(sdo_upload_response_u16(3, 0x6041, 0, 0x0027));
+
+        // Enable sequence: Shutdown → SwitchOn → EnableOperation
+        mock.enqueue(sdo_download_confirm(3, 0x6040, 0)); // Shutdown
+        mock.enqueue(sdo_download_confirm(3, 0x6040, 0)); // Switch On
+        mock.enqueue(sdo_download_confirm(3, 0x6040, 0)); // Enable Operation
+
+        let client = SdoClient::<MockCanDriver>::new(mock, Duration::from_secs(1));
+        let mut device = Ds402Device::new(client, 3);
+
+        // Read current state
+        let state = device.state().await.unwrap();
+        assert_eq!(state, Ds402State::OperationEnabled);
+
+        // Execute enable sequence
+        device.enable().await.unwrap();
+
+        // Verify control words were sent
+        let tx = device.sdo().can().tx_log();
+        assert_eq!(tx.len(), 4); // read + 3 writes
+
+        // Check the control words
+        // First write: Shutdown (0x0006)
+        assert_eq!(tx[1].data[4], 0x06);
+        assert_eq!(tx[1].data[5], 0x00);
+
+        // Second write: Switch On (0x0007)
+        assert_eq!(tx[2].data[4], 0x07);
+        assert_eq!(tx[2].data[5], 0x00);
+
+        // Third write: Enable Operation (0x000F)
+        assert_eq!(tx[3].data[4], 0x0F);
+        assert_eq!(tx[3].data[5], 0x00);
+    }
+
+    #[tokio::test]
+    async fn test_ds402_set_mode_and_position() {
+        let mut mock = MockCanDriver::new();
+
+        // Set mode to CSP (0x08)
+        mock.enqueue(sdo_download_confirm(3, 0x6060, 0));
+
+        // Set target position
+        mock.enqueue(sdo_download_confirm(3, 0x607A, 0));
+
+        // Read actual position (i32)
+        mock.enqueue(sdo_upload_response(3, 0x6064, 0, 12345i32.to_le_bytes()));
+
+        let client = SdoClient::<MockCanDriver>::new(mock, Duration::from_secs(1));
+        let mut device = Ds402Device::new(client, 3);
+
+        // Set CSP mode
+        device
+            .set_mode(OperationMode::CyclicSyncPosition)
+            .await
+            .unwrap();
+
+        // Set target position
+        device.set_target_position(10000).await.unwrap();
+
+        // Read actual position
+        let pos = device.actual_position().await.unwrap();
+        assert_eq!(pos, 12345);
+
+        // Verify all requests
+        let tx = device.sdo().can().tx_log();
+        assert_eq!(tx.len(), 3);
+    }
+
+    #[test]
+    fn test_ds402_state_from_status_word() {
+        // Test all state transitions from status word
+        assert_eq!(
+            Ds402State::from_status_word(0x0000),
+            Ds402State::NotReadyToSwitchOn
+        );
+        assert_eq!(
+            Ds402State::from_status_word(0x0040),
+            Ds402State::SwitchOnDisabled
+        );
+        assert_eq!(
+            Ds402State::from_status_word(0x0021),
+            Ds402State::ReadyToSwitchOn
+        );
+        assert_eq!(Ds402State::from_status_word(0x0023), Ds402State::SwitchedOn);
+        assert_eq!(
+            Ds402State::from_status_word(0x0027),
+            Ds402State::OperationEnabled
+        );
+        assert_eq!(
+            Ds402State::from_status_word(0x0007),
+            Ds402State::QuickStopActive
+        );
+        assert_eq!(
+            Ds402State::from_status_word(0x000F),
+            Ds402State::FaultReactionActive
+        );
+        assert_eq!(Ds402State::from_status_word(0x0008), Ds402State::Fault);
+    }
 }

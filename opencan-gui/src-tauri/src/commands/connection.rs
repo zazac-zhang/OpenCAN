@@ -1,6 +1,8 @@
 //! Connection commands: connect, disconnect, list backends.
 
-use crate::state::{AppState, BackendDescriptor, BackendInfo, SharedState};
+use crate::state::{BackendDescriptor, BackendInfo, SharedStack, SharedState};
+use opencan_canopen_core::testing::MockCanDriver;
+use opencan_canopen_ds301::stack::CanopenStack;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -13,23 +15,38 @@ pub struct ConnectParams {
 
 #[tauri::command]
 pub async fn connect_backend(
-    state: tauri::State<'_, SharedState>,
+    app_state: tauri::State<'_, SharedState>,
+    stack_state: tauri::State<'_, SharedStack>,
     params: ConnectParams,
 ) -> Result<BackendInfo, String> {
-    let mut guard = state.write().await;
-    guard.connected = true;
-    guard.backend_info = Some(BackendInfo {
+    // Reset the stack with a fresh mock driver
+    let new_stack = CanopenStack::new(MockCanDriver::new(), params.node_id);
+    {
+        let mut guard = stack_state.lock().await;
+        *guard = new_stack;
+    }
+
+    let info = BackendInfo {
         backend_type: params.backend_type.clone(),
         channel: params.channel.clone(),
         bitrate: params.bitrate,
         node_id: params.node_id,
-    });
-    Ok(guard.backend_info.clone().unwrap())
+    };
+
+    {
+        let mut guard = app_state.lock().await;
+        guard.connected = true;
+        guard.backend_info = Some(info.clone());
+    }
+
+    Ok(info)
 }
 
 #[tauri::command]
-pub async fn disconnect(state: tauri::State<'_, SharedState>) -> Result<(), String> {
-    let mut guard = state.write().await;
+pub async fn disconnect(
+    app_state: tauri::State<'_, SharedState>,
+) -> Result<(), String> {
+    let mut guard = app_state.lock().await;
     guard.connected = false;
     guard.backend_info = None;
     guard.nodes.clear();
@@ -60,7 +77,6 @@ pub async fn get_backends() -> Result<Vec<BackendDescriptor>, String> {
         available: false,
     });
 
-    // Other backends are stubs
     for (name, btype) in &[("Kvaser", "kvaser"), ("PCAN", "pcan"), ("ZLG", "zlg")] {
         backends.push(BackendDescriptor {
             name: name.to_string(),

@@ -3,7 +3,7 @@ members = [
     "crates/can-traits",
     "crates/canopen-core",
     "crates/canopen-ds301",
-    "opencan-gui",
+    "opencan-gui/src-tauri",
 ]
 exclude = []
 resolver = "2"

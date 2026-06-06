@@ -1,6 +1,5 @@
 //! EDS commands: load and parse EDS files.
 
-use crate::state::SharedState;
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -13,29 +12,41 @@ pub struct EdsInfo {
 }
 
 #[tauri::command]
-pub async fn load_eds_file(
-    state: tauri::State<'_, SharedState>,
-    path: String,
-) -> Result<EdsInfo, String> {
-    let _ = path;
-    let guard = state.read().await;
-    if !guard.connected {
-        return Err("Not connected".to_string());
-    }
-    // TODO: implement via canopen-core EDS parser
+pub async fn load_eds_file(path: String) -> Result<EdsInfo, String> {
     #[cfg(feature = "eds")]
     {
-        // Parse EDS file
+        use opencan_canopen_core::eds::parser::parse_eds;
+        use opencan_canopen_core::eds::builder::build_od;
+
+        let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let eds = parse_eds(&content).map_err(|e| format!("EDS parse error: {:?}", e))?;
+
+        let product_name = eds
+            .device_info
+            .product_name
+            .as_deref()
+            .unwrap_or("Unknown")
+            .to_string();
+        let vendor_id = eds.device_info.vendor_number.unwrap_or(0);
+        let product_code = eds.device_info.product_code.unwrap_or(0);
+        let revision_number = eds.device_info.revision_number.unwrap_or(0);
+        let baud_rate = eds.device_info.baud_rate.unwrap_or(0);
+
+        // Build OD from EDS (available for later use)
+        let _od = build_od(&eds);
+
+        Ok(EdsInfo {
+            product_name,
+            vendor_id,
+            product_code,
+            revision_number,
+            baud_rate,
+        })
     }
+
     #[cfg(not(feature = "eds"))]
     {
-        return Err("EDS feature not enabled".to_string());
+        let _ = path;
+        Err("EDS feature not enabled. Build with --features eds".to_string())
     }
-    Ok(EdsInfo {
-        product_name: String::new(),
-        vendor_id: 0,
-        product_code: 0,
-        revision_number: 0,
-        baud_rate: 0,
-    })
 }

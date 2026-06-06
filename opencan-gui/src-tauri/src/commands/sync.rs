@@ -1,27 +1,21 @@
 //! SYNC commands: start/stop SYNC producer.
 
-use crate::state::SharedState;
+use crate::state::SharedStack;
+use std::time::Duration;
 
 #[tauri::command]
 pub async fn start_sync(
-    state: tauri::State<'_, SharedState>,
+    stack_state: tauri::State<'_, SharedStack>,
     period_us: u32,
 ) -> Result<(), String> {
-    let _ = period_us;
-    let guard = state.read().await;
-    if !guard.connected {
-        return Err("Not connected".to_string());
-    }
-    // TODO: implement via CanopenStack::enable_sync_production
+    let mut guard = stack_state.lock().await;
+    guard.enable_sync_production(Duration::from_micros(period_us as u64));
     Ok(())
 }
 
 #[tauri::command]
-pub async fn stop_sync(state: tauri::State<'_, SharedState>) -> Result<(), String> {
-    let guard = state.read().await;
-    if !guard.connected {
-        return Err("Not connected".to_string());
-    }
-    // TODO: implement via CanopenStack::disable_sync_production
+pub async fn stop_sync(stack_state: tauri::State<'_, SharedStack>) -> Result<(), String> {
+    let mut guard = stack_state.lock().await;
+    guard.disable_sync_production();
     Ok(())
 }
