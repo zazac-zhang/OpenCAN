@@ -107,10 +107,11 @@ fn process_section(
     }
 
     // Parse sub-entries: [1018sub0], [1018sub1], etc.
+    // Note: index is hex (e.g., 1018 = 0x1018), but subindex is decimal (e.g., sub10 = 10)
     if let Some((idx_str, sub_str)) = section.split_once("sub")
         && let (Ok(index), Ok(subindex)) = (
             u16::from_str_radix(idx_str, 16),
-            u8::from_str_radix(sub_str, 16),
+            sub_str.parse::<u8>(),
         )
     {
         let parameter_name = props.get("ParameterName").cloned().unwrap_or_default();
@@ -221,5 +222,49 @@ ObjectType=7
 
         let eds = parse_eds(eds_content).unwrap();
         assert!(eds.entries.contains_key(&0x1000));
+    }
+
+    #[test]
+    fn test_subindex_decimal_parsing() {
+        let eds_content = r#"
+[1018]
+ParameterName=Identity Object
+ObjectType=9
+SubNumber=12
+
+[1018sub0]
+ParameterName=Max Sub-index
+DataType=0x0005
+AccessType=ro
+DefaultValue=12
+
+[1018sub10]
+ParameterName=Vendor Specific 10
+DataType=0x0007
+AccessType=ro
+DefaultValue=0xAAAAAAAA
+
+[1018sub11]
+ParameterName=Vendor Specific 11
+DataType=0x0007
+AccessType=ro
+DefaultValue=0xBBBBBBBB
+"#;
+
+        let eds = parse_eds(eds_content).unwrap();
+
+        // sub10 should be decimal 10, not hex 0x10 (16)
+        assert!(eds.sub_entries.contains_key(&(0x1018, 10)),
+            "sub10 should parse as decimal 10");
+        assert!(!eds.sub_entries.contains_key(&(0x1018, 16)),
+            "sub10 should NOT parse as hex 0x10 (16)");
+
+        // sub11 should be decimal 11
+        assert!(eds.sub_entries.contains_key(&(0x1018, 11)),
+            "sub11 should parse as decimal 11");
+
+        let sub10 = &eds.sub_entries[&(0x1018, 10)];
+        assert_eq!(sub10.parameter_name, "Vendor Specific 10");
+        assert_eq!(sub10.default_value.as_deref(), Some("0xAAAAAAAA"));
     }
 }

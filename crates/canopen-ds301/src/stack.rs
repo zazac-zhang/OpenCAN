@@ -14,6 +14,7 @@ use opencan_canopen_core::frame::{
 };
 use opencan_canopen_core::od::{DataType, OdValue};
 use opencan_canopen_core::{CanDriver, CanOpenError};
+use std::collections::HashSet;
 use std::time::Duration;
 
 use crate::emcy::EmergencyHandler;
@@ -65,6 +66,8 @@ pub struct CanopenStack<C: CanDriver> {
     sdo_server: Option<SdoServer>,
     /// SYNC Consumer (tracks SYNC and triggers synchronous PDOs)
     sync_consumer: SyncConsumer,
+    /// Nodes already reported as timed out (to avoid duplicate reports)
+    reported_timeouts: HashSet<u8>,
 }
 
 impl<C: CanDriver> CanopenStack<C> {
@@ -81,6 +84,7 @@ impl<C: CanDriver> CanopenStack<C> {
             od: None,
             sdo_server: None,
             sync_consumer: SyncConsumer::new(),
+            reported_timeouts: HashSet::new(),
         }
     }
 
@@ -166,6 +170,8 @@ impl<C: CanDriver> CanopenStack<C> {
             match classify_frame(frame) {
                 FrameClass::Heartbeat(hb) => {
                     let changed = self.heartbeat.update(&hb);
+                    // Clear timeout report when heartbeat is received
+                    self.reported_timeouts.remove(&hb.node_id);
                     if changed {
                         events.push(CanEvent::HeartbeatChanged {
                             node_id: hb.node_id,
@@ -213,9 +219,11 @@ impl<C: CanDriver> CanopenStack<C> {
                 }
             }
 
-            // Check for heartbeat timeouts
+            // Check for heartbeat timeouts (only report new ones)
             for (node_id, _elapsed) in self.heartbeat.check_timeouts() {
-                events.push(CanEvent::HeartbeatTimeout { node_id });
+                if self.reported_timeouts.insert(node_id) {
+                    events.push(CanEvent::HeartbeatTimeout { node_id });
+                }
             }
         }
 
@@ -857,5 +865,82 @@ mod tests {
         assert_eq!(tx.len(), 1);
         assert_eq!(tx[0].cob_id, 0x705); // heartbeat node 5
         assert_eq!(tx[0].data[0], 0x05); // Operational
+    }
+
+    #[tokio::test]
+    async fn test_heartbeat_timeout_no_duplicate() {
+        use std::time::Duration;
+
+        let mock = MockCanDriver::new();
+        let mut stack = CanopenStack::new(mock, 0);
+        stack.set_heartbeat_timeout(Duration::from_millis(50));
+
+        // Receive heartbeat from node 3
+        let hb = HeartbeatFrame {
+            node_id: 3,
+            state: NmtState::Operational,
+        };
+        stack.process(&hb.encode());
+
+        // Wait for timeout (3x period = 150ms, sleep 200ms)
+        std::thread::sleep(Duration::from_millis(200));
+
+        // First process should report timeout
+        let any_frame = CanOpenFrame::new(0x080, [0u8; 8]); // SYNC frame
+        let events1 = stack.process(&any_frame);
+        let timeout_count1 = events1
+            .iter()
+            .filter(|e| matches!(e, CanEvent::HeartbeatTimeout { node_id: 3 }))
+            .count();
+        assert_eq!(timeout_count1, 1, "First timeout should be reported");
+
+        // Second process should NOT report timeout again
+        let events2 = stack.process(&any_frame);
+        let timeout_count2 = events2
+            .iter()
+            .filter(|e| matches!(e, CanEvent::HeartbeatTimeout { node_id: 3 }))
+            .count();
+        assert_eq!(timeout_count2, 0, "Duplicate timeout should not be reported");
+    }
+
+    #[tokio::test]
+    async fn test_heartbeat_recovery_clears_timeout() {
+        use std::time::Duration;
+
+        let mock = MockCanDriver::new();
+        let mut stack = CanopenStack::new(mock, 0);
+        stack.set_heartbeat_timeout(Duration::from_millis(50));
+
+        // Receive heartbeat from node 3
+        let hb = HeartbeatFrame {
+            node_id: 3,
+            state: NmtState::Operational,
+        };
+        stack.process(&hb.encode());
+
+        // Wait for timeout (3x period = 150ms, sleep 200ms)
+        std::thread::sleep(Duration::from_millis(200));
+
+        // Report timeout
+        let any_frame = CanOpenFrame::new(0x080, [0u8; 8]);
+        stack.process(&any_frame);
+
+        // Node recovers with new heartbeat
+        let hb2 = HeartbeatFrame {
+            node_id: 3,
+            state: NmtState::Operational,
+        };
+        stack.process(&hb2.encode());
+
+        // Wait for timeout again
+        std::thread::sleep(Duration::from_millis(200));
+
+        // Should report timeout again (not suppressed)
+        let events = stack.process(&any_frame);
+        let timeout_count = events
+            .iter()
+            .filter(|e| matches!(e, CanEvent::HeartbeatTimeout { node_id: 3 }))
+            .count();
+        assert_eq!(timeout_count, 1, "Timeout should be reported again after recovery");
     }
 }

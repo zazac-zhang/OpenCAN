@@ -67,3 +67,81 @@ impl<B: CanBus> CanDriver for CanDriverAdapter<B> {
         Self::can_to_canopen(&can_frame)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::future::Future;
+    use std::pin::Pin;
+    use opencan_can_traits::{CanBitrate, CanState};
+    use opencan_can_traits::error::CanError;
+
+    // Mock CanBus for testing
+    struct MockBus;
+
+    impl opencan_can_traits::CanBus for MockBus {
+        fn send(&self, _frame: &CanFrame) -> Result<(), CanError> {
+            Ok(())
+        }
+
+        fn recv(&self) -> impl Future<Output = Result<CanFrame, CanError>> + Send {
+            async { Err(CanError::Io("not implemented".into())) }
+        }
+
+        fn state(&self) -> CanState {
+            CanState::Active
+        }
+
+        fn set_bitrate(&self, _bitrate: CanBitrate) -> Result<(), CanError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_canopen_to_can_roundtrip() {
+        let original = CanOpenFrame::new(0x583, [0x43, 0x00, 0x10, 0x00, 0x92, 0x01, 0x02, 0x00]);
+        let can_frame = CanDriverAdapter::<MockBus>::canopen_to_can(&original);
+        let restored = CanDriverAdapter::<MockBus>::can_to_canopen(&can_frame).unwrap();
+
+        assert_eq!(restored.cob_id, original.cob_id);
+        assert_eq!(restored.data, original.data);
+    }
+
+    #[test]
+    fn test_canopen_to_can_standard_id() {
+        let frame = CanOpenFrame::new(0x180, [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
+        let can_frame = CanDriverAdapter::<MockBus>::canopen_to_can(&frame);
+
+        match &can_frame {
+            CanFrame::Classic(f) => {
+                assert_eq!(f.id, CanId::Standard(0x180));
+                assert_eq!(f.data[..f.len as usize], [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
+            }
+            _ => panic!("Expected Classic frame"),
+        }
+    }
+
+    #[test]
+    fn test_can_to_canopen_rejects_extended() {
+        let can_frame = CanFrame::Classic(opencan_can_traits::ClassicFrame {
+            id: CanId::Extended(0x12345678),
+            data: [0u8; 8],
+            len: 8,
+            timestamp_us: None,
+        });
+        let result = CanDriverAdapter::<MockBus>::can_to_canopen(&can_frame);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_can_to_canopen_rejects_fd() {
+        let can_frame = CanFrame::Fd(opencan_can_traits::FdFrame {
+            id: CanId::Standard(0x123),
+            data: vec![0u8; 64],
+            flags: opencan_can_traits::FdFlags::default(),
+            timestamp_us: None,
+        });
+        let result = CanDriverAdapter::<MockBus>::can_to_canopen(&can_frame);
+        assert!(result.is_err());
+    }
+}

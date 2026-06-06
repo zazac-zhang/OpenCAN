@@ -82,7 +82,12 @@ impl<C: CanDriver> Ds402Device<C> {
     }
 
     /// Convenience: full enable sequence (Shutdown → SwitchOn → EnableOperation).
+    /// Skips unnecessary transitions if already in the desired state.
     pub async fn enable(&mut self) -> Result<(), CanOpenError> {
+        let current = self.state().await?;
+        if current == Ds402State::OperationEnabled {
+            return Ok(());
+        }
         self.shutdown().await?;
         self.switch_on().await?;
         self.enable_operation().await

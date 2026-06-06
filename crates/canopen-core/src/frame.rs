@@ -1109,4 +1109,173 @@ mod tests {
         let frame = CanOpenFrame::new(0x101, [0; 8]);
         assert!(TimestampFrame::decode(&frame).is_none());
     }
+
+    // === SdoResponse segment + abort tests ===
+
+    #[test]
+    fn test_sdo_response_decode_abort() {
+        let mut frame = CanOpenFrame::new(0x583, [0u8; 8]);
+        frame.data[0] = 0x80; // abort
+        frame.data[1] = 0x00;
+        frame.data[2] = 0x10; // index 0x1000
+        frame.data[3] = 0x00; // subindex 0
+        // abort code 0x06020000 in little-endian: [0x00, 0x00, 0x02, 0x06]
+        frame.data[4] = 0x00;
+        frame.data[5] = 0x00;
+        frame.data[6] = 0x02;
+        frame.data[7] = 0x06;
+
+        let resp = SdoResponse::decode(&frame).unwrap();
+        assert_eq!(resp.node_id, 3);
+        assert_eq!(resp.index, 0x1000);
+        assert_eq!(resp.subindex, 0);
+        match resp.data {
+            SdoResponseData::Abort { code } => {
+                assert_eq!(code, 0x0602_0000);
+            }
+            _ => panic!("Expected abort response"),
+        }
+    }
+
+    #[test]
+    fn test_sdo_response_decode_segment_full() {
+        // Segment response with 7 bytes of data (size not indicated)
+        let mut frame = CanOpenFrame::new(0x583, [0u8; 8]);
+        frame.data[0] = 0x00; // cs=0, toggle=0, no size indicated, not last
+        frame.data[1..8].copy_from_slice(&[0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47]);
+
+        let resp = SdoResponse::decode(&frame).unwrap();
+        match resp.data {
+            SdoResponseData::Segment { toggle, last, data, size } => {
+                assert!(!toggle);
+                assert!(!last);
+                assert_eq!(data, [0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47]);
+                assert_eq!(size, None); // size not indicated
+            }
+            _ => panic!("Expected segment response"),
+        }
+    }
+
+    #[test]
+    fn test_sdo_response_decode_segment_with_size() {
+        // Segment response with size indicated (e.g., 3 bytes)
+        // Size encoding: n = (cmd >> 1) & 0x07, actual_size = 7 - n
+        // For 3 bytes: n = 4, so cmd bits 1-3 = 100, cmd = 0x08
+        let mut frame = CanOpenFrame::new(0x583, [0u8; 8]);
+        frame.data[0] = 0x08; // cs=0, toggle=0, size indicated (n=4 → 3 bytes), not last
+        frame.data[1..8].copy_from_slice(&[0x41, 0x42, 0x43, 0x00, 0x00, 0x00, 0x00]);
+
+        let resp = SdoResponse::decode(&frame).unwrap();
+        match resp.data {
+            SdoResponseData::Segment { toggle, last, data, size } => {
+                assert!(!toggle);
+                assert!(!last);
+                assert_eq!(size, Some(3));
+            }
+            _ => panic!("Expected segment response"),
+        }
+    }
+
+    #[test]
+    fn test_sdo_response_decode_segment_last() {
+        // Last segment in transfer
+        let mut frame = CanOpenFrame::new(0x583, [0u8; 8]);
+        frame.data[0] = 0x01; // cs=0, toggle=0, no size, last=1
+        frame.data[1..8].copy_from_slice(&[0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47]);
+
+        let resp = SdoResponse::decode(&frame).unwrap();
+        match resp.data {
+            SdoResponseData::Segment { toggle, last, .. } => {
+                assert!(!toggle);
+                assert!(last);
+            }
+            _ => panic!("Expected segment response"),
+        }
+    }
+
+    #[test]
+    fn test_sdo_response_decode_segment_toggled() {
+        // Segment with toggle bit set
+        let mut frame = CanOpenFrame::new(0x583, [0u8; 8]);
+        frame.data[0] = 0x10; // cs=0, toggle=1, no size, not last
+        frame.data[1..8].copy_from_slice(&[0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47]);
+
+        let resp = SdoResponse::decode(&frame).unwrap();
+        match resp.data {
+            SdoResponseData::Segment { toggle, last, .. } => {
+                assert!(toggle);
+                assert!(!last);
+            }
+            _ => panic!("Expected segment response"),
+        }
+    }
+
+    #[test]
+    fn test_sdo_response_decode_segmented_initiated() {
+        // Segmented upload initiated with size indicated
+        let mut frame = CanOpenFrame::new(0x583, [0u8; 8]);
+        frame.data[0] = 0x41; // cs=2, not expedited, size indicated
+        frame.data[1] = 0x00;
+        frame.data[2] = 0x20; // index 0x2000
+        frame.data[3] = 0x00;
+        frame.data[4..8].copy_from_slice(&1000u32.to_le_bytes()); // size = 1000
+
+        let resp = SdoResponse::decode(&frame).unwrap();
+        match resp.data {
+            SdoResponseData::SegmentedInitiated { size } => {
+                assert_eq!(size, 1000);
+            }
+            _ => panic!("Expected segmented initiated response"),
+        }
+    }
+
+    #[test]
+    fn test_sdo_response_decode_download_confirmed() {
+        // Download confirmed (cs=1)
+        let mut frame = CanOpenFrame::new(0x583, [0u8; 8]);
+        frame.data[0] = 0x20; // cs=1 (download confirmed)
+        frame.data[1] = 0x40;
+        frame.data[2] = 0x60; // index 0x6040
+        frame.data[3] = 0x00;
+
+        let resp = SdoResponse::decode(&frame).unwrap();
+        assert_eq!(resp.index, 0x6040);
+        assert!(matches!(resp.data, SdoResponseData::DownloadConfirmed));
+    }
+
+    #[test]
+    fn test_sdo_response_decode_wrong_cob_id() {
+        // Frame with COB-ID outside SDO response range
+        let frame = CanOpenFrame::new(0x180, [0u8; 8]);
+        assert!(SdoResponse::decode(&frame).is_none());
+    }
+
+    #[test]
+    fn test_sdo_response_encode_decode_roundtrip() {
+        let original = SdoResponse {
+            node_id: 5,
+            index: 0x6041,
+            subindex: 0,
+            data: SdoResponseData::Expedited {
+                data: [0x37, 0x02, 0x00, 0x00],
+                size: Some(2),
+            },
+        };
+        let encoded = original.encode();
+        let decoded = SdoResponse::decode(&encoded).unwrap();
+
+        assert_eq!(decoded.node_id, original.node_id);
+        assert_eq!(decoded.index, original.index);
+        assert_eq!(decoded.subindex, original.subindex);
+        match (&decoded.data, &original.data) {
+            (
+                SdoResponseData::Expedited { data: d1, size: s1 },
+                SdoResponseData::Expedited { data: d2, size: s2 },
+            ) => {
+                assert_eq!(d1, d2);
+                assert_eq!(s1, s2);
+            }
+            _ => panic!("Type mismatch in roundtrip"),
+        }
+    }
 }
