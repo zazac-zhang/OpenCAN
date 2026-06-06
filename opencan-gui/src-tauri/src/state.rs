@@ -179,6 +179,13 @@ fn emit_event(channels: &Channels, event: CanEvent) {
                 timestamp_ms: now,
             });
         }
+        CanEvent::TimestampReceived { ms_of_day, days } => {
+            channels.emit_log(crate::channels::LogEvent {
+                level: "info".to_string(),
+                message: format!("TIME_STAMP: {}ms, day {}", ms_of_day, days),
+                timestamp_ms: now,
+            });
+        }
     }
 }
 

@@ -504,6 +504,10 @@ impl<C: CanDriver> SdoClient<C> {
     pub fn can(&self) -> &C {
         &self.can
     }
+
+    pub fn can_mut(&mut self) -> &mut C {
+        &mut self.can
+    }
 }
 
 /// Get human-readable SDO abort reason.

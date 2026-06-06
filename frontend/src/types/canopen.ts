@@ -16,6 +16,8 @@ export interface SdoEntry {
   is_read: boolean;
   success: boolean;
   error?: string;
+  data_type?: string;
+  timestamp_ms?: number;
 }
 
 export interface PdoEntry {
@@ -38,9 +40,14 @@ export interface HeartbeatEntry {
   node_id: number;
   alive: boolean;
   last_seen_ms: number;
+  timestamps?: number[];
 }
 
 export interface SyncStatus {
   is_producer: boolean;
   producer_period_us: number;
+  sync_count?: number;
+  first_sync_ts?: number;
+  last_sync_ts?: number;
+  history?: number[];
 }

@@ -17,11 +17,37 @@ impl OperationModeHandler for HomingMode {
         &self,
         sdo: &mut SdoClient<impl CanDriver>,
         node_id: u8,
-        _config: &ModeConfig,
+        config: &ModeConfig,
     ) -> Result<(), CanOpenError> {
-        // Homing mode only needs the mode of operation to be set
+        // Set mode of operation
         sdo.download(node_id, 0x6060, 0, &OdValue::Integer8(self.mode_value()))
-            .await
+            .await?;
+
+        // Set homing method (0x6098)
+        if let Some(method) = config.homing_method {
+            sdo.download(node_id, 0x6098, 0, &OdValue::Integer8(method))
+                .await?;
+        }
+
+        // Set homing speed fast (0x6099:1)
+        if let Some(speed) = config.homing_speed_fast {
+            sdo.download(node_id, 0x6099, 1, &OdValue::Unsigned32(speed))
+                .await?;
+        }
+
+        // Set homing speed slow (0x6099:2)
+        if let Some(speed) = config.homing_speed_slow {
+            sdo.download(node_id, 0x6099, 2, &OdValue::Unsigned32(speed))
+                .await?;
+        }
+
+        // Set homing acceleration (0x609A)
+        if let Some(acc) = config.homing_acceleration {
+            sdo.download(node_id, 0x609A, 0, &OdValue::Unsigned32(acc))
+                .await?;
+        }
+
+        Ok(())
     }
 
     async fn set_target(

@@ -156,7 +156,7 @@ export function TopBar() {
         <button
           key={br}
           className={`px-2 py-0.5 text-xs border rounded transition-colors ${
-            useAppStore.getState().connectionDialog.bitrate === br
+            connectionDialog.bitrate === br
               ? 'bg-primary text-primary-foreground'
               : 'hover:bg-muted'
           }`}

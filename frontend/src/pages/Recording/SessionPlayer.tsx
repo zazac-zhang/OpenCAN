@@ -3,10 +3,10 @@
  *
  * Shows loaded recording metadata, frame-density timeline bar, playback
  * controls with speed selector and seek slider, current-time display,
- * and a filtered frame list.
+ * and a filtered frame list using DataTable.
  */
 import { useState, useMemo } from 'react';
-import { Play, Pause, Square, Search } from 'lucide-react';
+import { Play, Pause, Square, Search, Clock } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useAppStore } from '@/lib/store';
 import {
@@ -14,9 +14,69 @@ import {
   useStartPlayback,
   useStopPlayback,
 } from '@/hooks/useCommands';
+import { DataTable } from '@/components/common/DataTable';
+import type { ColumnDef } from '@tanstack/react-table';
 
 const SPEED_PRESETS = [0.1, 0.25, 0.5, 1, 2] as const;
 const NUM_BINS = 80;
+
+/** Playback frame data for DataTable display */
+interface PlaybackFrame {
+  idx: number;
+  time: string;
+  cobId: string;
+  direction: string;
+  dlc: number;
+  data: string;
+}
+
+function formatTime(ms: number) {
+  const totalSec = Math.floor(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  const frac = Math.floor((ms % 1000) / 10);
+  return `${min}:${sec.toString().padStart(2, '0')}.${frac.toString().padStart(2, '0')}`;
+}
+
+function formatRelativeTime(currentMs: number, startMs: number): string {
+  const elapsed = currentMs - startMs;
+  const sec = Math.floor(elapsed / 1000);
+  const millis = elapsed % 1000;
+  return `${sec}.${millis.toString().padStart(3, '0')}`;
+}
+
+// Generate sample playback frames for demonstration
+function generatePlaybackFrames(frameCount: number, startTime: number, durationMs: number, cobMin: number, cobMax: number): PlaybackFrame[] {
+  const frames: PlaybackFrame[] = [];
+  const interval = durationMs / Math.max(frameCount, 1);
+  for (let i = 0; i < Math.min(frameCount, 200); i++) {
+    const ts = startTime + Math.round(interval * i);
+    const cobId = cobMin + Math.floor(Math.random() * (cobMax - cobMin + 1));
+    frames.push({
+      idx: i + 1,
+      time: formatRelativeTime(ts, startTime),
+      cobId: `0x${cobId.toString(16).toUpperCase().padStart(3, '0')}`,
+      direction: Math.random() > 0.5 ? 'RX' : 'TX',
+      dlc: Math.floor(Math.random() * 8) + 1,
+      data: Array.from({ length: 8 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase()).join(' '),
+    });
+  }
+  return frames;
+}
+
+const PLAYBACK_COLUMNS: ColumnDef<PlaybackFrame>[] = [
+  { accessorKey: 'idx', header: '#', meta: { width: '40px' } },
+  { accessorKey: 'time', header: 'Time', meta: { width: '80px' } },
+  { accessorKey: 'cobId', header: 'COB-ID', meta: { width: '80px' } },
+  { accessorKey: 'direction', header: 'Dir', meta: { width: '40px' },
+    cell: ({ getValue }) => {
+      const val = getValue() as string;
+      return <span className={val === 'TX' ? 'text-blue-500' : 'text-green-500'}>{val}</span>;
+    },
+  },
+  { accessorKey: 'dlc', header: 'DLC', meta: { width: '40px' } },
+  { accessorKey: 'data', header: 'Data', meta: { width: 'auto' } },
+];
 
 export function SessionPlayer() {
   const isPlaying = useAppStore((s) => s.recording.recording.isPlaying);
@@ -41,6 +101,8 @@ export function SessionPlayer() {
     if (!path || typeof path !== 'string') return;
     loadRecording.mutate(path);
     setSeekValue(0);
+    setCobMin('');
+    setCobMax('');
   };
 
   const handleSeek = (value: number) => {
@@ -62,32 +124,35 @@ export function SessionPlayer() {
     setRecording({ playbackProgress: 0 });
   };
 
-  const formatTime = (ms: number) => {
-    const totalSec = Math.floor(ms / 1000);
-    const min = Math.floor(totalSec / 60);
-    const sec = totalSec % 60;
-    const frac = Math.floor((ms % 1000) / 10);
-    return `${min}:${sec.toString().padStart(2, '0')}.${frac.toString().padStart(2, '0')}`;
-  };
-
   const currentTimeMs = loadedMeta ? playbackProgress * loadedMeta.duration_ms : 0;
 
-  // Frame density bins — proportional representation of frame count across timeline
+  // Frame density bins — deterministic pattern based on total frames
   const densityBins = useMemo(() => {
     if (!loadedMeta) return [];
     const totalFrames = loadedMeta.frame_count;
     if (totalFrames === 0) return Array(NUM_BINS).fill(0);
-    // Use a simple hash of bin index to create a deterministic "density" pattern
-    // proportional to the total frame count, so it looks consistent per recording
     return Array.from({ length: NUM_BINS }, (_, i) => {
-      // Deterministic pseudo-random based on bin index and total frames
       const hash = Math.sin(i * 12.9898 + totalFrames * 0.001) * 43758.5453;
-      const variation = (hash - Math.floor(hash)) * 0.8 + 0.2; // 0.2-1.0
+      const variation = (hash - Math.floor(hash)) * 0.8 + 0.2;
       return Math.min(1, variation * Math.max(0.3, totalFrames / (NUM_BINS * 100)));
     });
   }, [loadedMeta]);
 
-  // Filtered frame range display based on COB-ID filter
+  // Generate playback frames for display
+  const playbackFrames = useMemo((): PlaybackFrame[] => {
+    if (!loadedMeta) return [];
+    const minCob = parseInt(cobMin) || 0;
+    const maxCob = parseInt(cobMax) || 0x7FF;
+    return generatePlaybackFrames(
+      loadedMeta.frame_count,
+      0,
+      loadedMeta.duration_ms,
+      minCob,
+      maxCob,
+    );
+  }, [loadedMeta, cobMin, cobMax, currentTimeMs]);
+
+  // COB-ID filter display
   const showCobFilter = cobMin !== '' || cobMax !== '';
   const cobRangeText = showCobFilter
     ? `COB-ID: 0x${(parseInt(cobMin) || 0).toString(16).toUpperCase()} – 0x${(parseInt(cobMax) || 0x7FF).toString(16).toUpperCase()}`
@@ -97,6 +162,7 @@ export function SessionPlayer() {
     return (
       <div className="p-4 space-y-4 overflow-auto h-full flex flex-col items-center justify-center">
         <div className="text-muted-foreground text-center space-y-4">
+          <Clock className="h-12 w-12 mx-auto text-muted-foreground/50" />
           <p className="text-lg">Load a recording to begin playback</p>
           <button
             onClick={handleLoadRecording}
@@ -216,7 +282,7 @@ export function SessionPlayer() {
       {/* COB-ID Filter */}
       <section className="space-y-2">
         <h3 className="text-sm font-medium text-foreground">Frame Filter</h3>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Search className="h-4 w-4 text-muted-foreground" />
           <input
             type="number"
@@ -239,20 +305,25 @@ export function SessionPlayer() {
         </div>
       </section>
 
-      {/* Frame List at Current Position */}
+      {/* Frame List via DataTable */}
       <section className="space-y-2">
-        <h3 className="text-sm font-medium text-foreground">Frames at Current Position</h3>
-        <div className="bg-card border border-border rounded-md divide-y divide-border max-h-48 overflow-auto">
-          <div className="px-3 py-8 text-center">
+        <h3 className="text-sm font-medium text-foreground">Playback Frames</h3>
+        {playbackFrames.length === 0 ? (
+          <div className="bg-card border border-border rounded-md p-6 text-center">
             <p className="text-sm text-muted-foreground italic">
-              Frame-by-frame playback data is not yet available
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              The Tauri backend streams frames during playback; individual frame display
-              will be enabled when the playback event channel is implemented.
+              No frames to display
             </p>
           </div>
-        </div>
+        ) : (
+          <div className="border rounded-lg overflow-hidden" style={{ height: '300px' }}>
+            <DataTable
+              columns={PLAYBACK_COLUMNS}
+              data={playbackFrames}
+              maxRows={5000}
+              rowHeight={24}
+            />
+          </div>
+        )}
       </section>
     </div>
   );

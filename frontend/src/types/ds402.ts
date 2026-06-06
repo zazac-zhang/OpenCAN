@@ -4,6 +4,7 @@ export interface Ds402NodeState {
   node_id: number;
   state: string;
   status_word: number;
+  control_word?: number;
   actual_position: number;
   actual_velocity: number;
   actual_torque: number;

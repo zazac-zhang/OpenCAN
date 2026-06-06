@@ -41,6 +41,10 @@ export interface ControlPanelProps {
   actualVelocity?: number;
   /** Optional actual torque value for display */
   actualTorque?: number;
+  /** Auto-refresh toggle state (controlled from parent) */
+  autoRefresh?: boolean;
+  /** Called when auto-refresh toggle changes */
+  onAutoRefreshChange?: (value: boolean) => void;
 }
 
 /** Homing methods per CiA 402 */
@@ -134,9 +138,10 @@ export function ControlPanel({
   actualPosition,
   actualVelocity,
   actualTorque,
+  autoRefresh: autoRefreshProp,
+  onAutoRefreshChange,
 }: ControlPanelProps) {
   const [homingMethod, setHomingMethod] = useState(1);
-  const [autoRefresh, setAutoRefresh] = useState(false);
   const setTargetMutation = useDs402SetTarget();
 
   const inputs = getInputConfig(currentMode);
@@ -256,15 +261,17 @@ export function ControlPanel({
       </div>
 
       {/* Auto-refresh toggle */}
-      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-        <input
-          type="checkbox"
-          checked={autoRefresh}
-          onChange={(e) => setAutoRefresh(e.target.checked)}
-          className="rounded border-border"
-        />
-        <span className="text-muted-foreground">Auto-refresh</span>
-      </label>
+      {onAutoRefreshChange && (
+        <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+          <input
+            type="checkbox"
+            checked={autoRefreshProp ?? false}
+            onChange={(e) => onAutoRefreshChange(e.target.checked)}
+            className="rounded border-border"
+          />
+          <span className="text-muted-foreground">Auto-refresh</span>
+        </label>
+      )}
 
       {/* Position input (PP, CSP) */}
       {inputs.position && (

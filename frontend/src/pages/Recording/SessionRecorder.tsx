@@ -7,7 +7,7 @@
 import { useState, useEffect } from 'react';
 import { Circle, Square, Play, FolderOpen } from 'lucide-react';
 import { save, open } from '@tauri-apps/plugin-dialog';
-import { useAppStore } from '@/lib/store';
+import { useRecording } from '@/hooks/useRecording';
 import {
   useStartRecording,
   useStopRecording,
@@ -17,13 +17,13 @@ import {
 } from '@/hooks/useCommands';
 
 export function SessionRecorder() {
-  const isRecording = useAppStore((s) => s.recording.recording.isRecording);
-  const isPlaying = useAppStore((s) => s.recording.recording.isPlaying);
-  const playbackSpeed = useAppStore((s) => s.recording.recording.playbackSpeed);
-  const playbackProgress = useAppStore((s) => s.recording.recording.playbackProgress);
-  const loadedMeta = useAppStore((s) => s.recording.recording.loadedMeta);
-  const recordingPath = useAppStore((s) => s.recording.recording.recordingPath);
-  const setRecording = useAppStore((s) => s.recording.setRecording);
+  const recording = useRecording();
+  const isRecording = recording.isRecording;
+  const isPlaying = recording.isPlaying;
+  const playbackSpeed = recording.playbackSpeed;
+  const playbackProgress = recording.playbackProgress;
+  const loadedMeta = recording.loadedMeta;
+  const recordingPath = recording.recordingPath;
 
   const startRecording = useStartRecording();
   const stopRecording = useStopRecording();
@@ -42,7 +42,7 @@ export function SessionRecorder() {
       filters: [{ name: 'JSON', extensions: ['json'] }],
     });
     if (!path) return;
-    setRecording({ recordingPath: path });
+    recording.setRecordingPath(path);
     startRecording.mutate(path);
   };
 

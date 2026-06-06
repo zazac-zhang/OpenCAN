@@ -830,6 +830,9 @@ mod tests {
         assert_eq!(DataType::Unsigned16.byte_size(), Some(2));
         assert_eq!(DataType::Integer24.byte_size(), Some(3));
         assert_eq!(DataType::Real32.byte_size(), Some(4));
+        assert_eq!(DataType::Integer40.byte_size(), Some(5));
+        assert_eq!(DataType::Unsigned48.byte_size(), Some(6));
+        assert_eq!(DataType::Integer56.byte_size(), Some(7));
         assert_eq!(DataType::Integer64.byte_size(), Some(8));
         assert_eq!(DataType::Real64.byte_size(), Some(8));
 
@@ -889,5 +892,107 @@ mod tests {
 
         let val = OdValue::Unsigned32(0);
         assert_eq!(val.try_as_bytes(), None);
+    }
+
+    // === 40/48/56-bit type tests ===
+
+    #[test]
+    fn test_unsigned40_roundtrip() {
+        let val = OdValue::Unsigned40(0x000000FF_FFFFFFFF);
+        let bytes = val.to_bytes();
+        assert_eq!(bytes.len(), 5);
+        assert_eq!(bytes, [0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+
+        let decoded = OdValue::from_bytes(DataType::Unsigned40, &bytes).unwrap();
+        assert_eq!(decoded, val);
+        assert_eq!(decoded.try_as_u40(), Some(0xFFFFFFFFFF));
+    }
+
+    #[test]
+    fn test_unsigned48_roundtrip() {
+        let val = OdValue::Unsigned48(0x0000FFFF_FFFFFFFF);
+        let bytes = val.to_bytes();
+        assert_eq!(bytes.len(), 6);
+
+        let decoded = OdValue::from_bytes(DataType::Unsigned48, &bytes).unwrap();
+        assert_eq!(decoded, val);
+        assert_eq!(decoded.try_as_u48(), Some(0xFFFFFFFFFFFF));
+    }
+
+    #[test]
+    fn test_unsigned56_roundtrip() {
+        let val = OdValue::Unsigned56(0x00FFFFFF_FFFFFFFF);
+        let bytes = val.to_bytes();
+        assert_eq!(bytes.len(), 7);
+
+        let decoded = OdValue::from_bytes(DataType::Unsigned56, &bytes).unwrap();
+        assert_eq!(decoded, val);
+        assert_eq!(decoded.try_as_u56(), Some(0xFFFFFFFFFFFFFF));
+    }
+
+    #[test]
+    fn test_integer40_roundtrip() {
+        // Positive
+        let val = OdValue::Integer40(0x0000007F_FFFFFFFF);
+        let bytes = val.to_bytes();
+        assert_eq!(bytes.len(), 5);
+        let decoded = OdValue::from_bytes(DataType::Integer40, &bytes).unwrap();
+        assert_eq!(decoded, val);
+        assert_eq!(decoded.try_as_i40(), Some(0x7FFFFFFFFF));
+
+        // Negative
+        let val = OdValue::Integer40(-1);
+        let bytes = val.to_bytes();
+        assert_eq!(bytes, [0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+        let decoded = OdValue::from_bytes(DataType::Integer40, &bytes).unwrap();
+        assert_eq!(decoded, val);
+    }
+
+    #[test]
+    fn test_integer48_roundtrip() {
+        let val = OdValue::Integer48(-12345);
+        let bytes = val.to_bytes();
+        assert_eq!(bytes.len(), 6);
+        let decoded = OdValue::from_bytes(DataType::Integer48, &bytes).unwrap();
+        assert_eq!(decoded, val);
+        assert_eq!(decoded.try_as_i48(), Some(-12345));
+    }
+
+    #[test]
+    fn test_integer56_roundtrip() {
+        // Max positive 56-bit value: 0x007FFFFFFFFFFFFF
+        let val = OdValue::Integer56(0x007F_FFFF_FFFF_FFFF);
+        let bytes = val.to_bytes();
+        assert_eq!(bytes.len(), 7);
+        let decoded = OdValue::from_bytes(DataType::Integer56, &bytes).unwrap();
+        assert_eq!(decoded, val);
+        assert_eq!(decoded.try_as_i56(), Some(0x7FFFFFFFFFFFFF));
+
+        // Negative
+        let val = OdValue::Integer56(-1);
+        let bytes = val.to_bytes();
+        assert_eq!(bytes, [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+        let decoded = OdValue::from_bytes(DataType::Integer56, &bytes).unwrap();
+        assert_eq!(decoded, val);
+    }
+
+    #[test]
+    fn test_40_48_56_byte_size() {
+        assert_eq!(DataType::Integer40.byte_size(), Some(5));
+        assert_eq!(DataType::Unsigned40.byte_size(), Some(5));
+        assert_eq!(DataType::Integer48.byte_size(), Some(6));
+        assert_eq!(DataType::Unsigned48.byte_size(), Some(6));
+        assert_eq!(DataType::Integer56.byte_size(), Some(7));
+        assert_eq!(DataType::Unsigned56.byte_size(), Some(7));
+    }
+
+    #[test]
+    fn test_from_bytes_wrong_length_returns_none() {
+        // Too short
+        assert!(OdValue::from_bytes(DataType::Unsigned40, &[1, 2, 3]).is_none());
+        assert!(OdValue::from_bytes(DataType::Integer48, &[1, 2, 3, 4, 5]).is_none());
+        assert!(OdValue::from_bytes(DataType::Unsigned56, &[1, 2, 3, 4, 5, 6]).is_none());
+        // Exact length should work
+        assert!(OdValue::from_bytes(DataType::Unsigned40, &[1, 2, 3, 4, 5]).is_some());
     }
 }

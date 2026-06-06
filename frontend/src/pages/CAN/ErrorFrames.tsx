@@ -2,14 +2,14 @@
  * ErrorFrames page — CAN error frame details and error counter information.
  *
  * Displays error frames via ErrorFrameList with filtering by error type,
- * summary statistics, and a "Simulate Error" button for testing.
+ * summary statistics, TEC/REC trend visualization, and a "Simulate Error" button.
  */
-
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useErrorFrames, useAppStore } from '@/lib/store';
 import { ErrorFrameList } from '@/components/can/ErrorFrameList';
 import { useErrorFrameStream } from '@/hooks/useFrameStream';
 import type { ErrorFrame } from '@/types/can';
+import { Activity } from 'lucide-react';
 
 const ERROR_TYPES = ['Bus Off', 'Error Passive', 'Warning', 'Normal'];
 
@@ -26,16 +26,47 @@ function generateMockErrorFrame(): ErrorFrame {
   };
 }
 
+/** Mini sparkline for TEC/REC trends */
+function MiniSparkline({ data, color }: { data: number[]; color: string }) {
+  if (data.length < 2) return <span className="text-xs text-muted-foreground">—</span>;
+  const max = Math.max(...data, 1);
+  const height = 24;
+  const width = data.length * 3;
+  const points = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * width;
+    const y = height - (v / max) * (height - 4) - 2;
+    return `${x},${y}`;
+  }).join(' ');
+  return (
+    <svg width={width} height={height} className="w-full">
+      <polyline points={points} fill="none" stroke={color} strokeWidth="1.5" />
+    </svg>
+  );
+}
+
 export function ErrorFrames() {
   const errorFrames = useErrorFrames();
   const { startListening: startErrorStream } = useErrorFrameStream();
   const [filterType, setFilterType] = useState<string>('All');
   const [showMockControls, setShowMockControls] = useState(!errorFrames.length);
 
+  // TEC/REC trend history
+  const [tecHistory, setTecHistory] = useState<number[]>([]);
+  const [recHistory, setRecHistory] = useState<number[]>([]);
+
   // Start listening to error frame stream
   if (errorFrames.length === 0) {
     startErrorStream();
   }
+
+  // Update TEC/REC history from latest error frame
+  useEffect(() => {
+    if (errorFrames.length > 0) {
+      const latest = errorFrames[errorFrames.length - 1];
+      setTecHistory((prev) => [...prev.slice(-59), latest.tec]);
+      setRecHistory((prev) => [...prev.slice(-59), latest.rec]);
+    }
+  }, [errorFrames.length]);
 
   const filteredFrames = useMemo(
     () =>
@@ -67,8 +98,15 @@ export function ErrorFrames() {
     return { type: maxType, count: maxCount };
   }, [typeCounts]);
 
+  // Latest TEC/REC values
+  const latestTec = errorFrames.length > 0 ? errorFrames[errorFrames.length - 1].tec : 0;
+  const latestRec = errorFrames.length > 0 ? errorFrames[errorFrames.length - 1].rec : 0;
+
   const handleClear = () => {
     useAppStore.getState().errors.clearErrorFrames();
+    setTecHistory([]);
+    setRecHistory([]);
+    errorCounter = 0; // Reset mock counter on clear
   };
 
   const handleSimulateError = () => {
@@ -128,6 +166,60 @@ export function ErrorFrames() {
           <div className="text-xl font-bold font-mono mt-1">{filteredFrames.length}</div>
         </div>
       </div>
+
+      {/* TEC/REC trend visualization */}
+      {(tecHistory.length > 0 || recHistory.length > 0) && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-3 border rounded-lg bg-card space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium flex items-center gap-1">
+                <Activity className="h-3 w-3 text-red-400" /> TEC (Transmit)
+              </span>
+              <span className="text-lg font-bold font-mono text-red-400">{latestTec}</span>
+            </div>
+            <MiniSparkline data={tecHistory} color="hsl(0, 84%, 60%)" />
+            <div className="text-[10px] text-muted-foreground">
+              {latestTec >= 255 ? 'Bus Off' : latestTec >= 128 ? 'Error Passive' : latestTec >= 96 ? 'Warning' : 'Active'}
+            </div>
+          </div>
+          <div className="p-3 border rounded-lg bg-card space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium flex items-center gap-1">
+                <Activity className="h-3 w-3 text-blue-400" /> REC (Receive)
+              </span>
+              <span className="text-lg font-bold font-mono text-blue-400">{latestRec}</span>
+            </div>
+            <MiniSparkline data={recHistory} color="hsl(217, 91%, 60%)" />
+            <div className="text-[10px] text-muted-foreground">
+              {latestRec >= 128 ? 'Error Passive' : latestRec >= 96 ? 'Warning' : 'Active'}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Severity distribution */}
+      {totalErrors > 0 && (
+        <div className="p-3 border rounded-lg bg-card space-y-2">
+          <span className="text-xs font-medium">Error Type Distribution</span>
+          <div className="space-y-1">
+            {ERROR_TYPES.map((type) => {
+              const count = typeCounts[type] || 0;
+              const pct = totalErrors > 0 ? (count / totalErrors) * 100 : 0;
+              const color = type === 'Bus Off' ? 'bg-red-500' : type === 'Error Passive' ? 'bg-orange-500' : type === 'Warning' ? 'bg-yellow-500' : 'bg-green-500';
+              return (
+                <div key={type} className="flex items-center gap-2 text-xs">
+                  <span className="w-28 truncate">{type}</span>
+                  <div className="flex-1 h-3 bg-muted rounded overflow-hidden">
+                    <div className={`h-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="w-12 text-right font-mono">{count}</span>
+                  <span className="w-10 text-right text-muted-foreground">{pct.toFixed(0)}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Filter dropdown */}
       <div className="flex items-center gap-2">

@@ -10,7 +10,7 @@
 use opencan_canopen_core::concrete_od::ConcreteOd;
 use opencan_canopen_core::frame::{
     CanOpenFrame, FrameClass, NmtCommand, NmtCommandSpecifier, PdoFrame, SdoData, SdoRequest,
-    SdoResponse, SdoResponseData, classify_frame,
+    SdoResponse, SdoResponseData, TimestampFrame, classify_frame,
 };
 use opencan_canopen_core::od::{DataType, OdValue};
 use opencan_canopen_core::{CanDriver, CanOpenError};
@@ -47,6 +47,11 @@ pub enum CanEvent {
     },
     /// SYNC frame received (counter value for monitoring).
     SyncReceived { counter: u32 },
+    /// TIME_STAMP frame received (time since midnight in ms, days since 1984-01-01).
+    TimestampReceived {
+        ms_of_day: u32,
+        days: u16,
+    },
 }
 
 /// Main CANOpen protocol stack.
@@ -210,8 +215,11 @@ impl<C: CanDriver> CanopenStack<C> {
                         });
                     }
                 }
-                FrameClass::TimestampFrame(_) => {
-                    // TODO: Handle TIME_STAMP
+                FrameClass::TimestampFrame(ts) => {
+                    events.push(CanEvent::TimestampReceived {
+                        ms_of_day: ts.ms_of_day,
+                        days: ts.days,
+                    });
                 }
                 FrameClass::Unknown { cob_id } => {
                     // Unknown frame — log if needed
@@ -596,6 +604,16 @@ impl<C: CanDriver> CanopenStack<C> {
 
     // === SYNC Production ===
 
+    // === TIME_STAMP Production ===
+
+    /// Send a TIME_STAMP frame for the local node.
+    pub fn send_timestamp(&mut self, ms_of_day: u32, days: u16) -> Result<(), CanOpenError> {
+        let ts = TimestampFrame::new(ms_of_day, days);
+        self.can.send(&ts.encode())
+    }
+
+    // === SYNC Production ===
+
     /// Enable periodic SYNC frame production.
     pub fn enable_sync_production(&mut self, period: Duration) {
         self.sync_producer = Some(SyncProducer::new(period));
@@ -948,5 +966,41 @@ mod tests {
             timeout_count, 1,
             "Timeout should be reported again after recovery"
         );
+    }
+
+    #[test]
+    fn test_timestamp_received_event() {
+        let mock = MockCanDriver::new();
+        let mut stack = CanopenStack::new(mock, 0);
+
+        // Create a TIME_STAMP frame: 43200000 ms (12 hours), day 365
+        let ts = TimestampFrame::new(43_200_000, 365);
+        let events = stack.process(&ts.encode());
+
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            CanEvent::TimestampReceived { ms_of_day, days } => {
+                assert_eq!(*ms_of_day, 43_200_000);
+                assert_eq!(*days, 365);
+            }
+            other => panic!("Expected TimestampReceived, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_send_timestamp() {
+        let mock = MockCanDriver::new();
+        let mut stack = CanopenStack::new(mock, 0);
+
+        stack.send_timestamp(43_200_000, 365).unwrap();
+
+        let tx = stack.can().tx_log();
+        assert_eq!(tx.len(), 1);
+        assert_eq!(tx[0].cob_id, 0x100); // TIME_STAMP COB-ID
+
+        // Verify the data encodes correctly
+        let decoded = TimestampFrame::decode(&tx[0]).unwrap();
+        assert_eq!(decoded.ms_of_day, 43_200_000);
+        assert_eq!(decoded.days, 365);
     }
 }
