@@ -746,7 +746,7 @@ mod tests {
         // Send segment: "World!" (6 bytes, last)
         let mut seg_data = [0u8; 7];
         seg_data[..6].copy_from_slice(b"World!");
-        let seg_frame = SdoRequest {
+        let _seg_frame = SdoRequest {
             node_id: 3,
             index: 0x2000,
             subindex: 0,

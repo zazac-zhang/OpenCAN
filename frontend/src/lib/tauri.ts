@@ -138,6 +138,10 @@ export function onBusStatsStream(callback: (event: BusStatsEvent) => void): Prom
   return listen<BusStatsEvent>('bus_stats_stream', (e) => callback(e.payload));
 }
 
+export function onErrorFrameStream(callback: (event: ErrorFrameEvent) => void): Promise<UnlistenFn> {
+  return listen<ErrorFrameEvent>('error_frame_stream', (e) => callback(e.payload));
+}
+
 // ============ Types ============
 
 export interface BackendInfo {
@@ -231,4 +235,11 @@ export interface BusStatsEvent {
   frame_rate: number;
   tx_errors: number;
   rx_errors: number;
+}
+
+export interface ErrorFrameEvent {
+  timestamp_ms: number;
+  error_type: string;
+  tec: number;
+  rec: number;
 }

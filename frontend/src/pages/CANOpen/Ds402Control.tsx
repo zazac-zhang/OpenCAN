@@ -1,16 +1,23 @@
-// DS402 Control page
+// DS402 Control page — enhanced with sub-components
 
 import { useAppStore, useSelectedNode } from '@/lib/store';
 import { useDs402Enable, useDs402FaultReset, useDs402SetMode, useDs402SetTarget } from '@/hooks/useCommands';
+import { StateMachine } from '@/components/ds402/StateMachine';
+import { ModeSelector } from '@/components/ds402/ModeSelector';
+import { ControlPanel } from '@/components/ds402/ControlPanel';
+import { WaveformDisplay } from '@/components/ds402/WaveformDisplay';
 
-const DS402_MODES = [
-  { value: 1, label: 'PP (Profile Position)' },
-  { value: 3, label: 'PV (Profile Velocity)' },
-  { value: 6, label: 'Homing' },
-  { value: 8, label: 'CSP (Cyclic Sync Position)' },
-  { value: 9, label: 'CSV (Cyclic Sync Velocity)' },
-  { value: 10, label: 'CST (Cyclic Sync Torque)' },
-];
+/** Map mode number to display name */
+const MODE_NAMES: Record<number, string> = {
+  1: 'PP',
+  2: 'VL',
+  3: 'PV',
+  6: 'HM',
+  7: 'IP',
+  8: 'CSP',
+  9: 'CSV',
+  10: 'CST',
+};
 
 export function Ds402Control() {
   const selectedNode = useSelectedNode();
@@ -21,29 +28,43 @@ export function Ds402Control() {
   const targetMutation = useDs402SetTarget();
 
   const nodeState = useAppStore((s) => s.ds402.nodeStates[nodeId]);
+  const posHistory = nodeState?.position_history ?? [];
+  const velHistory = nodeState?.velocity_history ?? [];
+  const torqueHistory = nodeState?.torque_history ?? [];
+
+  const targetPosition = nodeState?.target_position ?? '';
+  const targetVelocity = nodeState?.target_velocity ?? '';
+  const targetTorque = nodeState?.target_torque ?? '';
+
+  const currentMode = nodeState?.selected_mode ? parseInt(nodeState.selected_mode, 10) : 1;
+  const currentModeName = MODE_NAMES[currentMode] ?? 'PP';
 
   return (
     <div className="p-4 space-y-4 overflow-auto h-full">
       <h2 className="text-lg font-semibold">DS402 Control</h2>
 
-      {/* State machine status */}
-      <div className="p-3 border rounded bg-card">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">Node {nodeId}</span>
-          <span className={`px-2 py-0.5 text-xs rounded ${
-            nodeState?.state === 'Operation Enabled' ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'
-          }`}>
-            {nodeState?.state ?? 'Unknown'}
-          </span>
-        </div>
+      {/* Header controls */}
+      <div className="flex items-center gap-2 p-3 border rounded bg-card">
+        <span className="text-sm font-medium">Node {nodeId}</span>
+        <span
+          className={`px-2 py-0.5 text-xs rounded ${
+            nodeState?.state === 'Operation Enabled'
+              ? 'bg-green-500/20 text-green-500'
+              : nodeState?.state === 'Fault' || nodeState?.state === 'Fault Reaction Active'
+                ? 'bg-red-500/20 text-red-500'
+                : 'bg-yellow-500/20 text-yellow-500'
+          }`}
+        >
+          {nodeState?.state ?? 'Unknown'}
+        </span>
         {nodeState && (
-          <div className="text-xs text-muted-foreground mt-1">
-            Status Word: 0x{nodeState.status_word.toString(16).padStart(4, '0').toUpperCase()}
-          </div>
+          <span className="ml-auto text-xs text-muted-foreground font-mono">
+            SW: 0x{nodeState.status_word.toString(16).padStart(4, '0').toUpperCase()}
+          </span>
         )}
       </div>
 
-      {/* Enable sequence */}
+      {/* Enable / Fault Reset */}
       <div className="flex gap-2">
         <button
           className="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700"
@@ -59,74 +80,62 @@ export function Ds402Control() {
         </button>
       </div>
 
-      {/* Mode selection */}
-      <div className="space-y-2">
-        <p className="text-sm font-medium">Operation Mode:</p>
-        <div className="flex flex-wrap gap-1">
-          {DS402_MODES.map((mode) => (
-            <button
-              key={mode.value}
-              onClick={() => modeMutation.mutate({ nodeId, mode: mode.value })}
-              className={`px-2 py-1 text-xs rounded ${
-                nodeState?.selected_mode === mode.value.toString()
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted hover:bg-muted/80'
-              }`}
-            >
-              {mode.label}
-            </button>
-          ))}
-        </div>
+      {/* State machine visualization */}
+      <div className="border rounded bg-card p-3">
+        <StateMachine
+          currentState={nodeState?.state ?? 'Unknown'}
+          readOnly
+        />
       </div>
 
-      {/* Target inputs */}
-      <div className="space-y-2">
-        <p className="text-sm font-medium">Target Values:</p>
-        <div className="flex items-center gap-2">
-          <span className="text-xs w-20">Position:</span>
-          <input
-            className="flex-1 px-2 py-1 text-xs border rounded bg-background"
-            value={nodeState?.target_position ?? ''}
-            onChange={(e) =>
-              useAppStore.getState().ds402.updateNodeState(nodeId, { target_position: e.target.value })
-            }
-            placeholder="0"
-          />
-          <button
-            className="px-3 py-1 text-xs bg-primary text-primary-foreground rounded"
-            onClick={() => {
-              const val = parseFloat(nodeState?.target_position ?? '0');
-              if (!isNaN(val)) {
-                targetMutation.mutate({ nodeId, mode: 1, target: val });
-              }
-            }}
-          >
-            Set
-          </button>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs w-20">Velocity:</span>
-          <input
-            className="flex-1 px-2 py-1 text-xs border rounded bg-background"
-            value={nodeState?.target_velocity ?? ''}
-            onChange={(e) =>
-              useAppStore.getState().ds402.updateNodeState(nodeId, { target_velocity: e.target.value })
-            }
-            placeholder="0"
-          />
-          <button
-            className="px-3 py-1 text-xs bg-primary text-primary-foreground rounded"
-            onClick={() => {
-              const val = parseFloat(nodeState?.target_velocity ?? '0');
-              if (!isNaN(val)) {
-                targetMutation.mutate({ nodeId, mode: 3, target: val });
-              }
-            }}
-          >
-            Set
-          </button>
-        </div>
+      {/* Mode selector */}
+      <div className="border rounded bg-card p-3">
+        <ModeSelector
+          selectedMode={currentMode}
+          onModeChange={(mode) => {
+            modeMutation.mutate({ nodeId, mode });
+            useAppStore.getState().ds402.updateNodeState(nodeId, { selected_mode: mode.toString() });
+          }}
+        />
       </div>
+
+      {/* Motion control panel */}
+      <div className="border rounded bg-card p-3">
+        <ControlPanel
+          nodeId={nodeId}
+          currentMode={currentModeName}
+          targetPosition={targetPosition}
+          targetVelocity={targetVelocity}
+          targetTorque={targetTorque}
+          onTargetPositionChange={(v) =>
+            useAppStore.getState().ds402.updateNodeState(nodeId, { target_position: v })
+          }
+          onTargetVelocityChange={(v) =>
+            useAppStore.getState().ds402.updateNodeState(nodeId, { target_velocity: v })
+          }
+          onTargetTorqueChange={(v) =>
+            useAppStore.getState().ds402.updateNodeState(nodeId, { target_torque: v })
+          }
+          onSetTarget={(mode, value) =>
+            targetMutation.mutate({ nodeId, mode, target: value })
+          }
+          actualPosition={nodeState?.actual_position}
+          actualVelocity={nodeState?.actual_velocity}
+          actualTorque={nodeState?.actual_torque}
+        />
+      </div>
+
+      {/* Waveform display */}
+      {(posHistory.length > 0 || velHistory.length > 0 || torqueHistory.length > 0) && (
+        <div className="border rounded bg-card p-3">
+          <WaveformDisplay
+            nodeId={nodeId}
+            positionHistory={posHistory}
+            velocityHistory={velHistory}
+            torqueHistory={torqueHistory}
+          />
+        </div>
+      )}
     </div>
   );
 }

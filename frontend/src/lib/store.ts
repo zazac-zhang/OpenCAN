@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import type { NodeInfo, SdoEntry, PdoEntry, EmcyEntry, HeartbeatEntry, SyncStatus } from '../types/canopen';
-import type { CanFrame, BusStats } from '../types/can';
+import type { CanFrame, BusStats, ErrorFrame } from '../types/can';
 import type { Ds402NodeState } from '../types/ds402';
 import type { RecordingState } from '../types/recording';
 
@@ -79,12 +79,12 @@ interface ConnectionDialogState {
 // UI state
 interface UiState {
   currentTab: string;
-  primaryTab: 'can' | 'canopen';
+  primaryTab: 'can' | 'canopen' | 'recording' | 'settings';
   detailPanelVisible: boolean;
   paused: boolean;
   statusMessage: string;
   setCurrentTab: (tab: string) => void;
-  setPrimaryTab: (tab: 'can' | 'canopen') => void;
+  setPrimaryTab: (tab: 'can' | 'canopen' | 'recording' | 'settings') => void;
   toggleDetailPanel: () => void;
   togglePause: () => void;
   setStatusMessage: (msg: string) => void;
@@ -94,6 +94,13 @@ interface UiState {
 interface RecordingStateStore {
   recording: RecordingState;
   setRecording: (state: Partial<RecordingState>) => void;
+}
+
+// Error frame state
+interface ErrorFrameState {
+  errorFrames: ErrorFrame[];
+  addErrorFrames: (frames: ErrorFrame[]) => void;
+  clearErrorFrames: () => void;
 }
 
 // Root store
@@ -109,6 +116,7 @@ interface AppState {
   connectionDialog: ConnectionDialogState;
   ui: UiState;
   recording: RecordingStateStore;
+  errors: ErrorFrameState;
 }
 
 export const useAppStore = create<AppState>()((set) => ({
@@ -278,6 +286,14 @@ export const useAppStore = create<AppState>()((set) => ({
         recording: { ...state.recording, recording: { ...state.recording.recording, ...partial } },
       })),
   },
+  errors: {
+    errorFrames: [],
+    addErrorFrames: (frames) =>
+      set((state) => ({
+        errors: { ...state.errors, errorFrames: [...state.errors.errorFrames, ...frames] },
+      })),
+    clearErrorFrames: () => set((state) => ({ errors: { ...state.errors, errorFrames: [] } })),
+  },
 }));
 
 // Fine-grained selectors
@@ -288,3 +304,4 @@ export const useFrames = () => useAppStore((s) => s.frames.frames);
 export const useBusStats = () => useAppStore((s) => s.frames.busStats);
 export const useSdoHistory = () => useAppStore((s) => s.sdo.history);
 export const useUi = () => useAppStore((s) => s.ui);
+export const useErrorFrames = () => useAppStore((s) => s.errors.errorFrames);

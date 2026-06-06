@@ -16,8 +16,14 @@ import { Ds402Control } from '@/pages/CANOpen/Ds402Control';
 import { EmcyMonitor } from '@/pages/CANOpen/EmcyMonitor';
 import { HeartbeatMonitor } from '@/pages/CANOpen/HeartbeatMonitor';
 import { SyncManagement } from '@/pages/CANOpen/SyncManagement';
+import { SessionRecorder } from '@/pages/Recording/SessionRecorder';
+import { SessionPlayer } from '@/pages/Recording/SessionPlayer';
+import { ConnectionSettings } from '@/pages/Settings/ConnectionSettings';
+import { EdsManagement } from '@/pages/Settings/EdsManagement';
 import { useAppStore, useConnected } from '@/lib/store';
 import { useFrameStream } from '@/hooks/useFrameStream';
+import { useEmcyStream, useHeartbeatStream, useDs402StateStream, useBusStatsStream } from '@/hooks/useStreams';
+import { ConnectionDialog } from '@/components/common/ConnectionDialog';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -38,13 +44,24 @@ const TAB_COMPONENTS: Record<string, React.ComponentType> = {
   EmcyMonitor,
   HeartbeatMonitor,
   SyncManagement,
+  SessionRecorder,
+  SessionPlayer,
+  ConnectionSettings,
+  EdsManagement,
 };
 
 function AppContent() {
   const currentTab = useAppStore((s) => s.ui.currentTab);
   const detailVisible = useAppStore((s) => s.ui.detailPanelVisible);
   const connected = useConnected();
+  const dialogVisible = useAppStore((s) => s.connectionDialog.visible);
   const { startListening } = useFrameStream();
+
+  // Subscribe to all Tauri event streams
+  useEmcyStream();
+  useHeartbeatStream();
+  useDs402StateStream();
+  useBusStatsStream();
 
   // Start listening to frame stream when connected
   if (connected) {
@@ -69,6 +86,7 @@ function AppContent() {
         </div>
       </div>
       <StatusBar />
+      {dialogVisible && <ConnectionDialog />}
     </div>
   );
 }

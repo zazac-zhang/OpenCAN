@@ -264,6 +264,243 @@ impl<C: CanDriver> SdoClient<C> {
         }
     }
 
+    /// SDO Block Upload — read a large value using block transfer.
+    ///
+    /// More efficient than segmented transfer for large data blocks.
+    /// The server sends multiple segments in a block without waiting for
+    /// individual acknowledgments.
+    pub async fn block_upload(
+        &mut self,
+        node_id: u8,
+        index: u16,
+        subindex: u8,
+    ) -> Result<OdValue, CanOpenError> {
+        // Step 1: Initiate block upload request (cs=5)
+        let request = SdoRequest {
+            node_id,
+            index,
+            subindex,
+            data: SdoData::BlockUploadRequest { crc_enabled: false },
+        };
+        self.can.send(&request.encode())?;
+
+        // Step 2: Wait for initiate block upload response
+        let response_frame = self.recv_with_timeout().await?;
+        let response = SdoResponse::decode(&response_frame)
+            .ok_or_else(|| CanOpenError::Protocol("Invalid SDO response".to_string()))?;
+
+        if response.index != index || response.subindex != subindex {
+            return Err(CanOpenError::Protocol(
+                "SDO response index/subindex mismatch".to_string(),
+            ));
+        }
+
+        let (_block_size, total_size, crc_supported) = match &response.data {
+            SdoResponseData::BlockUploadInitiated {
+                block_size,
+                crc_supported,
+                size,
+            } => (*block_size, *size, *crc_supported),
+            SdoResponseData::Abort { code } => {
+                return Err(CanOpenError::SdoAbort {
+                    code: *code,
+                    reason: sdo_abort_reason(*code),
+                });
+            }
+            _ => {
+                return Err(CanOpenError::Protocol(
+                    "Expected block upload initiated response".to_string(),
+                ));
+            }
+        };
+
+        // Step 3: Start block upload (cs=6)
+        let start = SdoRequest {
+            node_id,
+            index,
+            subindex,
+            data: SdoData::BlockUploadStart,
+        };
+        self.can.send(&start.encode())?;
+
+        // Step 4: Receive block segments
+        let mut data = Vec::new();
+        let mut last_seq = 0u8;
+
+        loop {
+            let seg_frame = self.recv_with_timeout().await?;
+            let cmd = seg_frame.data[0];
+
+            // Check if this is an end-of-block marker (cs=5 or cs=6)
+            if cmd & 0xE0 == 0xA0 || cmd & 0xE0 == 0xC0 {
+                // End block
+                let end_resp = SdoResponse::decode(&seg_frame)
+                    .ok_or_else(|| CanOpenError::Protocol("Invalid block end".to_string()))?;
+                match end_resp.data {
+                    SdoResponseData::BlockEnd { n, .. } => {
+                        // Remove unused bytes from last segment
+                        // n = number of bytes that do NOT contain data
+                        if n > 0 && !data.is_empty() {
+                            let trim = n as usize;
+                            let new_len = data.len().saturating_sub(trim);
+                            data.truncate(new_len);
+                        }
+                        break;
+                    }
+                    _ => {
+                        return Err(CanOpenError::Protocol(
+                            "Expected block end".to_string(),
+                        ));
+                    }
+                }
+            }
+
+            // Regular block segment (seq in cmd[6:0])
+            let seq = cmd & 0x7F;
+            if seq != (last_seq % 127) + 1 && seq != 1 {
+                return Err(CanOpenError::Protocol(format!(
+                    "Block sequence error: expected {}, got {}",
+                    (last_seq % 127) + 1,
+                    seq
+                )));
+            }
+            last_seq = seq;
+
+            data.extend_from_slice(&seg_frame.data[1..8]);
+        }
+
+        // Step 5: Confirm block transfer
+        let confirm = SdoRequest {
+            node_id,
+            index,
+            subindex,
+            data: SdoData::BlockEnd {
+                n: 0,
+                crc: if crc_supported { Some(0) } else { None },
+            },
+        };
+        self.can.send(&confirm.encode())?;
+
+        // Trim to total size if known
+        if let Some(size) = total_size {
+            data.truncate(size as usize);
+        }
+
+        Ok(OdValue::Domain(data))
+    }
+
+    /// SDO Block Download — write a large value using block transfer.
+    ///
+    /// More efficient than segmented transfer for large data blocks.
+    /// The client sends multiple segments in a block without waiting for
+    /// individual acknowledgments.
+    pub async fn block_download(
+        &mut self,
+        node_id: u8,
+        index: u16,
+        subindex: u8,
+        value: &OdValue,
+    ) -> Result<(), CanOpenError> {
+        let bytes = value.to_bytes();
+        if bytes.len() <= 4 {
+            // Use expedited for small data
+            return self.download(node_id, index, subindex, value).await;
+        }
+
+        // Step 1: Initiate block download request (cs=6)
+        let request = SdoRequest {
+            node_id,
+            index,
+            subindex,
+            data: SdoData::BlockDownloadRequest {
+                crc_enabled: false,
+                size: Some(bytes.len() as u32),
+            },
+        };
+        self.can.send(&request.encode())?;
+
+        // Step 2: Wait for block download confirmed
+        let response_frame = self.recv_with_timeout().await?;
+        let response = SdoResponse::decode(&response_frame)
+            .ok_or_else(|| CanOpenError::Protocol("Invalid SDO response".to_string()))?;
+
+        if response.index != index || response.subindex != subindex {
+            return Err(CanOpenError::Protocol(
+                "SDO response index/subindex mismatch".to_string(),
+            ));
+        }
+
+        match &response.data {
+            SdoResponseData::BlockDownloadConfirmed { .. } => {}
+            SdoResponseData::Abort { code } => {
+                return Err(CanOpenError::SdoAbort {
+                    code: *code,
+                    reason: sdo_abort_reason(*code),
+                });
+            }
+            _ => {
+                return Err(CanOpenError::Protocol(
+                    "Expected block download confirmed".to_string(),
+                ));
+            }
+        }
+
+        // Step 3: Send block segments
+        let mut offset = 0;
+        let mut seq = 0u8;
+
+        while offset < bytes.len() {
+            seq = (seq % 127) + 1;
+            let remaining = bytes.len() - offset;
+            let seg_len = remaining.min(7);
+
+            let mut seg_data = [0u8; 7];
+            seg_data[..seg_len].copy_from_slice(&bytes[offset..offset + seg_len]);
+
+            let segment = SdoRequest {
+                node_id,
+                index,
+                subindex,
+                data: SdoData::BlockSegment {
+                    seq,
+                    data: seg_data,
+                },
+            };
+            self.can.send(&segment.encode())?;
+
+            offset += seg_len;
+        }
+
+        // Step 4: Send end of block
+        let unused_bytes = (7 - (bytes.len() % 7)) % 7;
+        let end = SdoRequest {
+            node_id,
+            index,
+            subindex,
+            data: SdoData::BlockEnd {
+                n: unused_bytes as u8,
+                crc: None,
+            },
+        };
+        self.can.send(&end.encode())?;
+
+        // Step 5: Wait for end-of-block confirmation
+        let confirm_frame = self.recv_with_timeout().await?;
+        let confirm = SdoResponse::decode(&confirm_frame)
+            .ok_or_else(|| CanOpenError::Protocol("Invalid SDO response".to_string()))?;
+
+        match &confirm.data {
+            SdoResponseData::BlockEnd { .. } => Ok(()),
+            SdoResponseData::Abort { code } => Err(CanOpenError::SdoAbort {
+                code: *code,
+                reason: sdo_abort_reason(*code),
+            }),
+            _ => Err(CanOpenError::Protocol(
+                "Expected block end confirmation".to_string(),
+            )),
+        }
+    }
+
     pub fn can(&self) -> &C {
         &self.can
     }
@@ -438,5 +675,129 @@ mod tests {
         // Should have sent: initiate + 3 segments = 4 frames
         let tx = client.can().tx_log();
         assert_eq!(tx.len(), 4);
+    }
+
+    #[tokio::test]
+    async fn test_sdo_block_upload() {
+        let mut mock = MockCanDriver::new();
+
+        // Response: initiate block upload (cs=5, block_size=3, no size)
+        let mut resp1 = [0u8; 8];
+        resp1[0] = 0xA0; // cs=5, no CRC, no size
+        resp1[1] = 0x00; // index low
+        resp1[2] = 0x20; // index high (0x2000)
+        resp1[3] = 0x00; // subindex
+        resp1[4] = 0x03; // block_size = 3
+        mock.enqueue(opencan_canopen_core::frame::CanOpenFrame::new(0x583, resp1));
+
+        // Block segments (3 segments)
+        let mut seg1 = [0u8; 8];
+        seg1[0] = 0x01; // seq=1
+        seg1[1..8].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7]);
+        mock.enqueue(opencan_canopen_core::frame::CanOpenFrame::new(0x583, seg1));
+
+        let mut seg2 = [0u8; 8];
+        seg2[0] = 0x02; // seq=2
+        seg2[1..8].copy_from_slice(&[8, 9, 10, 11, 12, 13, 14]);
+        mock.enqueue(opencan_canopen_core::frame::CanOpenFrame::new(0x583, seg2));
+
+        let mut seg3 = [0u8; 8];
+        seg3[0] = 0x03; // seq=3
+        seg3[1..8].copy_from_slice(&[15, 16, 17, 18, 19, 20, 0]);
+        mock.enqueue(opencan_canopen_core::frame::CanOpenFrame::new(0x583, seg3));
+
+        // End block (cs=5, n=1 unused byte in last segment)
+        let mut end = [0u8; 8];
+        end[0] = 0xA3; // cs=5, no CRC, n=1 (bits 3-1 = 001)
+        mock.enqueue(opencan_canopen_core::frame::CanOpenFrame::new(0x583, end));
+
+        let mut client = SdoClient::new(mock, Duration::from_secs(1));
+        let result = client.block_upload(3, 0x2000, 0).await.unwrap();
+
+        match result {
+            OdValue::Domain(data) => {
+                assert_eq!(data.len(), 20);
+                assert_eq!(data[0], 1);
+                assert_eq!(data[19], 20);
+            }
+            other => panic!("Expected Domain data, got: {:?}", other),
+        }
+
+        // Verify: initiate + start + end_confirm = 3 frames sent
+        let tx = client.can().tx_log();
+        assert_eq!(tx.len(), 3);
+        assert_eq!(tx[0].data[0], 0xA0); // initiate block upload
+        assert_eq!(tx[1].data[0], 0xC0); // start block upload
+        assert_eq!(tx[2].data[0], 0xC1); // end confirm (cs=1, n=0, no crc)
+    }
+
+    #[tokio::test]
+    async fn test_sdo_block_download() {
+        let mut mock = MockCanDriver::new();
+
+        // Response: block download confirmed (cs=4)
+        let mut resp1 = [0u8; 8];
+        resp1[0] = 0x80; // cs=4, no CRC
+        resp1[1] = 0x00; // index low
+        resp1[2] = 0x20; // index high (0x2000)
+        resp1[3] = 0x00; // subindex
+        mock.enqueue(opencan_canopen_core::frame::CanOpenFrame::new(0x583, resp1));
+
+        // End block confirmation (cs=5, n=0)
+        let mut end_confirm = [0u8; 8];
+        end_confirm[0] = 0xA1; // cs=5, no CRC, n=0
+        mock.enqueue(opencan_canopen_core::frame::CanOpenFrame::new(0x583, end_confirm));
+
+        let mut client = SdoClient::new(mock, Duration::from_secs(1));
+        let data = vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        client
+            .block_download(3, 0x2000, 0, &OdValue::Domain(data))
+            .await
+            .unwrap();
+
+        // Verify: initiate + 3 segments + end = 5 frames sent
+        let tx = client.can().tx_log();
+        assert_eq!(tx.len(), 5);
+        assert_eq!(tx[0].data[0], 0xC2); // initiate block download (size indicated)
+        assert_eq!(tx[1].data[0], 0x01); // segment seq=1
+        assert_eq!(tx[2].data[0], 0x02); // segment seq=2
+        assert_eq!(tx[3].data[0], 0x03); // segment seq=3
+        assert_eq!(tx[4].data[0], 0xCD); // end block (cs=1, n=6 unused bytes)
+    }
+
+    #[tokio::test]
+    async fn test_sdo_block_upload_small_data() {
+        let mut mock = MockCanDriver::new();
+
+        // Response: initiate block upload (cs=5, block_size=1)
+        let mut resp1 = [0u8; 8];
+        resp1[0] = 0xA0;
+        resp1[1] = 0x00;
+        resp1[2] = 0x20;
+        resp1[3] = 0x00;
+        resp1[4] = 0x01; // block_size = 1
+        mock.enqueue(opencan_canopen_core::frame::CanOpenFrame::new(0x583, resp1));
+
+        // Single segment
+        let mut seg = [0u8; 8];
+        seg[0] = 0x01; // seq=1
+        seg[1..4].copy_from_slice(&[0xAA, 0xBB, 0xCC]);
+        mock.enqueue(opencan_canopen_core::frame::CanOpenFrame::new(0x583, seg));
+
+        // End block (n=4 unused bytes)
+        let mut end = [0u8; 8];
+        end[0] = 0xA9; // cs=5, n=4
+        mock.enqueue(opencan_canopen_core::frame::CanOpenFrame::new(0x583, end));
+
+        let mut client = SdoClient::new(mock, Duration::from_secs(1));
+        let result = client.block_upload(3, 0x2000, 0).await.unwrap();
+
+        match result {
+            OdValue::Domain(data) => {
+                assert_eq!(data.len(), 3); // 7 - 4 unused = 3 bytes
+                assert_eq!(data, vec![0xAA, 0xBB, 0xCC]);
+            }
+            other => panic!("Expected Domain data, got: {:?}", other),
+        }
     }
 }

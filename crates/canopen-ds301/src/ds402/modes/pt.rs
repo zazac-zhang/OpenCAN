@@ -1,6 +1,6 @@
 //! Profile Torque (PT) mode — CiA 402 mode 4.
 
-use super::{ModeActual, ModeTarget, OperationModeHandler};
+use super::{ModeActual, ModeConfig, ModeTarget, OperationModeHandler};
 use crate::SdoClient;
 use opencan_canopen_core::CanDriver;
 use opencan_canopen_core::CanOpenError;
@@ -17,9 +17,25 @@ impl OperationModeHandler for ProfileTorque {
         &self,
         sdo: &mut SdoClient<impl CanDriver>,
         node_id: u8,
+        config: &ModeConfig,
     ) -> Result<(), CanOpenError> {
+        // Set mode of operation
         sdo.download(node_id, 0x6060, 0, &OdValue::Integer8(self.mode_value()))
-            .await
+            .await?;
+
+        // Set torque slope (0x6087)
+        if let Some(slope) = config.torque_slope {
+            sdo.download(node_id, 0x6087, 0, &OdValue::Unsigned32(slope))
+                .await?;
+        }
+
+        // Set max torque (0x6072)
+        if let Some(max_tq) = config.max_torque {
+            sdo.download(node_id, 0x6072, 0, &OdValue::Unsigned16(max_tq))
+                .await?;
+        }
+
+        Ok(())
     }
 
     async fn set_target(

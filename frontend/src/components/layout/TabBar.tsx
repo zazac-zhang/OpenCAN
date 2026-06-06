@@ -2,9 +2,11 @@
 
 import { useAppStore } from '@/lib/store';
 
-const PRIMARY_TABS: { key: 'can' | 'canopen'; label: string }[] = [
+const PRIMARY_TABS: { key: 'can' | 'canopen' | 'recording' | 'settings'; label: string }[] = [
   { key: 'can', label: 'CAN Bus' },
   { key: 'canopen', label: 'CANOpen' },
+  { key: 'recording', label: 'Recording' },
+  { key: 'settings', label: 'Settings' },
 ];
 
 const SECONDARY_TABS: Record<string, { key: string; label: string }[]> = {
@@ -22,11 +24,19 @@ const SECONDARY_TABS: Record<string, { key: string; label: string }[]> = {
     { key: 'HeartbeatMonitor', label: 'Heartbeat' },
     { key: 'SyncManagement', label: 'SYNC' },
   ],
+  recording: [
+    { key: 'SessionRecorder', label: 'Recorder' },
+    { key: 'SessionPlayer', label: 'Player' },
+  ],
+  settings: [
+    { key: 'ConnectionSettings', label: 'Connection' },
+    { key: 'EdsManagement', label: 'EDS' },
+  ],
 };
 
 export function TabBar() {
   const ui = useAppStore((s) => s.ui);
-  const setPrimaryTab = (tab: 'can' | 'canopen') => ui.setPrimaryTab(tab);
+  const setPrimaryTab = (tab: 'can' | 'canopen' | 'recording' | 'settings') => ui.setPrimaryTab(tab);
   const setCurrentTab = (tab: string) => ui.setCurrentTab(tab);
 
   return (

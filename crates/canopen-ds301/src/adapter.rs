@@ -74,7 +74,6 @@ mod tests {
     use opencan_can_traits::error::CanError;
     use opencan_can_traits::{CanBitrate, CanState};
     use std::future::Future;
-    use std::pin::Pin;
 
     // Mock CanBus for testing
     struct MockBus;

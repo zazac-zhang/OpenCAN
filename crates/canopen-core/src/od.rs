@@ -194,12 +194,24 @@ pub enum OdValue {
     /// 24-bit signed integer (stored as i32, serialized as 3 bytes LE).
     Integer24(i32),
     Integer32(i32),
+    /// 40-bit signed integer (stored as i64, serialized as 5 bytes LE).
+    Integer40(i64),
+    /// 48-bit signed integer (stored as i64, serialized as 6 bytes LE).
+    Integer48(i64),
+    /// 56-bit signed integer (stored as i64, serialized as 7 bytes LE).
+    Integer56(i64),
     Integer64(i64),
     Unsigned8(u8),
     Unsigned16(u16),
     /// 24-bit unsigned integer (stored as u32, serialized as 3 bytes LE).
     Unsigned24(u32),
     Unsigned32(u32),
+    /// 40-bit unsigned integer (stored as u64, serialized as 5 bytes LE).
+    Unsigned40(u64),
+    /// 48-bit unsigned integer (stored as u64, serialized as 6 bytes LE).
+    Unsigned48(u64),
+    /// 56-bit unsigned integer (stored as u64, serialized as 7 bytes LE).
+    Unsigned56(u64),
     Unsigned64(u64),
     Real32(f32),
     Real64(f64),
@@ -218,11 +230,17 @@ impl OdValue {
             Self::Integer16(_) => Some(DataType::Integer16),
             Self::Integer24(_) => Some(DataType::Integer24),
             Self::Integer32(_) => Some(DataType::Integer32),
+            Self::Integer40(_) => Some(DataType::Integer40),
+            Self::Integer48(_) => Some(DataType::Integer48),
+            Self::Integer56(_) => Some(DataType::Integer56),
             Self::Integer64(_) => Some(DataType::Integer64),
             Self::Unsigned8(_) => Some(DataType::Unsigned8),
             Self::Unsigned16(_) => Some(DataType::Unsigned16),
             Self::Unsigned24(_) => Some(DataType::Unsigned24),
             Self::Unsigned32(_) => Some(DataType::Unsigned32),
+            Self::Unsigned40(_) => Some(DataType::Unsigned40),
+            Self::Unsigned48(_) => Some(DataType::Unsigned48),
+            Self::Unsigned56(_) => Some(DataType::Unsigned56),
             Self::Unsigned64(_) => Some(DataType::Unsigned64),
             Self::Real32(_) => Some(DataType::Real32),
             Self::Real64(_) => Some(DataType::Real64),
@@ -244,6 +262,18 @@ impl OdValue {
                 vec![bytes[0], bytes[1], bytes[2]]
             }
             Self::Integer32(v) => v.to_le_bytes().to_vec(),
+            Self::Integer40(v) => {
+                let bytes = v.to_le_bytes();
+                vec![bytes[0], bytes[1], bytes[2], bytes[3], bytes[4]]
+            }
+            Self::Integer48(v) => {
+                let bytes = v.to_le_bytes();
+                vec![bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]]
+            }
+            Self::Integer56(v) => {
+                let bytes = v.to_le_bytes();
+                vec![bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6]]
+            }
             Self::Integer64(v) => v.to_le_bytes().to_vec(),
             Self::Unsigned8(v) => vec![*v],
             Self::Unsigned16(v) => v.to_le_bytes().to_vec(),
@@ -252,6 +282,18 @@ impl OdValue {
                 vec![bytes[0], bytes[1], bytes[2]]
             }
             Self::Unsigned32(v) => v.to_le_bytes().to_vec(),
+            Self::Unsigned40(v) => {
+                let bytes = v.to_le_bytes();
+                vec![bytes[0], bytes[1], bytes[2], bytes[3], bytes[4]]
+            }
+            Self::Unsigned48(v) => {
+                let bytes = v.to_le_bytes();
+                vec![bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]]
+            }
+            Self::Unsigned56(v) => {
+                let bytes = v.to_le_bytes();
+                vec![bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6]]
+            }
             Self::Unsigned64(v) => v.to_le_bytes().to_vec(),
             Self::Real32(v) => v.to_le_bytes().to_vec(),
             Self::Real64(v) => v.to_le_bytes().to_vec(),
@@ -275,6 +317,18 @@ impl OdValue {
             DataType::Integer32 => data
                 .get(..4)
                 .map(|b| Self::Integer32(i32::from_le_bytes([b[0], b[1], b[2], b[3]]))),
+            DataType::Integer40 => data.get(..5).map(|b| {
+                let raw = i64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], 0, 0, 0]);
+                Self::Integer40((raw << 24) >> 24) // sign-extend from 40-bit
+            }),
+            DataType::Integer48 => data.get(..6).map(|b| {
+                let raw = i64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], 0, 0]);
+                Self::Integer48((raw << 16) >> 16) // sign-extend from 48-bit
+            }),
+            DataType::Integer56 => data.get(..7).map(|b| {
+                let raw = i64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], 0]);
+                Self::Integer56((raw << 8) >> 8) // sign-extend from 56-bit
+            }),
             DataType::Integer64 => data
                 .get(..8)
                 .map(|b| Self::Integer64(i64::from_le_bytes(b.try_into().unwrap()))),
@@ -288,6 +342,15 @@ impl OdValue {
             DataType::Unsigned32 => data
                 .get(..4)
                 .map(|b| Self::Unsigned32(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))),
+            DataType::Unsigned40 => data.get(..5).map(|b| {
+                Self::Unsigned40(u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], 0, 0, 0]))
+            }),
+            DataType::Unsigned48 => data.get(..6).map(|b| {
+                Self::Unsigned48(u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], 0, 0]))
+            }),
+            DataType::Unsigned56 => data.get(..7).map(|b| {
+                Self::Unsigned56(u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], 0]))
+            }),
             DataType::Unsigned64 => data
                 .get(..8)
                 .map(|b| Self::Unsigned64(u64::from_le_bytes(b.try_into().unwrap()))),
@@ -305,14 +368,7 @@ impl OdValue {
             // Variable-length types without OdValue variant
             DataType::UnicodeString
             | DataType::TimeOfDay
-            | DataType::TimeDifference
-            // 40/48/56-bit types not yet represented in OdValue
-            | DataType::Integer40
-            | DataType::Integer48
-            | DataType::Integer56
-            | DataType::Unsigned40
-            | DataType::Unsigned48
-            | DataType::Unsigned56 => None,
+            | DataType::TimeDifference => None,
         }
     }
 
@@ -394,6 +450,54 @@ impl OdValue {
     pub fn try_as_i64(&self) -> Option<i64> {
         match self {
             Self::Integer64(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Try to extract a 40-bit signed integer value (stored as i64).
+    pub fn try_as_i40(&self) -> Option<i64> {
+        match self {
+            Self::Integer40(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Try to extract a 48-bit signed integer value (stored as i64).
+    pub fn try_as_i48(&self) -> Option<i64> {
+        match self {
+            Self::Integer48(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Try to extract a 56-bit signed integer value (stored as i64).
+    pub fn try_as_i56(&self) -> Option<i64> {
+        match self {
+            Self::Integer56(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Try to extract a 40-bit unsigned integer value (stored as u64).
+    pub fn try_as_u40(&self) -> Option<u64> {
+        match self {
+            Self::Unsigned40(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Try to extract a 48-bit unsigned integer value (stored as u64).
+    pub fn try_as_u48(&self) -> Option<u64> {
+        match self {
+            Self::Unsigned48(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Try to extract a 56-bit unsigned integer value (stored as u64).
+    pub fn try_as_u56(&self) -> Option<u64> {
+        match self {
+            Self::Unsigned56(v) => Some(*v),
             _ => None,
         }
     }
@@ -632,11 +736,17 @@ impl std::fmt::Display for OdValue {
             Self::Integer16(v) => write!(f, "{}", v),
             Self::Integer24(v) => write!(f, "{}", v),
             Self::Integer32(v) => write!(f, "{}", v),
+            Self::Integer40(v) => write!(f, "{}", v),
+            Self::Integer48(v) => write!(f, "{}", v),
+            Self::Integer56(v) => write!(f, "{}", v),
             Self::Integer64(v) => write!(f, "{}", v),
             Self::Unsigned8(v) => write!(f, "{}", v),
             Self::Unsigned16(v) => write!(f, "{}", v),
             Self::Unsigned24(v) => write!(f, "{}", v),
             Self::Unsigned32(v) => write!(f, "{}", v),
+            Self::Unsigned40(v) => write!(f, "{}", v),
+            Self::Unsigned48(v) => write!(f, "{}", v),
+            Self::Unsigned56(v) => write!(f, "{}", v),
             Self::Unsigned64(v) => write!(f, "{}", v),
             Self::Real32(v) => write!(f, "{}", v),
             Self::Real64(v) => write!(f, "{}", v),

@@ -251,3 +251,13 @@ export function useStopPlayback() {
     },
   });
 }
+
+// Recording playback with path
+export function useStartRecordingWithPath() {
+  return useMutation({
+    mutationFn: ({ path }: { path: string }) => tauri.startRecording(path),
+    onSuccess: (_, { path }) => {
+      useAppStore.getState().recording.setRecording({ isRecording: true, recordingPath: path });
+    },
+  });
+}

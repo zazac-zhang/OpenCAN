@@ -1,6 +1,6 @@
 //! Profile Velocity (PV) mode — CiA 402 mode 3.
 
-use super::{ModeActual, ModeTarget, OperationModeHandler};
+use super::{ModeActual, ModeConfig, ModeTarget, OperationModeHandler};
 use crate::SdoClient;
 use opencan_canopen_core::CanDriver;
 use opencan_canopen_core::CanOpenError;
@@ -17,9 +17,31 @@ impl OperationModeHandler for ProfileVelocity {
         &self,
         sdo: &mut SdoClient<impl CanDriver>,
         node_id: u8,
+        config: &ModeConfig,
     ) -> Result<(), CanOpenError> {
+        // Set mode of operation
         sdo.download(node_id, 0x6060, 0, &OdValue::Integer8(self.mode_value()))
-            .await
+            .await?;
+
+        // Set profile acceleration (0x6083)
+        if let Some(acc) = config.profile_acceleration {
+            sdo.download(node_id, 0x6083, 0, &OdValue::Unsigned32(acc))
+                .await?;
+        }
+
+        // Set profile deceleration (0x6084)
+        if let Some(dec) = config.profile_deceleration {
+            sdo.download(node_id, 0x6084, 0, &OdValue::Unsigned32(dec))
+                .await?;
+        }
+
+        // Set quick stop deceleration (0x8500)
+        if let Some(qsd) = config.quick_stop_deceleration {
+            sdo.download(node_id, 0x8500, 0, &OdValue::Unsigned32(qsd))
+                .await?;
+        }
+
+        Ok(())
     }
 
     async fn set_target(

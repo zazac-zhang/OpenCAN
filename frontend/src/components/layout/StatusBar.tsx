@@ -1,12 +1,16 @@
 // Status bar
 
-import { useAppStore, useConnected, useNodes } from '@/lib/store';
+import { useAppStore, useConnected, useNodes, useFrames, useErrorFrames } from '@/lib/store';
 
 export function StatusBar() {
   const connected = useConnected();
   const nodes = useNodes();
+  const frames = useFrames();
   const busStats = useAppStore((s) => s.frames.busStats);
+  const errorFrames = useErrorFrames();
   const ui = useAppStore((s) => s.ui);
+  const isRecording = useAppStore((s) => s.recording.recording.isRecording);
+  const isPlaying = useAppStore((s) => s.recording.recording.isPlaying);
 
   return (
     <div className="flex items-center gap-3 px-4 py-1 border-t bg-muted/50 h-7 text-xs shrink-0">
@@ -16,11 +20,17 @@ export function StatusBar() {
         <>
           <span>Load: {busStats.bus_load.toFixed(1)}%</span>
           <span>Rate: {busStats.frame_rate} fps</span>
-          <span>Frames: {busStats.frame_rate > 0 ? '—' : '0'}</span>
+          <span>Frames: {frames.length.toLocaleString()}</span>
+          {errorFrames.length > 0 && (
+            <span className="text-red-400">Errors: {errorFrames.length}</span>
+          )}
         </>
       )}
 
       <span>Nodes: {nodes.length}</span>
+
+      {isRecording && <span className="text-red-400 animate-pulse">● REC</span>}
+      {isPlaying && <span className="text-blue-400">▶ PLAY</span>}
 
       <div className="flex-1" />
 

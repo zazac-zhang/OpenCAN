@@ -1,6 +1,6 @@
 //! Cyclic Sync Position (CSP) mode — CiA 402 mode 8.
 
-use super::{ModeActual, ModeTarget, OperationModeHandler};
+use super::{ModeActual, ModeConfig, ModeTarget, OperationModeHandler};
 use crate::SdoClient;
 use opencan_canopen_core::CanDriver;
 use opencan_canopen_core::CanOpenError;
@@ -17,7 +17,9 @@ impl OperationModeHandler for CyclicSyncPosition {
         &self,
         sdo: &mut SdoClient<impl CanDriver>,
         node_id: u8,
+        _config: &ModeConfig,
     ) -> Result<(), CanOpenError> {
+        // CSP mode only needs the mode of operation to be set
         sdo.download(node_id, 0x6060, 0, &OdValue::Integer8(self.mode_value()))
             .await
     }

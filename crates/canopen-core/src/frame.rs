@@ -425,6 +425,34 @@ pub enum SdoData {
     UploadRequest,
     /// Abort.
     Abort { code: u32 },
+    /// Initiate block upload request (client → server, cs=5).
+    BlockUploadRequest {
+        /// Enable CRC in block transfer.
+        crc_enabled: bool,
+    },
+    /// Start block upload (client → server, cs=6).
+    BlockUploadStart,
+    /// Block segment (cs=0, sequence number in data[0]).
+    BlockSegment {
+        /// Sequence number (1-127).
+        seq: u8,
+        /// Segment data (up to 7 bytes).
+        data: [u8; 7],
+    },
+    /// End block upload/download (cs=1 or cs=2).
+    BlockEnd {
+        /// Number of unused bytes in last segment.
+        n: u8,
+        /// CRC (if used).
+        crc: Option<u16>,
+    },
+    /// Initiate block download request (client → server, cs=6).
+    BlockDownloadRequest {
+        /// Enable CRC in block transfer.
+        crc_enabled: bool,
+        /// Total data size (if known).
+        size: Option<u32>,
+    },
 }
 
 impl SdoRequest {
@@ -483,6 +511,50 @@ impl SdoRequest {
                 data[1..3].copy_from_slice(&self.index.to_le_bytes());
                 data[3] = self.subindex;
                 data[4..8].copy_from_slice(&size.to_le_bytes());
+            }
+            SdoData::BlockUploadRequest { crc_enabled } => {
+                let mut cmd: u8 = 0xA0; // initiate block upload (cs=5)
+                if *crc_enabled {
+                    cmd |= 0x04; // CRC enabled
+                }
+                data[0] = cmd;
+                data[1..3].copy_from_slice(&self.index.to_le_bytes());
+                data[3] = self.subindex;
+            }
+            SdoData::BlockUploadStart => {
+                data[0] = 0xC0; // start block upload (cs=6)
+            }
+            SdoData::BlockSegment { seq, data: d } => {
+                data[0] = *seq & 0x7F; // sequence number (1-127)
+                data[1..8].copy_from_slice(d);
+            }
+            SdoData::BlockEnd { n, crc } => {
+                let mut cmd: u8 = 0xC1; // end block (cs=1)
+                if crc.is_some() {
+                    cmd |= 0x04; // CRC used
+                }
+                cmd |= (n & 0x07) << 1;
+                data[0] = cmd;
+                if let Some(crc_val) = crc {
+                    data[1..3].copy_from_slice(&crc_val.to_le_bytes());
+                }
+            }
+            SdoData::BlockDownloadRequest { crc_enabled, size } => {
+                let mut cmd: u8 = 0xC0; // initiate block download (cs=6)
+                if *crc_enabled {
+                    cmd |= 0x04; // CRC enabled
+                }
+                if let Some(s) = size {
+                    cmd |= 0x02; // size indicated
+                    data[0] = cmd;
+                    data[1..3].copy_from_slice(&self.index.to_le_bytes());
+                    data[3] = self.subindex;
+                    data[4..8].copy_from_slice(&s.to_le_bytes());
+                } else {
+                    data[0] = cmd;
+                    data[1..3].copy_from_slice(&self.index.to_le_bytes());
+                    data[3] = self.subindex;
+                }
             }
         }
 
@@ -550,6 +622,46 @@ impl SdoRequest {
                 data: d,
                 size,
             }
+        } else if cmd & 0xE0 == 0xA0 {
+            // Block upload request (cs=5)
+            let crc_enabled = cmd & 0x04 != 0;
+            SdoData::BlockUploadRequest { crc_enabled }
+        } else if cmd == 0xC0 {
+            // Start block upload (cs=6)
+            SdoData::BlockUploadStart
+        } else if cmd & 0xE0 == 0xC0 {
+            // Block download request (cs=6) or block end (cs=1)
+            let cs = (cmd >> 5) & 0x07;
+            match cs {
+                6 => {
+                    // Initiate block download
+                    let crc_enabled = cmd & 0x04 != 0;
+                    let size_indicated = cmd & 0x02 != 0;
+                    let size = if size_indicated {
+                        Some(u32::from_le_bytes([
+                            frame.data[4],
+                            frame.data[5],
+                            frame.data[6],
+                            frame.data[7],
+                        ]))
+                    } else {
+                        None
+                    };
+                    SdoData::BlockDownloadRequest { crc_enabled, size }
+                }
+                1 => {
+                    // Block end
+                    let n = (cmd >> 1) & 0x07;
+                    let crc_used = cmd & 0x04 != 0;
+                    let crc = if crc_used {
+                        Some(u16::from_le_bytes([frame.data[1], frame.data[2]]))
+                    } else {
+                        None
+                    };
+                    SdoData::BlockEnd { n, crc }
+                }
+                _ => return None,
+            }
         } else {
             return None;
         };
@@ -589,6 +701,34 @@ pub enum SdoResponseData {
     DownloadConfirmed,
     /// Abort.
     Abort { code: u32 },
+    /// Block upload initiated response (server → client, cs=5).
+    BlockUploadInitiated {
+        /// Server's proposed block size (1-127).
+        block_size: u8,
+        /// CRC supported by server.
+        crc_supported: bool,
+        /// Total data size (if indicated).
+        size: Option<u32>,
+    },
+    /// Block segment (cs=0, sequence number in cmd).
+    BlockSegment {
+        /// Sequence number (1-127).
+        seq: u8,
+        /// Segment data (up to 7 bytes).
+        data: [u8; 7],
+    },
+    /// End block upload/download (cs=1 or cs=2).
+    BlockEnd {
+        /// Number of unused bytes in last segment.
+        n: u8,
+        /// CRC (if used).
+        crc: Option<u16>,
+    },
+    /// Block download confirmed (server → client, cs=4).
+    BlockDownloadConfirmed {
+        /// CRC supported by server.
+        crc_supported: bool,
+    },
 }
 
 impl SdoResponse {
@@ -603,10 +743,37 @@ impl SdoResponse {
         let subindex = frame.data[3];
 
         let data = if cmd == 0x80 {
-            // Abort
+            // Could be Abort or Block Download Confirmed (cs=4)
+            // Distinguish by checking if abort code is non-zero
             let code =
                 u32::from_le_bytes([frame.data[4], frame.data[5], frame.data[6], frame.data[7]]);
-            SdoResponseData::Abort { code }
+            if code != 0 {
+                SdoResponseData::Abort { code }
+            } else {
+                // Block download confirmed
+                let crc_supported = cmd & 0x04 != 0;
+                SdoResponseData::BlockDownloadConfirmed { crc_supported }
+            }
+        } else if cmd == 0xA0 || cmd == 0xA4 || cmd == 0xA2 || cmd == 0xA6 {
+            // Initiate block upload response (cs=5)
+            let crc_supported = cmd & 0x04 != 0;
+            let size_indicated = cmd & 0x02 != 0;
+            let block_size = frame.data[4];
+            let size = if size_indicated {
+                Some(u32::from_le_bytes([
+                    frame.data[5],
+                    frame.data[6],
+                    frame.data[7],
+                    0,
+                ]))
+            } else {
+                None
+            };
+            SdoResponseData::BlockUploadInitiated {
+                block_size,
+                crc_supported,
+                size,
+            }
         } else if cmd & 0xE0 == 0x40 {
             // Initiate upload response (cs=2)
             let expedited = cmd & 0x02 != 0;
@@ -652,6 +819,16 @@ impl SdoResponse {
                 data: d,
                 size,
             }
+        } else if cmd & 0xE0 == 0xA0 || cmd & 0xE0 == 0xC0 {
+            // Block end (cs=5 from server or cs=6 from client)
+            let n = (cmd >> 1) & 0x07;
+            let crc_used = cmd & 0x04 != 0;
+            let crc = if crc_used {
+                Some(u16::from_le_bytes([frame.data[1], frame.data[2]]))
+            } else {
+                None
+            };
+            SdoResponseData::BlockEnd { n, crc }
         } else {
             return None;
         };
@@ -722,6 +899,50 @@ impl SdoResponse {
                 data[1..3].copy_from_slice(&self.index.to_le_bytes());
                 data[3] = self.subindex;
                 data[4..8].copy_from_slice(&code.to_le_bytes());
+            }
+            SdoResponseData::BlockUploadInitiated {
+                block_size,
+                crc_supported,
+                size,
+            } => {
+                let mut cmd: u8 = 0xA0; // initiate block upload response (cs=5)
+                if *crc_supported {
+                    cmd |= 0x04;
+                }
+                if size.is_some() {
+                    cmd |= 0x02; // size indicated
+                }
+                data[0] = cmd;
+                data[1..3].copy_from_slice(&self.index.to_le_bytes());
+                data[3] = self.subindex;
+                data[4] = *block_size;
+                if let Some(s) = size {
+                    data[5..8].copy_from_slice(&s.to_le_bytes()[0..3]);
+                }
+            }
+            SdoResponseData::BlockSegment { seq, data: d } => {
+                data[0] = *seq & 0x7F; // sequence number (1-127)
+                data[1..8].copy_from_slice(d);
+            }
+            SdoResponseData::BlockEnd { n, crc } => {
+                let mut cmd: u8 = 0xA1; // end block (cs=5)
+                if crc.is_some() {
+                    cmd |= 0x04; // CRC used
+                }
+                cmd |= (n & 0x07) << 1;
+                data[0] = cmd;
+                if let Some(crc_val) = crc {
+                    data[1..3].copy_from_slice(&crc_val.to_le_bytes());
+                }
+            }
+            SdoResponseData::BlockDownloadConfirmed { crc_supported } => {
+                let mut cmd: u8 = 0x80; // block download confirmed (cs=4)
+                if *crc_supported {
+                    cmd |= 0x04;
+                }
+                data[0] = cmd;
+                data[1..3].copy_from_slice(&self.index.to_le_bytes());
+                data[3] = self.subindex;
             }
         }
 
@@ -1177,7 +1398,7 @@ mod tests {
             SdoResponseData::Segment {
                 toggle,
                 last,
-                data,
+                data: _,
                 size,
             } => {
                 assert!(!toggle);

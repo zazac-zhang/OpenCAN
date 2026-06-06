@@ -1,54 +1,45 @@
 // Network Overview page
 
-import { useNodes, useSelectedNode, useAppStore } from '@/lib/store';
+import { useNodes, useAppStore } from '@/lib/store';
 import { useScanNodes } from '@/hooks/useCommands';
+import { NodeCard } from '@/components/common/NodeCard';
 
 export function NetworkOverview() {
   const nodes = useNodes();
-  const selectedNode = useSelectedNode();
+  const selectedNode = useAppStore((s) => s.can.selectedNode);
   const scanMutation = useScanNodes();
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 space-y-4 overflow-auto h-full">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Network Overview</h2>
         <button
           className="px-3 py-1 text-sm bg-primary text-primary-foreground rounded"
           onClick={() => scanMutation.mutate()}
+          disabled={scanMutation.isPending}
         >
-          Scan Nodes
+          {scanMutation.isPending ? 'Scanning...' : 'Scan Nodes'}
         </button>
       </div>
 
       {nodes.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No nodes discovered. Click "Scan Nodes" to find devices.</p>
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <p className="text-sm text-muted-foreground mb-2">No nodes discovered</p>
+          <p className="text-xs text-muted-foreground">Click "Scan Nodes" to find devices on the bus</p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {nodes.map((node) => (
-            <div
+            <NodeCard
               key={node.node_id}
-              className={`p-4 border rounded-lg cursor-pointer transition ${
-                selectedNode === node.node_id
-                  ? 'border-primary bg-primary/5'
-                  : 'hover:border-muted-foreground/50'
-              }`}
-              onClick={() => {
+              node={node}
+              selected={selectedNode === node.node_id}
+              onClick={(id) => {
                 useAppStore.setState((s) => ({
-                  can: { ...s.can, selectedNode: node.node_id },
+                  can: { ...s.can, selectedNode: id },
                 }));
               }}
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-lg">{node.nmt_state === 'Operational' ? '🟢' : '🟡'}</span>
-                <span className="font-medium">Node {node.node_id}</span>
-              </div>
-              <div className="text-sm text-muted-foreground mt-1">{node.nmt_state}</div>
-              {node.device_type && (
-                <div className="text-xs text-muted-foreground mt-2">
-                  Device: 0x{node.device_type.toString(16).padStart(8, '0')}
-                </div>
-              )}
-            </div>
+            />
           ))}
         </div>
       )}

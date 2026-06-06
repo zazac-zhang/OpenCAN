@@ -31,6 +31,31 @@ pub enum ModeActual {
     Torque(i16),
 }
 
+/// Configuration parameters for DS402 operation modes.
+///
+/// Not all parameters are used by all modes.
+#[derive(Debug, Clone, Default)]
+pub struct ModeConfig {
+    /// Profile velocity (0x6081) in position units/s.
+    pub profile_velocity: Option<u32>,
+    /// Profile acceleration (0x6083) in position units/s².
+    pub profile_acceleration: Option<u32>,
+    /// Profile deceleration (0x6084) in position units/s².
+    pub profile_deceleration: Option<u32>,
+    /// Quick stop deceleration (0x8500) in position units/s².
+    pub quick_stop_deceleration: Option<u32>,
+    /// Max profile velocity (0x607F) in position units/s.
+    pub max_profile_velocity: Option<u32>,
+    /// Max acceleration (0x60C5) in position units/s².
+    pub max_acceleration: Option<u32>,
+    /// Max deceleration (0x60C6) in position units/s².
+    pub max_deceleration: Option<u32>,
+    /// Torque slope (0x6087) in 0.1%/s.
+    pub torque_slope: Option<u32>,
+    /// Max torque (0x6072) in 0.1% of rated torque.
+    pub max_torque: Option<u16>,
+}
+
 /// Trait for DS402 operation mode handlers.
 #[allow(async_fn_in_trait)]
 pub trait OperationModeHandler {
@@ -42,8 +67,9 @@ pub trait OperationModeHandler {
         &self,
         sdo: &mut SdoClient<impl CanDriver>,
         node_id: u8,
+        config: &ModeConfig,
     ) -> Result<(), CanOpenError> {
-        let _ = (sdo, node_id);
+        let _ = (sdo, node_id, config);
         Ok(())
     }
 

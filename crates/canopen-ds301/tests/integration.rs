@@ -184,8 +184,11 @@ mod ds402_tests {
     async fn test_ds402_enable_sequence() {
         let mut mock = MockCanDriver::new();
 
-        // Read status word → OperationEnabled (0x0027)
-        mock.enqueue(sdo_upload_response_u16(3, 0x6041, 0, 0x0027));
+        // Read status word (called twice: once in test, once in enable())
+        // First read: SwitchOnDisabled (0x0040)
+        mock.enqueue(sdo_upload_response_u16(3, 0x6041, 0, 0x0040));
+        // Second read (inside enable()): SwitchOnDisabled (0x0040)
+        mock.enqueue(sdo_upload_response_u16(3, 0x6041, 0, 0x0040));
 
         // Enable sequence: Shutdown → SwitchOn → EnableOperation
         mock.enqueue(sdo_download_confirm(3, 0x6040, 0)); // Shutdown
@@ -197,27 +200,45 @@ mod ds402_tests {
 
         // Read current state
         let state = device.state().await.unwrap();
-        assert_eq!(state, Ds402State::OperationEnabled);
+        assert_eq!(state, Ds402State::SwitchOnDisabled);
 
         // Execute enable sequence
         device.enable().await.unwrap();
 
         // Verify control words were sent
         let tx = device.sdo().can().tx_log();
-        assert_eq!(tx.len(), 4); // read + 3 writes
+        assert_eq!(tx.len(), 5); // 2 reads + 3 writes
 
-        // Check the control words
+        // Check the control words (indices 2, 3, 4)
         // First write: Shutdown (0x0006)
-        assert_eq!(tx[1].data[4], 0x06);
-        assert_eq!(tx[1].data[5], 0x00);
-
-        // Second write: Switch On (0x0007)
-        assert_eq!(tx[2].data[4], 0x07);
+        assert_eq!(tx[2].data[4], 0x06);
         assert_eq!(tx[2].data[5], 0x00);
 
-        // Third write: Enable Operation (0x000F)
-        assert_eq!(tx[3].data[4], 0x0F);
+        // Second write: Switch On (0x0007)
+        assert_eq!(tx[3].data[4], 0x07);
         assert_eq!(tx[3].data[5], 0x00);
+
+        // Third write: Enable Operation (0x000F)
+        assert_eq!(tx[4].data[4], 0x0F);
+        assert_eq!(tx[4].data[5], 0x00);
+    }
+
+    #[tokio::test]
+    async fn test_ds402_enable_already_enabled() {
+        let mut mock = MockCanDriver::new();
+
+        // Read status word → OperationEnabled (0x0027) — already enabled
+        mock.enqueue(sdo_upload_response_u16(3, 0x6041, 0, 0x0027));
+
+        let client = SdoClient::<MockCanDriver>::new(mock, Duration::from_secs(1));
+        let mut device = Ds402Device::new(client, 3);
+
+        // Execute enable — should be a no-op
+        device.enable().await.unwrap();
+
+        // Verify only the status read was sent (no writes)
+        let tx = device.sdo().can().tx_log();
+        assert_eq!(tx.len(), 1); // only the status read
     }
 
     #[tokio::test]
