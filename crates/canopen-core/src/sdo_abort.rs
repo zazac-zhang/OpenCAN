@@ -258,10 +258,22 @@ mod tests {
 
     #[test]
     fn test_abort_reason_known_codes() {
-        assert_eq!(abort_reason(codes::OBJECT_NOT_FOUND), "Object does not exist");
-        assert_eq!(abort_reason(codes::SUBINDEX_NOT_FOUND), "Sub-index does not exist");
-        assert_eq!(abort_reason(codes::UNSUPPORTED_ACCESS), "Unsupported access to an object");
-        assert_eq!(abort_reason(codes::PROTOCOL_TIMEOUT), "SDO protocol timed out");
+        assert_eq!(
+            abort_reason(codes::OBJECT_NOT_FOUND),
+            "Object does not exist"
+        );
+        assert_eq!(
+            abort_reason(codes::SUBINDEX_NOT_FOUND),
+            "Sub-index does not exist"
+        );
+        assert_eq!(
+            abort_reason(codes::UNSUPPORTED_ACCESS),
+            "Unsupported access to an object"
+        );
+        assert_eq!(
+            abort_reason(codes::PROTOCOL_TIMEOUT),
+            "SDO protocol timed out"
+        );
     }
 
     #[test]

@@ -374,12 +374,8 @@ impl TimestampFrame {
         if frame.cob_id != 0x100 {
             return None;
         }
-        let ms_of_day = u32::from_le_bytes([
-            frame.data[0],
-            frame.data[1],
-            frame.data[2],
-            frame.data[3],
-        ]);
+        let ms_of_day =
+            u32::from_le_bytes([frame.data[0], frame.data[1], frame.data[2], frame.data[3]]);
         let days = u16::from_le_bytes([frame.data[4], frame.data[5]]);
         Some(Self { ms_of_day, days })
     }
@@ -769,7 +765,9 @@ pub enum FrameClass {
     SdoResponse(SdoResponse),
     Heartbeat(HeartbeatFrame),
     /// Unrecognized or malformed frame. Carries the raw COB-ID for diagnostics.
-    Unknown { cob_id: u16 },
+    Unknown {
+        cob_id: u16,
+    },
 }
 
 pub fn classify_frame(frame: &CanOpenFrame) -> FrameClass {
@@ -846,10 +844,14 @@ impl std::fmt::Display for NmtState {
 impl std::fmt::Display for CanOpenFrame {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let fc = CobId::from_u16(self.cob_id & 0x7FF);
-        let fc_str = fc.map(|c| c.to_string()).unwrap_or_else(|| format!("0x{:03X}", self.cob_id));
+        let fc_str = fc
+            .map(|c| c.to_string())
+            .unwrap_or_else(|| format!("0x{:03X}", self.cob_id));
         write!(f, "COB-ID=0x{:03X} ({}) data=[", self.cob_id, fc_str)?;
         for (i, b) in self.data.iter().enumerate() {
-            if i > 0 { write!(f, " ")?; }
+            if i > 0 {
+                write!(f, " ")?;
+            }
             write!(f, "{:02X}", b)?;
         }
         write!(f, "]")
@@ -1146,7 +1148,12 @@ mod tests {
 
         let resp = SdoResponse::decode(&frame).unwrap();
         match resp.data {
-            SdoResponseData::Segment { toggle, last, data, size } => {
+            SdoResponseData::Segment {
+                toggle,
+                last,
+                data,
+                size,
+            } => {
                 assert!(!toggle);
                 assert!(!last);
                 assert_eq!(data, [0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47]);
@@ -1167,7 +1174,12 @@ mod tests {
 
         let resp = SdoResponse::decode(&frame).unwrap();
         match resp.data {
-            SdoResponseData::Segment { toggle, last, data, size } => {
+            SdoResponseData::Segment {
+                toggle,
+                last,
+                data,
+                size,
+            } => {
                 assert!(!toggle);
                 assert!(!last);
                 assert_eq!(size, Some(3));

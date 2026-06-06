@@ -29,11 +29,7 @@ pub struct InvalidNodeId(pub u8);
 
 impl fmt::Display for InvalidNodeId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "invalid node ID {}: must be in range 1..=127",
-            self.0
-        )
+        write!(f, "invalid node ID {}: must be in range 1..=127", self.0)
     }
 }
 
@@ -147,6 +143,9 @@ mod tests {
     #[test]
     fn test_invalid_node_id_display() {
         let err = InvalidNodeId(0);
-        assert_eq!(format!("{}", err), "invalid node ID 0: must be in range 1..=127");
+        assert_eq!(
+            format!("{}", err),
+            "invalid node ID 0: must be in range 1..=127"
+        );
     }
 }

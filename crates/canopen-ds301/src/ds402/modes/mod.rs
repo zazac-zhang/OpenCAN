@@ -11,9 +11,9 @@ pub mod pp;
 pub mod pt;
 pub mod pv;
 
+use crate::SdoClient;
 use opencan_canopen_core::CanDriver;
 use opencan_canopen_core::CanOpenError;
-use crate::SdoClient;
 
 /// Target value for an operation mode.
 #[derive(Debug, Clone)]

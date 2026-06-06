@@ -120,7 +120,13 @@ impl ConcreteOd {
     /// - 0x1000: Device Type (default 0x00020192)
     /// - 0x1001: Error Register
     /// - 0x1018: Identity Object (4 subindices)
-    pub fn standard_device(device_type: u32, vendor_id: u32, product_code: u32, revision: u32, serial: u32) -> Self {
+    pub fn standard_device(
+        device_type: u32,
+        vendor_id: u32,
+        product_code: u32,
+        revision: u32,
+        serial: u32,
+    ) -> Self {
         let mut od = Self::new();
 
         // 0x1000: Device Type
@@ -225,7 +231,9 @@ pub struct OdBuilder {
 impl OdBuilder {
     /// Create a new builder.
     pub fn new() -> Self {
-        Self { od: ConcreteOd::new() }
+        Self {
+            od: ConcreteOd::new(),
+        }
     }
 
     /// Add a simple variable entry (subindex 0, Var type).
@@ -408,7 +416,11 @@ mod tests {
         let od = make_test_od();
         let entries: Vec<_> = od.range(0x6000, 0x6FFF).collect();
         assert_eq!(entries.len(), 2);
-        assert!(entries.iter().all(|e| e.index >= 0x6000 && e.index <= 0x6FFF));
+        assert!(
+            entries
+                .iter()
+                .all(|e| e.index >= 0x6000 && e.index <= 0x6FFF)
+        );
     }
 
     #[test]
@@ -442,7 +454,8 @@ mod tests {
 
     #[test]
     fn test_standard_device() {
-        let od = ConcreteOd::standard_device(0x00020192, 0x12345678, 0xABCDEF01, 0x00010002, 0x00000042);
+        let od =
+            ConcreteOd::standard_device(0x00020192, 0x12345678, 0xABCDEF01, 0x00010002, 0x00000042);
 
         assert_eq!(od.read(0x1000, 0).unwrap(), OdValue::Unsigned32(0x00020192));
         assert_eq!(od.read(0x1001, 0).unwrap(), OdValue::Unsigned8(0));
@@ -456,8 +469,18 @@ mod tests {
     #[test]
     fn test_builder() {
         let od = OdBuilder::new()
-            .add_var(0x1000, "Device Type", AccessType::ReadOnly, OdValue::Unsigned32(0x00020192))
-            .add_var(0x6040, "Control Word", AccessType::ReadWrite, OdValue::Unsigned16(0))
+            .add_var(
+                0x1000,
+                "Device Type",
+                AccessType::ReadOnly,
+                OdValue::Unsigned32(0x00020192),
+            )
+            .add_var(
+                0x6040,
+                "Control Word",
+                AccessType::ReadWrite,
+                OdValue::Unsigned16(0),
+            )
             .build();
 
         assert_eq!(od.len(), 2);

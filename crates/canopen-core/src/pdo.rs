@@ -256,7 +256,11 @@ pub enum PdoError {
     /// Total mapped data exceeds 64 bits.
     DataExceeds64Bits { total_bits: u16 },
     /// Non-byte-aligned mappings not yet supported.
-    NonByteAligned { index: u16, subindex: u8, bit_offset: u16 },
+    NonByteAligned {
+        index: u16,
+        subindex: u8,
+        bit_offset: u16,
+    },
     /// Failed to decode a value from PDO data.
     DecodeFailed { index: u16, subindex: u8 },
 }
@@ -265,19 +269,39 @@ impl std::fmt::Display for PdoError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::LengthMismatch { mappings, values } => {
-                write!(f, "PDO length mismatch: {} mappings, {} values", mappings, values)
+                write!(
+                    f,
+                    "PDO length mismatch: {} mappings, {} values",
+                    mappings, values
+                )
             }
             Self::ValueTooShort { index, subindex } => {
-                write!(f, "value too short for mapping at {:04X}:{:02X}", index, subindex)
+                write!(
+                    f,
+                    "value too short for mapping at {:04X}:{:02X}",
+                    index, subindex
+                )
             }
             Self::DataExceeds64Bits { total_bits } => {
                 write!(f, "PDO data exceeds 64 bits ({} bits)", total_bits)
             }
-            Self::NonByteAligned { index, subindex, bit_offset } => {
-                write!(f, "non-byte-aligned mapping at {:04X}:{:02X} (bit offset {})", index, subindex, bit_offset)
+            Self::NonByteAligned {
+                index,
+                subindex,
+                bit_offset,
+            } => {
+                write!(
+                    f,
+                    "non-byte-aligned mapping at {:04X}:{:02X} (bit offset {})",
+                    index, subindex, bit_offset
+                )
             }
             Self::DecodeFailed { index, subindex } => {
-                write!(f, "failed to decode PDO value at {:04X}:{:02X}", index, subindex)
+                write!(
+                    f,
+                    "failed to decode PDO value at {:04X}:{:02X}",
+                    index, subindex
+                )
             }
         }
     }
@@ -555,13 +579,10 @@ mod tests {
     #[test]
     fn test_pack_pdo_basic() {
         let mappings = vec![
-            PdoMapping::new(0x6041, 0, 16),  // Status Word (2 bytes)
-            PdoMapping::new(0x6064, 0, 32),  // Position (4 bytes)
+            PdoMapping::new(0x6041, 0, 16), // Status Word (2 bytes)
+            PdoMapping::new(0x6064, 0, 32), // Position (4 bytes)
         ];
-        let values = vec![
-            OdValue::Unsigned16(0x0027),
-            OdValue::Unsigned32(12345),
-        ];
+        let values = vec![OdValue::Unsigned16(0x0027), OdValue::Unsigned32(12345)];
         let data = pack_pdo(&mappings, &values).unwrap();
         assert_eq!(&data[0..2], &0x0027u16.to_le_bytes());
         assert_eq!(&data[2..6], &12345u32.to_le_bytes());
@@ -628,7 +649,11 @@ mod tests {
         ];
         let data = pack_pdo(&mappings, &values).unwrap();
 
-        let types = vec![DataType::Unsigned16, DataType::Unsigned32, DataType::Unsigned16];
+        let types = vec![
+            DataType::Unsigned16,
+            DataType::Unsigned32,
+            DataType::Unsigned16,
+        ];
         let unpacked = unpack_pdo(&mappings, &data, &types).unwrap();
         assert_eq!(unpacked, values);
     }

@@ -187,9 +187,24 @@ mod tests {
     #[test]
     fn test_emergency_handler_events_for_node() {
         let mut handler = EmergencyHandler::new(10);
-        handler.record(&EmergencyFrame { node_id: 1, error_code: 0x1000, error_register: 0, data: [0; 5] });
-        handler.record(&EmergencyFrame { node_id: 2, error_code: 0x2000, error_register: 0, data: [0; 5] });
-        handler.record(&EmergencyFrame { node_id: 1, error_code: 0x3000, error_register: 0, data: [0; 5] });
+        handler.record(&EmergencyFrame {
+            node_id: 1,
+            error_code: 0x1000,
+            error_register: 0,
+            data: [0; 5],
+        });
+        handler.record(&EmergencyFrame {
+            node_id: 2,
+            error_code: 0x2000,
+            error_register: 0,
+            data: [0; 5],
+        });
+        handler.record(&EmergencyFrame {
+            node_id: 1,
+            error_code: 0x3000,
+            error_register: 0,
+            data: [0; 5],
+        });
 
         let node1_events = handler.events_for_node(1);
         assert_eq!(node1_events.len(), 2);

@@ -3,8 +3,8 @@
 //! Converts a parsed [`EdsFile`] into a [`ConcreteOd`] that can be used
 //! by the CANOpen protocol stack and GUI.
 
-use crate::eds::model::EdsFile;
 use crate::concrete_od::{ConcreteOd, OdEntry};
+use crate::eds::model::EdsFile;
 use crate::od::{AccessType, DataType, ObjectType, OdValue};
 
 /// Build a [`ConcreteOd`] from a parsed EDS file.

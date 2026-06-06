@@ -71,10 +71,10 @@ impl<B: CanBus> CanDriver for CanDriverAdapter<B> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use opencan_can_traits::error::CanError;
+    use opencan_can_traits::{CanBitrate, CanState};
     use std::future::Future;
     use std::pin::Pin;
-    use opencan_can_traits::{CanBitrate, CanState};
-    use opencan_can_traits::error::CanError;
 
     // Mock CanBus for testing
     struct MockBus;
@@ -115,7 +115,10 @@ mod tests {
         match &can_frame {
             CanFrame::Classic(f) => {
                 assert_eq!(f.id, CanId::Standard(0x180));
-                assert_eq!(f.data[..f.len as usize], [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
+                assert_eq!(
+                    f.data[..f.len as usize],
+                    [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
+                );
             }
             _ => panic!("Expected Classic frame"),
         }

@@ -1,10 +1,10 @@
 //! Cyclic Sync Position (CSP) mode — CiA 402 mode 8.
 
 use super::{ModeActual, ModeTarget, OperationModeHandler};
+use crate::SdoClient;
 use opencan_canopen_core::CanDriver;
 use opencan_canopen_core::CanOpenError;
 use opencan_canopen_core::od::OdValue;
-use crate::SdoClient;
 
 pub struct CyclicSyncPosition;
 

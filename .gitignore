@@ -4,3 +4,6 @@ Cargo.lock
 *.swo
 *~
 .DS_Store
+frontend/node_modules/
+frontend/dist/
+opencan-gui/src-tauri/target/

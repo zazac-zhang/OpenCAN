@@ -900,7 +900,10 @@ mod tests {
             .iter()
             .filter(|e| matches!(e, CanEvent::HeartbeatTimeout { node_id: 3 }))
             .count();
-        assert_eq!(timeout_count2, 0, "Duplicate timeout should not be reported");
+        assert_eq!(
+            timeout_count2, 0,
+            "Duplicate timeout should not be reported"
+        );
     }
 
     #[tokio::test]
@@ -941,6 +944,9 @@ mod tests {
             .iter()
             .filter(|e| matches!(e, CanEvent::HeartbeatTimeout { node_id: 3 }))
             .count();
-        assert_eq!(timeout_count, 1, "Timeout should be reported again after recovery");
+        assert_eq!(
+            timeout_count, 1,
+            "Timeout should be reported again after recovery"
+        );
     }
 }

@@ -3,8 +3,8 @@
 //! High-level API for controlling CANOpen motion control devices.
 
 use super::state_machine::{ControlWord, Ds402State, OperationMode};
-use opencan_canopen_core::{CanDriver, CanOpenError, OdValue};
 use crate::SdoClient;
+use opencan_canopen_core::{CanDriver, CanOpenError, OdValue};
 
 /// DS402 motion control device.
 ///

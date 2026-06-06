@@ -1,0 +1,31 @@
+{
+  "identifier": "main-capability",
+  "description": "Main window capabilities",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "fs:default",
+    "fs:allow-read-text-file",
+    "fs:allow-write-text-file",
+    "fs:allow-read-dir",
+    "fs:allow-write-dir",
+    "fs:allow-read-all",
+    "fs:allow-write-all",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "dialog:allow-message",
+    "shell:allow-open",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
+    "os:allow-platform",
+    "os:allow-arch",
+    "os:allow-version",
+    "window:allow-set-size",
+    "window:allow-maximize",
+    "window:allow-minimize",
+    "window:allow-start-dragging",
+    "app:allow-version",
+    "app:allow-app-show",
+    "app:allow-app-hide"
+  ]
+}

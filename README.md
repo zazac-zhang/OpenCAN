@@ -103,6 +103,142 @@ cargo build -p opencan-gui --features pcan
 cargo build -p opencan-gui --features zlg
 ```
 
+## Development Commands
+
+We provide multiple ways to run common development tasks:
+
+### Using just (Recommended)
+
+Install [just](https://github.com/casey/just) and run:
+
+```bash
+# Show all available commands
+just
+
+# Type check
+just check
+
+# Build
+just build
+
+# Run tests
+just test
+
+# Run clippy (CI gate)
+just clippy
+
+# Format code
+just fmt
+
+# Check formatting (CI gate)
+just fmt-check
+
+# Run GUI
+just gui
+
+# Run GUI with socketcan
+just gui-socketcan
+
+# Setup vcan0 (Linux, requires sudo)
+just vcan-setup
+
+# Run vcan integration tests
+just vcan-test
+
+# Run all CI checks
+just ci
+
+# Clean build artifacts
+just clean
+
+# Show dependency tree
+just deps
+
+# Generate and open documentation
+just doc
+
+# Watch for changes and run check
+just watch
+
+# Run tests for a specific crate
+just test-crate canopen-core
+
+# Build with specific feature
+just build-feature socketcan
+```
+
+### Using Make
+
+Alternatively, use `make`:
+
+```bash
+# Show all targets
+make help
+
+# Type check
+make check
+
+# Build
+make build
+
+# Run tests
+make test
+
+# Run clippy
+make clippy
+
+# Format code
+make fmt
+
+# Check formatting
+make fmt-check
+
+# Run GUI
+make gui
+
+# Run GUI with socketcan
+make gui-socketcan
+
+# Setup vcan0
+make vcan-setup
+
+# Run vcan integration tests
+make vcan-test
+
+# Run all CI checks
+make ci
+
+# Clean build artifacts
+make clean
+
+# Show dependency tree
+make deps
+
+# Generate documentation
+make doc
+
+# Watch for changes
+make watch
+
+# Run tests for a specific crate
+make test-crate crate=canopen-core
+
+# Build with specific feature
+make build-feature feature=socketcan
+```
+
+### Using Scripts
+
+Helper scripts are available in the `scripts/` directory:
+
+```bash
+# Setup vcan0 interface (Linux, requires sudo)
+sudo ./scripts/vcan-setup.sh
+
+# Run all CI checks locally
+./scripts/ci-check.sh
+```
+
 ## Crate Overview
 
 | Crate | Description | Tests |

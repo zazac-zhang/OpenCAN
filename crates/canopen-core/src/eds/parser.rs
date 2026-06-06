@@ -109,10 +109,7 @@ fn process_section(
     // Parse sub-entries: [1018sub0], [1018sub1], etc.
     // Note: index is hex (e.g., 1018 = 0x1018), but subindex is decimal (e.g., sub10 = 10)
     if let Some((idx_str, sub_str)) = section.split_once("sub")
-        && let (Ok(index), Ok(subindex)) = (
-            u16::from_str_radix(idx_str, 16),
-            sub_str.parse::<u8>(),
-        )
+        && let (Ok(index), Ok(subindex)) = (u16::from_str_radix(idx_str, 16), sub_str.parse::<u8>())
     {
         let parameter_name = props.get("ParameterName").cloned().unwrap_or_default();
         let data_type: Option<u16> = props.get("DataType").and_then(|s| {
@@ -254,14 +251,20 @@ DefaultValue=0xBBBBBBBB
         let eds = parse_eds(eds_content).unwrap();
 
         // sub10 should be decimal 10, not hex 0x10 (16)
-        assert!(eds.sub_entries.contains_key(&(0x1018, 10)),
-            "sub10 should parse as decimal 10");
-        assert!(!eds.sub_entries.contains_key(&(0x1018, 16)),
-            "sub10 should NOT parse as hex 0x10 (16)");
+        assert!(
+            eds.sub_entries.contains_key(&(0x1018, 10)),
+            "sub10 should parse as decimal 10"
+        );
+        assert!(
+            !eds.sub_entries.contains_key(&(0x1018, 16)),
+            "sub10 should NOT parse as hex 0x10 (16)"
+        );
 
         // sub11 should be decimal 11
-        assert!(eds.sub_entries.contains_key(&(0x1018, 11)),
-            "sub11 should parse as decimal 11");
+        assert!(
+            eds.sub_entries.contains_key(&(0x1018, 11)),
+            "sub11 should parse as decimal 11"
+        );
 
         let sub10 = &eds.sub_entries[&(0x1018, 10)];
         assert_eq!(sub10.parameter_name, "Vendor Specific 10");

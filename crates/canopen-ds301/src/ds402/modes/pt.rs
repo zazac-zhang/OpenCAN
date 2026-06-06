@@ -1,10 +1,10 @@
 //! Profile Torque (PT) mode — CiA 402 mode 4.
 
 use super::{ModeActual, ModeTarget, OperationModeHandler};
+use crate::SdoClient;
 use opencan_canopen_core::CanDriver;
 use opencan_canopen_core::CanOpenError;
 use opencan_canopen_core::od::OdValue;
-use crate::SdoClient;
 
 pub struct ProfileTorque;
 

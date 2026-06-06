@@ -16,15 +16,16 @@ pub mod eds;
 #[cfg(feature = "testing")]
 pub mod testing;
 
-pub use error::{CanOpenError, CanError, OdError, Ds402State};
 pub use concrete_od::{ConcreteOd, OdBuilder, OdEntry};
+pub use error::{CanError, CanOpenError, Ds402State, OdError};
 pub use frame::{
-    CanOpenFrame, CobId, FunctionCode, SyncFrame, TimestampFrame,
-    FrameClass, classify_frame,
-    SdoRequest, SdoResponse, SdoData, SdoResponseData,
-    NmtState, NmtCommandSpecifier, NmtCommand,
-    HeartbeatFrame, EmergencyFrame, PdoFrame,
+    CanOpenFrame, CobId, EmergencyFrame, FrameClass, FunctionCode, HeartbeatFrame, NmtCommand,
+    NmtCommandSpecifier, NmtState, PdoFrame, SdoData, SdoRequest, SdoResponse, SdoResponseData,
+    SyncFrame, TimestampFrame, classify_frame,
 };
-pub use node_id::{NodeId, InvalidNodeId};
+pub use node_id::{InvalidNodeId, NodeId};
 pub use od::{AccessType, CanDriver, DataType, EntryInfo, ObjectDictionary, ObjectType, OdValue};
-pub use pdo::{PdoDirection, PdoMapping, TransmissionType, PdoData, parse_pdo, pdo_comm_index, pdo_map_index, pack_pdo, unpack_pdo, PdoError};
+pub use pdo::{
+    PdoData, PdoDirection, PdoError, PdoMapping, TransmissionType, pack_pdo, parse_pdo,
+    pdo_comm_index, pdo_map_index, unpack_pdo,
+};
