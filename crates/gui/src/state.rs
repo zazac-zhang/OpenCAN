@@ -18,6 +18,10 @@ pub struct App {
     pub connected: bool,
     /// Connection dialog state.
     pub connection_dialog: ConnectionDialog,
+    /// CAN log filter state.
+    pub log_filter: LogFilter,
+    /// PDO monitor entries (separate from can_log for dedicated display).
+    pub pdo_log: Vec<LogEntry>,
 }
 
 impl Default for App {
@@ -35,6 +39,8 @@ impl Default for App {
             ds402_state: Ds402PanelState::default(),
             connected: false,
             connection_dialog: ConnectionDialog::default(),
+            log_filter: LogFilter::default(),
+            pdo_log: Vec::new(),
         }
     }
 }
@@ -128,6 +134,57 @@ pub struct LogEntry {
     pub description: String,
 }
 
+/// CAN log filter state.
+#[derive(Debug, Clone)]
+pub struct LogFilter {
+    pub text: String,
+    pub show_nmt: bool,
+    pub show_sdo: bool,
+    pub show_pdo: bool,
+    pub show_heartbeat: bool,
+    pub show_emcy: bool,
+    pub show_other: bool,
+}
+
+impl Default for LogFilter {
+    fn default() -> Self {
+        Self {
+            text: String::new(),
+            show_nmt: true,
+            show_sdo: true,
+            show_pdo: true,
+            show_heartbeat: true,
+            show_emcy: true,
+            show_other: true,
+        }
+    }
+}
+
+impl LogFilter {
+    /// Check if a log entry passes this filter.
+    pub fn matches(&self, entry: &LogEntry) -> bool {
+        if !self.text.is_empty() {
+            let query = self.text.to_lowercase();
+            let hex_data = entry.data.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ");
+            let haystack = format!("{:03X} {} {}", entry.cob_id, hex_data, entry.description).to_lowercase();
+            if !haystack.contains(&query) {
+                return false;
+            }
+        }
+        let cob = entry.cob_id;
+        match cob {
+            0x000 => self.show_nmt,
+            0x080 => self.show_other,
+            0x081..=0x0FF => self.show_emcy,
+            0x100..=0x17F => self.show_other,
+            0x180..=0x57F => self.show_pdo,
+            0x580..=0x67F => self.show_sdo,
+            0x700..=0x77F => self.show_heartbeat,
+            _ => self.show_other,
+        }
+    }
+}
+
 /// Available CAN backends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CanBackend {
@@ -218,6 +275,10 @@ pub enum Message {
     Ds402SetVelocity(u8),
     Ds402ReadPosition(u8),
     Ds402ReadVelocity(u8),
+
+    // CAN log filter
+    LogFilterChanged(String),
+    LogClear,
 
     // Tick (polls backend events)
     Tick,

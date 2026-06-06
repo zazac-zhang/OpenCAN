@@ -250,6 +250,17 @@ impl App {
                 }
                 iced::Task::none()
             }
+
+            // === CAN log filter ===
+            Message::LogFilterChanged(text) => {
+                self.log_filter.text = text;
+                iced::Task::none()
+            }
+            Message::LogClear => {
+                self.can_log.clear();
+                self.pdo_log.clear();
+                iced::Task::none()
+            }
         }
     }
 
@@ -321,12 +332,21 @@ impl App {
                 }
             }
             BackendEvent::FrameReceived { cob_id, data, timestamp_ms } => {
-                self.can_log.push(LogEntry {
+                let entry = LogEntry {
                     timestamp_ms,
                     cob_id,
                     data,
                     description: String::new(),
-                });
+                };
+                // Route PDOs to dedicated pdo_log
+                if (0x180..=0x57F).contains(&cob_id) {
+                    self.pdo_log.push(entry.clone());
+                    // Keep pdo_log bounded
+                    if self.pdo_log.len() > 1000 {
+                        self.pdo_log.remove(0);
+                    }
+                }
+                self.can_log.push(entry);
             }
             BackendEvent::Connected(info) => {
                 self.connected = true;

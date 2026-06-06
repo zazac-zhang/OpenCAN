@@ -234,42 +234,99 @@ pub fn ds402_panel(app: &App) -> Element<'_, Message> {
 }
 
 /// PDO monitor page.
-pub fn pdo_monitor(_app: &App) -> Element<'_, Message> {
-    let content = column![
-        text("PDO Monitor").size(20),
+pub fn pdo_monitor(app: &App) -> Element<'_, Message> {
+    let mut content = column![
+        row![
+            text("PDO Monitor").size(20),
+            text(format!("({} frames)", app.pdo_log.len())).size(14),
+        ].spacing(8),
         horizontal_rule(1),
-        text("PDO monitoring requires CAN frame subscription.").size(14),
-        text("Connect to a CAN bus and PDOs will appear here.").size(12),
-        horizontal_rule(1),
-        text("PDO Mapping (when available):").size(14),
-        text("  TPDO1 (0x180): --").size(12),
-        text("  RPDO1 (0x200): --").size(12),
-        text("  TPDO2 (0x280): --").size(12),
-        text("  RPDO2 (0x300): --").size(12),
-        text("  TPDO3 (0x380): --").size(12),
-        text("  RPDO3 (0x400): --").size(12),
-        text("  TPDO4 (0x480): --").size(12),
-        text("  RPDO4 (0x500): --").size(12),
-    ].spacing(8).padding(10);
+    ].spacing(4).padding(10);
+
+    if !app.connected {
+        content = content.push(
+            text("Not connected. PDOs will appear here when connected.").size(14)
+        );
+    } else if app.pdo_log.is_empty() {
+        content = content.push(text("No PDO frames received yet.").size(14));
+        content = content.push(text("PDOs appear when nodes send TPDO or receive RPDO.").size(12));
+    } else {
+        // Table header
+        content = content.push(
+            row![
+                text("Time").size(11).width(80),
+                text("COB-ID").size(11).width(60),
+                text("Type").size(11).width(60),
+                text("Node").size(11).width(40),
+                text("Data").size(11),
+            ].spacing(4)
+        );
+        content = content.push(horizontal_rule(1));
+
+        // Show latest 200 PDOs (newest first)
+        for entry in app.pdo_log.iter().rev().take(200) {
+            let hex_data: String = entry.data.iter()
+                .map(|b| format!("{:02X}", b))
+                .collect::<Vec<_>>()
+                .join(" ");
+
+            let (pdo_type, node_id) = classify_pdo(entry.cob_id);
+
+            content = content.push(
+                row![
+                    text(format!("{}ms", entry.timestamp_ms)).size(10).width(80),
+                    text(format!("{:03X}", entry.cob_id)).size(10).width(60),
+                    text(pdo_type).size(10).width(60),
+                    text(format!("{}", node_id)).size(10).width(40),
+                    text(hex_data).size(10),
+                ].spacing(4)
+            );
+        }
+    }
 
     container(scrollable(content)).width(Length::Fill).height(Length::Fill).into()
 }
 
+/// Classify a PDO COB-ID to type and node ID.
+fn classify_pdo(cob_id: u16) -> (String, u8) {
+    match cob_id {
+        0x180..=0x1FF => ("TPDO1".to_string(), (cob_id - 0x180) as u8),
+        0x200..=0x27F => ("RPDO1".to_string(), (cob_id - 0x200) as u8),
+        0x280..=0x2FF => ("TPDO2".to_string(), (cob_id - 0x280) as u8),
+        0x300..=0x37F => ("RPDO2".to_string(), (cob_id - 0x300) as u8),
+        0x380..=0x3FF => ("TPDO3".to_string(), (cob_id - 0x380) as u8),
+        0x400..=0x47F => ("RPDO3".to_string(), (cob_id - 0x400) as u8),
+        0x480..=0x4FF => ("TPDO4".to_string(), (cob_id - 0x480) as u8),
+        0x500..=0x57F => ("RPDO4".to_string(), (cob_id - 0x500) as u8),
+        _ => ("?".to_string(), 0),
+    }
+}
+
 /// CAN log page.
 pub fn can_log(app: &App) -> Element<'_, Message> {
+    let filtered_count = app.can_log.iter().filter(|e| app.log_filter.matches(e)).count();
+
     let mut content = column![
         row![
             text("CAN Log").size(20),
-            text(format!("({} frames)", app.can_log.len())).size(14),
+            text(format!("({} frames)", filtered_count)).size(14),
+            button(text("Clear").size(11)).on_press(Message::LogClear),
         ].spacing(8),
         horizontal_rule(1),
+        // Filter bar
+        row![
+            text("Filter:").size(12),
+            text_input("Search COB-ID, data, or description...", &app.log_filter.text)
+                .on_input(Message::LogFilterChanged)
+                .width(Length::Fill),
+        ].spacing(4),
     ].spacing(4).padding(10);
 
     if app.can_log.is_empty() {
         content = content.push(text("No CAN frames logged yet.").size(14));
     } else {
-        // Show latest 200 frames (newest first)
-        for entry in app.can_log.iter().rev().take(200) {
+        // Show filtered frames (newest first)
+        for entry in app.can_log.iter().rev().filter(|e| app.log_filter.matches(e)).take(500) {
             let hex_data: String = entry.data.iter()
                 .map(|b| format!("{:02X}", b))
                 .collect::<Vec<_>>()
