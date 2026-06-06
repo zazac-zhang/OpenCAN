@@ -3,7 +3,7 @@
 use iced::widget::{button, column, container, horizontal_rule, row, scrollable, text, text_input};
 use iced::{Element, Length};
 
-use crate::state::{App, Message, View};
+use crate::state::{App, Message, View, ConnectionDialog, CanBackend};
 
 /// Network overview page.
 pub fn network_overview(app: &App) -> Element<'_, Message> {
@@ -315,6 +315,84 @@ fn classify_cob_id(cob_id: u16) -> String {
         0x580..=0x5FF => format!("SDO server node {}", cob_id - 0x580),
         0x600..=0x67F => format!("SDO client node {}", cob_id - 0x600),
         0x700..=0x77F => format!("HEARTBEAT node {}", cob_id - 0x700),
-        _ => format!("Unknown"),
+        _ => "Unknown".to_string(),
     }
+}
+
+/// Connection dialog overlay.
+pub fn connection_dialog(dialog: &ConnectionDialog) -> Element<'_, Message> {
+    let mut content = column![
+        text("Connect to CAN Bus").size(20),
+        horizontal_rule(1),
+    ].spacing(8).padding(16);
+
+    // Backend selection
+    content = content.push(text("Backend:").size(14));
+    let mut backend_row = row![].spacing(4);
+    for b in CanBackend::all() {
+        let label = b.name();
+        let is_selected = *b == dialog.selected_backend;
+        let btn: Element<'_, Message> = if is_selected {
+            button(text(format!("[{}]", label)).size(12))
+                .on_press(Message::ConnectionBackendChanged(*b))
+                .style(iced::widget::button::primary)
+                .into()
+        } else {
+            button(text(label).size(12))
+                .on_press(Message::ConnectionBackendChanged(*b))
+                .into()
+        };
+        backend_row = backend_row.push(btn);
+    }
+    content = content.push(backend_row);
+
+    // Channel input
+    content = content.push(
+        row![
+            text("Channel:").size(12),
+            text_input("can0", &dialog.channel)
+                .on_input(Message::ConnectionChannelChanged)
+                .width(120),
+        ].spacing(4)
+    );
+
+    // Bitrate input
+    content = content.push(
+        row![
+            text("Bitrate:").size(12),
+            text_input("500000", &dialog.bitrate)
+                .on_input(Message::ConnectionBitrateChanged)
+                .width(120),
+        ].spacing(4)
+    );
+
+    // Node ID input
+    content = content.push(
+        row![
+            text("Node ID:").size(12),
+            text_input("0", &dialog.node_id)
+                .on_input(Message::ConnectionNodeIdChanged)
+                .width(60),
+            text("(0 = master)").size(10),
+        ].spacing(4)
+    );
+
+    content = content.push(horizontal_rule(1));
+
+    // Action buttons
+    content = content.push(
+        row![
+            button(text("Connect").size(14))
+                .on_press(Message::ConnectionConnect),
+            button(text("Cancel").size(14))
+                .on_press(Message::HideConnectionDialog),
+        ].spacing(8)
+    );
+
+    // Wrap in a styled container
+    container(content)
+        .width(400)
+        .padding(4)
+        .style(container::rounded_box)
+        .into()
 }

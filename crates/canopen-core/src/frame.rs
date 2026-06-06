@@ -437,9 +437,7 @@ impl PdoFrame {
     pub fn from_canopen(frame: &CanOpenFrame) -> Option<Self> {
         // TPDO1-4: 0x180-0x4FF, RPDO1-4: 0x200-0x57F
         match frame.cob_id {
-            0x180..=0x1FF | 0x200..=0x27F | 0x280..=0x2FF |
-            0x300..=0x37F | 0x380..=0x3FF | 0x400..=0x47F |
-            0x480..=0x4FF | 0x500..=0x57F => {
+            0x180..=0x57F => {
                 Some(Self {
                     cob_id: frame.cob_id,
                     data: frame.data,

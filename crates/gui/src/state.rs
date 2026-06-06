@@ -16,6 +16,8 @@ pub struct App {
     pub backend: Option<crate::backend::Backend>,
     pub ds402_state: Ds402PanelState,
     pub connected: bool,
+    /// Connection dialog state.
+    pub connection_dialog: ConnectionDialog,
 }
 
 impl Default for App {
@@ -32,6 +34,7 @@ impl Default for App {
             backend: None,
             ds402_state: Ds402PanelState::default(),
             connected: false,
+            connection_dialog: ConnectionDialog::default(),
         }
     }
 }
@@ -125,6 +128,55 @@ pub struct LogEntry {
     pub description: String,
 }
 
+/// Available CAN backends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CanBackend {
+    Mock,
+    SocketCan,
+    Kvaser,
+    Pcan,
+    Zlg,
+}
+
+impl CanBackend {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Mock => "Mock (Testing)",
+            Self::SocketCan => "SocketCAN (Linux)",
+            Self::Kvaser => "Kvaser",
+            Self::Pcan => "PCAN",
+            Self::Zlg => "ZLG",
+        }
+    }
+
+    /// All available backends.
+    pub fn all() -> &'static [CanBackend] {
+        &[Self::Mock, Self::SocketCan, Self::Kvaser, Self::Pcan, Self::Zlg]
+    }
+}
+
+/// Connection dialog state.
+#[derive(Debug)]
+pub struct ConnectionDialog {
+    pub visible: bool,
+    pub selected_backend: CanBackend,
+    pub channel: String,
+    pub bitrate: String,
+    pub node_id: String,
+}
+
+impl Default for ConnectionDialog {
+    fn default() -> Self {
+        Self {
+            visible: false,
+            selected_backend: CanBackend::Mock,
+            channel: "can0".to_string(),
+            bitrate: "500000".to_string(),
+            node_id: "0".to_string(),
+        }
+    }
+}
+
 /// Messages.
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -134,6 +186,13 @@ pub enum Message {
 
     // Connection
     ConnectMock,
+    ShowConnectionDialog,
+    HideConnectionDialog,
+    ConnectionBackendChanged(CanBackend),
+    ConnectionChannelChanged(String),
+    ConnectionBitrateChanged(String),
+    ConnectionNodeIdChanged(String),
+    ConnectionConnect,
     Disconnect,
     ScanNodes,
 

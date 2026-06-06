@@ -16,6 +16,12 @@ pub struct MockCanDriver {
     error_inject: Option<CanOpenError>,
 }
 
+impl Default for MockCanDriver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockCanDriver {
     pub fn new() -> Self {
         Self {

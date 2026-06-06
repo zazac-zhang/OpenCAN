@@ -398,19 +398,19 @@ impl<C: CanDriver> CanopenStack<C> {
 
             match result {
                 Ok(Ok(frame)) => {
-                    if let Some(resp) = SdoResponse::decode(&frame) {
-                        if resp.index == 0x1000 && resp.subindex == 0 {
-                            match resp.data {
-                                SdoResponseData::Expedited { .. }
-                                | SdoResponseData::SegmentedInitiated { .. } => {
-                                    found.push(node_id);
-                                }
-                                SdoResponseData::Abort { .. } => {
-                                    // Node responded (even with abort) — it exists
-                                    found.push(node_id);
-                                }
-                                _ => {}
+                    if let Some(resp) = SdoResponse::decode(&frame)
+                        && resp.index == 0x1000 && resp.subindex == 0
+                    {
+                        match resp.data {
+                            SdoResponseData::Expedited { .. }
+                            | SdoResponseData::SegmentedInitiated { .. } => {
+                                found.push(node_id);
                             }
+                            SdoResponseData::Abort { .. } => {
+                                // Node responded (even with abort) — it exists
+                                found.push(node_id);
+                            }
+                            _ => {}
                         }
                     }
                 }

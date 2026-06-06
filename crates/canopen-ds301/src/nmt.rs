@@ -7,6 +7,12 @@ use opencan_canopen_core::frame::{NmtCommand, NmtCommandSpecifier};
 /// NMT master for controlling CANOpen network nodes.
 pub struct NmtMaster;
 
+impl Default for NmtMaster {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NmtMaster {
     pub fn new() -> Self {
         Self

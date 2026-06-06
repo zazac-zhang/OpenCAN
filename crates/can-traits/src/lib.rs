@@ -158,7 +158,7 @@ pub struct FdFrame {
 }
 
 /// CAN FD flags.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct FdFlags {
     /// Bit Rate Switch — use higher data rate for data phase.
     pub brs: bool,
@@ -166,9 +166,10 @@ pub struct FdFlags {
     pub esi: bool,
 }
 
-impl Default for FdFlags {
-    fn default() -> Self {
-        Self { brs: false, esi: false }
+impl FdFlags {
+    /// Create new FD flags.
+    pub fn new(brs: bool, esi: bool) -> Self {
+        Self { brs, esi }
     }
 }
 

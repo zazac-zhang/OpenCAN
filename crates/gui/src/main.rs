@@ -57,6 +57,51 @@ impl App {
                 self.status_message = "Connected (Mock)".to_string();
                 iced::Task::none()
             }
+            Message::ShowConnectionDialog => {
+                self.connection_dialog.visible = true;
+                iced::Task::none()
+            }
+            Message::HideConnectionDialog => {
+                self.connection_dialog.visible = false;
+                iced::Task::none()
+            }
+            Message::ConnectionBackendChanged(backend) => {
+                self.connection_dialog.selected_backend = backend;
+                iced::Task::none()
+            }
+            Message::ConnectionChannelChanged(ch) => {
+                self.connection_dialog.channel = ch;
+                iced::Task::none()
+            }
+            Message::ConnectionBitrateChanged(br) => {
+                self.connection_dialog.bitrate = br;
+                iced::Task::none()
+            }
+            Message::ConnectionNodeIdChanged(id) => {
+                self.connection_dialog.node_id = id;
+                iced::Task::none()
+            }
+            Message::ConnectionConnect => {
+                let dialog = &self.connection_dialog;
+                let backend_type = dialog.selected_backend;
+                match backend_type {
+                    state::CanBackend::Mock => {
+                        let backend = backend::Backend::new_mock();
+                        self.backend = Some(backend);
+                        self.connected = true;
+                        self.status_message = "Connected (Mock)".to_string();
+                    }
+                    state::CanBackend::SocketCan => {
+                        // Real SocketCAN connection would go here
+                        self.status_message = "SocketCAN connection not available on this platform".to_string();
+                    }
+                    _ => {
+                        self.status_message = format!("{} backend not yet implemented", backend_type.name());
+                    }
+                }
+                self.connection_dialog.visible = false;
+                iced::Task::none()
+            }
             Message::Disconnect => {
                 if let Some(ref backend) = self.backend {
                     backend.send(BackendCommand::Disconnect);
@@ -310,10 +355,25 @@ impl App {
             .width(Length::Fill)
             .height(Length::Fill);
 
-        column![main_content, statusbar]
+        let base = column![main_content, statusbar]
             .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+            .height(Length::Fill);
+
+        // Show connection dialog as an overlay
+        if self.connection_dialog.visible {
+            let dialog = views::connection_dialog(&self.connection_dialog);
+            // Stack the dialog on top of the main content
+            iced::widget::stack![
+                base,
+                container(dialog)
+                    .center_x(Length::Fill)
+                    .center_y(Length::Fill)
+                    .width(Length::Fill)
+                    .height(Length::Fill)
+            ].into()
+        } else {
+            base.into()
+        }
     }
 
     fn theme(&self) -> Theme {
@@ -332,6 +392,11 @@ impl App {
             sidebar = sidebar.push(
                 button(text("Connect (Mock)").size(12))
                     .on_press(Message::ConnectMock)
+                    .width(Length::Fill)
+            );
+            sidebar = sidebar.push(
+                button(text("Connect...").size(12))
+                    .on_press(Message::ShowConnectionDialog)
                     .width(Length::Fill)
             );
         } else {

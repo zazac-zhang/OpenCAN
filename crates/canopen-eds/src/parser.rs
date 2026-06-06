@@ -84,29 +84,29 @@ fn process_section(
     }
 
     // Parse sub-entries: [1018sub0], [1018sub1], etc.
-    if let Some((idx_str, sub_str)) = section.split_once("sub") {
-        if let (Ok(index), Ok(subindex)) = (u16::from_str_radix(idx_str, 16), u8::from_str_radix(sub_str, 16)) {
-            let parameter_name = props.get("ParameterName").cloned().unwrap_or_default();
-            let data_type: Option<u16> = props.get("DataType")
-                .and_then(|s| {
-                    if s.starts_with("0x") || s.starts_with("0X") {
-                        u16::from_str_radix(&s[2..], 16).ok()
-                    } else {
-                        s.parse::<u16>().ok()
-                    }
-                });
-            let access_type = props.get("AccessType").cloned();
-            let default_value = props.get("DefaultValue").cloned();
-
-            sub_entries.insert((index, subindex), EdsSubEntry {
-                index,
-                subindex,
-                parameter_name,
-                data_type,
-                access_type,
-                default_value,
+    if let Some((idx_str, sub_str)) = section.split_once("sub")
+        && let (Ok(index), Ok(subindex)) = (u16::from_str_radix(idx_str, 16), u8::from_str_radix(sub_str, 16))
+    {
+        let parameter_name = props.get("ParameterName").cloned().unwrap_or_default();
+        let data_type: Option<u16> = props.get("DataType")
+            .and_then(|s| {
+                if s.starts_with("0x") || s.starts_with("0X") {
+                    u16::from_str_radix(&s[2..], 16).ok()
+                } else {
+                    s.parse::<u16>().ok()
+                }
             });
-        }
+        let access_type = props.get("AccessType").cloned();
+        let default_value = props.get("DefaultValue").cloned();
+
+        sub_entries.insert((index, subindex), EdsSubEntry {
+            index,
+            subindex,
+            parameter_name,
+            data_type,
+            access_type,
+            default_value,
+        });
     }
 }
 
