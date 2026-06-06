@@ -3,9 +3,9 @@
 //! EDS files are INI-format files describing CANOpen device object dictionaries.
 //! This parser extracts the fields relevant for debugging tools.
 
-use std::collections::BTreeMap;
-use crate::model::{EdsFile, EdsEntry, EdsSubEntry};
+use crate::model::{EdsEntry, EdsFile, EdsSubEntry};
 use opencan_canopen_core::od::ObjectType;
+use std::collections::BTreeMap;
 
 /// Parse an EDS file from a string.
 pub fn parse_eds(content: &str) -> Result<EdsFile, String> {
@@ -30,7 +30,7 @@ pub fn parse_eds(content: &str) -> Result<EdsFile, String> {
                 process_section(section, &current_props, &mut entries, &mut sub_entries);
             }
 
-            current_section = Some(line[1..line.len()-1].to_string());
+            current_section = Some(line[1..line.len() - 1].to_string());
             current_props.clear();
             continue;
         }
@@ -46,7 +46,10 @@ pub fn parse_eds(content: &str) -> Result<EdsFile, String> {
         process_section(section, &current_props, &mut entries, &mut sub_entries);
     }
 
-    Ok(EdsFile { entries, sub_entries })
+    Ok(EdsFile {
+        entries,
+        sub_entries,
+    })
 }
 
 fn process_section(
@@ -56,8 +59,12 @@ fn process_section(
     sub_entries: &mut BTreeMap<(u16, u8), EdsSubEntry>,
 ) {
     // Skip metadata sections
-    if section == "FileInfo" || section == "DeviceInfo" || section == "DummyUsage" ||
-       section == "Comments" || section == "DeviceCommissioning" {
+    if section == "FileInfo"
+        || section == "DeviceInfo"
+        || section == "DummyUsage"
+        || section == "Comments"
+        || section == "DeviceCommissioning"
+    {
         return;
     }
 
@@ -72,56 +79,62 @@ fn process_section(
             _ => ObjectType::Var,
         };
 
-        let sub_number = props.get("SubNumber")
-            .and_then(|s| s.parse::<u8>().ok());
+        let sub_number = props.get("SubNumber").and_then(|s| s.parse::<u8>().ok());
 
-        let data_type: Option<u16> = props.get("DataType")
-            .and_then(|s| {
-                if s.starts_with("0x") || s.starts_with("0X") {
-                    u16::from_str_radix(&s[2..], 16).ok()
-                } else {
-                    s.parse::<u16>().ok()
-                }
-            });
+        let data_type: Option<u16> = props.get("DataType").and_then(|s| {
+            if s.starts_with("0x") || s.starts_with("0X") {
+                u16::from_str_radix(&s[2..], 16).ok()
+            } else {
+                s.parse::<u16>().ok()
+            }
+        });
 
         let access_type = props.get("AccessType").cloned();
         let default_value = props.get("DefaultValue").cloned();
 
-        entries.insert(index, EdsEntry {
+        entries.insert(
             index,
-            parameter_name,
-            object_type,
-            sub_number,
-            data_type,
-            access_type,
-            default_value,
-        });
+            EdsEntry {
+                index,
+                parameter_name,
+                object_type,
+                sub_number,
+                data_type,
+                access_type,
+                default_value,
+            },
+        );
     }
 
     // Parse sub-entries: [1018sub0], [1018sub1], etc.
     if let Some((idx_str, sub_str)) = section.split_once("sub")
-        && let (Ok(index), Ok(subindex)) = (u16::from_str_radix(idx_str, 16), u8::from_str_radix(sub_str, 16))
+        && let (Ok(index), Ok(subindex)) = (
+            u16::from_str_radix(idx_str, 16),
+            u8::from_str_radix(sub_str, 16),
+        )
     {
         let parameter_name = props.get("ParameterName").cloned().unwrap_or_default();
-        let data_type: Option<u16> = props.get("DataType")
-            .and_then(|s| {
-                if s.starts_with("0x") || s.starts_with("0X") {
-                    u16::from_str_radix(&s[2..], 16).ok()
-                } else {
-                    s.parse::<u16>().ok()
-                }
-            });
+        let data_type: Option<u16> = props.get("DataType").and_then(|s| {
+            if s.starts_with("0x") || s.starts_with("0X") {
+                u16::from_str_radix(&s[2..], 16).ok()
+            } else {
+                s.parse::<u16>().ok()
+            }
+        });
         let access_type = props.get("AccessType").cloned();
         let default_value = props.get("DefaultValue").cloned();
 
-        sub_entries.insert((index, subindex), EdsSubEntry {
-            index,
-            subindex,
-            parameter_name,
-            data_type,
-            access_type,
-            default_value,
-        });
+        sub_entries.insert(
+            (index, subindex),
+            EdsSubEntry {
+                index,
+                subindex,
+                parameter_name,
+                data_type,
+                access_type,
+                default_value,
+            },
+        );
     }
 }
 

@@ -3,17 +3,17 @@
 //! Each mode implements the [`OperationModeHandler`] trait for configuration,
 //! target setting, and actual value reading.
 
-pub mod pp;
-pub mod pv;
-pub mod pt;
-pub mod homing;
 pub mod csp;
-pub mod csv;
 pub mod cst;
+pub mod csv;
+pub mod homing;
+pub mod pp;
+pub mod pt;
+pub mod pv;
 
+use opencan_canopen_core::CanDriver;
 use opencan_canopen_core::CanOpenError;
 use opencan_canopen_ds301::SdoClient;
-use opencan_canopen_core::CanDriver;
 
 /// Target value for an operation mode.
 #[derive(Debug, Clone)]
@@ -38,14 +38,27 @@ pub trait OperationModeHandler {
     fn mode_value(&self) -> i8;
 
     /// Configure the mode (write OD parameters if needed).
-    async fn configure(&self, sdo: &mut SdoClient<impl CanDriver>, node_id: u8) -> Result<(), CanOpenError> {
+    async fn configure(
+        &self,
+        sdo: &mut SdoClient<impl CanDriver>,
+        node_id: u8,
+    ) -> Result<(), CanOpenError> {
         let _ = (sdo, node_id);
         Ok(())
     }
 
     /// Set target value.
-    async fn set_target(&self, sdo: &mut SdoClient<impl CanDriver>, node_id: u8, target: &ModeTarget) -> Result<(), CanOpenError>;
+    async fn set_target(
+        &self,
+        sdo: &mut SdoClient<impl CanDriver>,
+        node_id: u8,
+        target: &ModeTarget,
+    ) -> Result<(), CanOpenError>;
 
     /// Read actual value.
-    async fn read_actual(&self, sdo: &mut SdoClient<impl CanDriver>, node_id: u8) -> Result<ModeActual, CanOpenError>;
+    async fn read_actual(
+        &self,
+        sdo: &mut SdoClient<impl CanDriver>,
+        node_id: u8,
+    ) -> Result<ModeActual, CanOpenError>;
 }

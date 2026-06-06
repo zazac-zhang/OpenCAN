@@ -1,10 +1,10 @@
 //! SDO (Service Data Object) client implementation.
 
-use std::time::Duration;
-use opencan_canopen_core::{CanDriver, CanOpenError};
-use tokio::time::timeout;
-use opencan_canopen_core::frame::{SdoRequest, SdoData, SdoResponse, SdoResponseData};
+use opencan_canopen_core::frame::{SdoData, SdoRequest, SdoResponse, SdoResponseData};
 use opencan_canopen_core::od::{DataType, OdValue};
+use opencan_canopen_core::{CanDriver, CanOpenError};
+use std::time::Duration;
+use tokio::time::timeout;
 
 /// SDO client for reading/writing remote node object dictionaries.
 pub struct SdoClient<C: CanDriver> {
@@ -18,13 +18,23 @@ impl<C: CanDriver> SdoClient<C> {
     }
 
     /// SDO Upload — read a value from remote node's OD.
-    pub async fn upload(&mut self, node_id: u8, index: u16, subindex: u8) -> Result<OdValue, CanOpenError> {
-        self.upload_with_type(node_id, index, subindex, DataType::Unsigned32).await
+    pub async fn upload(
+        &mut self,
+        node_id: u8,
+        index: u16,
+        subindex: u8,
+    ) -> Result<OdValue, CanOpenError> {
+        self.upload_with_type(node_id, index, subindex, DataType::Unsigned32)
+            .await
     }
 
     /// SDO Upload with explicit data type hint.
     pub async fn upload_with_type(
-        &mut self, node_id: u8, index: u16, subindex: u8, data_type: DataType,
+        &mut self,
+        node_id: u8,
+        index: u16,
+        subindex: u8,
+        data_type: DataType,
     ) -> Result<OdValue, CanOpenError> {
         // Send initiate upload request
         let request = SdoRequest {
@@ -42,7 +52,9 @@ impl<C: CanDriver> SdoClient<C> {
             .ok_or_else(|| CanOpenError::Protocol("Invalid SDO response".to_string()))?;
 
         if response.index != index || response.subindex != subindex {
-            return Err(CanOpenError::Protocol("SDO response index/subindex mismatch".to_string()));
+            return Err(CanOpenError::Protocol(
+                "SDO response index/subindex mismatch".to_string(),
+            ));
         }
 
         match response.data {
@@ -52,25 +64,30 @@ impl<C: CanDriver> SdoClient<C> {
                 } else {
                     &data
                 };
-                OdValue::from_bytes(data_type, bytes)
-                    .ok_or_else(|| CanOpenError::Protocol("Failed to decode expedited data".to_string()))
+                OdValue::from_bytes(data_type, bytes).ok_or_else(|| {
+                    CanOpenError::Protocol("Failed to decode expedited data".to_string())
+                })
             }
             SdoResponseData::SegmentedInitiated { size } => {
                 // Segmented upload — read segments
                 self.upload_segments(node_id, size as usize).await
             }
-            SdoResponseData::Abort { code } => {
-                Err(CanOpenError::SdoAbort {
-                    code,
-                    reason: sdo_abort_reason(code),
-                })
-            }
-            _ => Err(CanOpenError::Protocol("Unexpected SDO response".to_string())),
+            SdoResponseData::Abort { code } => Err(CanOpenError::SdoAbort {
+                code,
+                reason: sdo_abort_reason(code),
+            }),
+            _ => Err(CanOpenError::Protocol(
+                "Unexpected SDO response".to_string(),
+            )),
         }
     }
 
     /// Read segmented upload data.
-    async fn upload_segments(&mut self, node_id: u8, total_size: usize) -> Result<OdValue, CanOpenError> {
+    async fn upload_segments(
+        &mut self,
+        node_id: u8,
+        total_size: usize,
+    ) -> Result<OdValue, CanOpenError> {
         let mut data = Vec::with_capacity(total_size);
         let mut toggle = false;
 
@@ -78,7 +95,8 @@ impl<C: CanDriver> SdoClient<C> {
             // Send upload segment request
             let mut req_data = [0u8; 8];
             req_data[0] = if toggle { 0x60 } else { 0x40 }; // toggle bit
-            let frame = opencan_canopen_core::frame::CanOpenFrame::new(0x600 + node_id as u16, req_data);
+            let frame =
+                opencan_canopen_core::frame::CanOpenFrame::new(0x600 + node_id as u16, req_data);
             self.can.send(&frame)?;
 
             // Receive segment (with timeout)
@@ -104,7 +122,13 @@ impl<C: CanDriver> SdoClient<C> {
     }
 
     /// SDO Download — write a value to remote node's OD.
-    pub async fn download(&mut self, node_id: u8, index: u16, subindex: u8, value: &OdValue) -> Result<(), CanOpenError> {
+    pub async fn download(
+        &mut self,
+        node_id: u8,
+        index: u16,
+        subindex: u8,
+        value: &OdValue,
+    ) -> Result<(), CanOpenError> {
         let bytes = value.to_bytes();
 
         if bytes.len() <= 4 {
@@ -125,20 +149,27 @@ impl<C: CanDriver> SdoClient<C> {
             self.wait_download_confirm(index, subindex).await
         } else {
             // Segmented download
-            self.download_segments(node_id, index, subindex, &bytes).await
+            self.download_segments(node_id, index, subindex, &bytes)
+                .await
         }
     }
 
     /// Segmented download.
     async fn download_segments(
-        &mut self, node_id: u8, index: u16, subindex: u8, data: &[u8],
+        &mut self,
+        node_id: u8,
+        index: u16,
+        subindex: u8,
+        data: &[u8],
     ) -> Result<(), CanOpenError> {
         // Send initiate segmented download
         let request = SdoRequest {
             node_id,
             index,
             subindex,
-            data: SdoData::SegmentedInitiated { size: data.len() as u32 },
+            data: SdoData::SegmentedInitiated {
+                size: data.len() as u32,
+            },
         };
         self.can.send(&request.encode())?;
         self.wait_download_confirm(index, subindex).await?;
@@ -181,7 +212,11 @@ impl<C: CanDriver> SdoClient<C> {
                         reason: sdo_abort_reason(code),
                     });
                 }
-                _ => return Err(CanOpenError::Protocol("Unexpected SDO response".to_string())),
+                _ => {
+                    return Err(CanOpenError::Protocol(
+                        "Unexpected SDO response".to_string(),
+                    ));
+                }
             }
 
             offset += seg_len;
@@ -192,13 +227,19 @@ impl<C: CanDriver> SdoClient<C> {
     }
 
     /// Wait for download confirmation.
-    async fn wait_download_confirm(&mut self, index: u16, subindex: u8) -> Result<(), CanOpenError> {
+    async fn wait_download_confirm(
+        &mut self,
+        index: u16,
+        subindex: u8,
+    ) -> Result<(), CanOpenError> {
         let response_frame = self.recv_with_timeout().await?;
         let response = SdoResponse::decode(&response_frame)
             .ok_or_else(|| CanOpenError::Protocol("Invalid SDO response".to_string()))?;
 
         if response.index != index || response.subindex != subindex {
-            return Err(CanOpenError::Protocol("SDO response index/subindex mismatch".to_string()));
+            return Err(CanOpenError::Protocol(
+                "SDO response index/subindex mismatch".to_string(),
+            ));
         }
 
         match response.data {
@@ -207,12 +248,16 @@ impl<C: CanDriver> SdoClient<C> {
                 code,
                 reason: sdo_abort_reason(code),
             }),
-            _ => Err(CanOpenError::Protocol("Unexpected SDO response".to_string())),
+            _ => Err(CanOpenError::Protocol(
+                "Unexpected SDO response".to_string(),
+            )),
         }
     }
 
     /// Receive a frame with timeout.
-    async fn recv_with_timeout(&mut self) -> Result<opencan_canopen_core::frame::CanOpenFrame, CanOpenError> {
+    async fn recv_with_timeout(
+        &mut self,
+    ) -> Result<opencan_canopen_core::frame::CanOpenFrame, CanOpenError> {
         match timeout(self.timeout, self.can.recv()).await {
             Ok(result) => result,
             Err(_) => Err(CanOpenError::SdoTimeout(self.timeout)),
@@ -301,7 +346,10 @@ mod tests {
         let mut client = SdoClient::new(mock, Duration::from_secs(1));
 
         // Write control word 0x0006 (Shutdown)
-        client.download(3, 0x6040, 0, &OdValue::Unsigned16(0x0006)).await.unwrap();
+        client
+            .download(3, 0x6040, 0, &OdValue::Unsigned16(0x0006))
+            .await
+            .unwrap();
 
         // Verify request
         let tx = client.can().tx_log();
@@ -343,9 +391,13 @@ mod tests {
         // 0x41 = 0b0100_0001 → cs=2 (0b010), e=0, s=1
         let mut data = [0u8; 8];
         data[0] = 0x41;
-        data[1] = 0x00; data[2] = 0x10; // index 0x1000
+        data[1] = 0x00;
+        data[2] = 0x10; // index 0x1000
         data[3] = 0x00; // subindex
-        data[4] = 20; data[5] = 0; data[6] = 0; data[7] = 0; // size = 20
+        data[4] = 20;
+        data[5] = 0;
+        data[6] = 0;
+        data[7] = 0; // size = 20
         mock.enqueue(opencan_canopen_core::frame::CanOpenFrame::new(0x583, data));
 
         // Segment 1: 7 bytes, not last (cs=0, n=0, t=0)
@@ -373,7 +425,12 @@ mod tests {
         match result {
             OdValue::Domain(data) => {
                 assert_eq!(data.len(), 20);
-                assert_eq!(data, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+                assert_eq!(
+                    data,
+                    vec![
+                        1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20
+                    ]
+                );
             }
             other => panic!("Expected Domain data, got: {:?}", other),
         }
@@ -399,7 +456,10 @@ mod tests {
 
         let mut client = SdoClient::new(mock, Duration::from_secs(1));
         let data = vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-        client.download(3, 0x1000, 0, &OdValue::Domain(data)).await.unwrap();
+        client
+            .download(3, 0x1000, 0, &OdValue::Domain(data))
+            .await
+            .unwrap();
 
         // Should have sent: initiate + 3 segments = 4 frames
         let tx = client.can().tx_log();

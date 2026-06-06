@@ -1,8 +1,8 @@
 //! Heartbeat consumer implementation.
 
+use opencan_canopen_core::frame::{HeartbeatFrame, NmtState};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use opencan_canopen_core::frame::{HeartbeatFrame, NmtState};
 
 /// Heartbeat consumer — monitors heartbeat messages from remote nodes.
 pub struct HeartbeatConsumer {
@@ -47,7 +47,9 @@ impl HeartbeatConsumer {
             Some(ts) => ts,
             None => return false,
         };
-        let timeout = self.periods.get(&node_id)
+        let timeout = self
+            .periods
+            .get(&node_id)
             .copied()
             .unwrap_or(self.default_timeout);
         last.elapsed() < timeout * 3 // Allow 3x the period
@@ -57,9 +59,12 @@ impl HeartbeatConsumer {
     /// Returns list of (node_id, elapsed_since_last) for timed-out nodes.
     pub fn check_timeouts(&self) -> Vec<(u8, Duration)> {
         let now = Instant::now();
-        self.last_heartbeat.iter()
+        self.last_heartbeat
+            .iter()
             .filter_map(|(&node_id, &last)| {
-                let timeout = self.periods.get(&node_id)
+                let timeout = self
+                    .periods
+                    .get(&node_id)
                     .copied()
                     .unwrap_or(self.default_timeout);
                 let elapsed = now.duration_since(last);
@@ -228,7 +233,8 @@ impl SyncConsumer {
 
     /// Register a PDO for synchronous triggering.
     pub fn register_pdo(&mut self, pdo_number: u8, direction: PdoDirection, transmission_type: u8) {
-        self.sync_pdos.insert((pdo_number, direction), transmission_type);
+        self.sync_pdos
+            .insert((pdo_number, direction), transmission_type);
     }
 
     pub fn unregister_pdo(&mut self, pdo_number: u8, direction: PdoDirection) {
@@ -253,13 +259,21 @@ impl SyncConsumer {
         triggered
     }
 
-    pub fn sync_count(&self) -> u32 { self.sync_count }
-    pub fn reset(&mut self) { self.sync_count = 0; }
-    pub fn registered_count(&self) -> usize { self.sync_pdos.len() }
+    pub fn sync_count(&self) -> u32 {
+        self.sync_count
+    }
+    pub fn reset(&mut self) {
+        self.sync_count = 0;
+    }
+    pub fn registered_count(&self) -> usize {
+        self.sync_pdos.len()
+    }
 }
 
 impl Default for SyncConsumer {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -294,10 +308,28 @@ mod sync_tests {
     }
 
     #[test]
+    fn test_sync_type3_trigger() {
+        let mut c = SyncConsumer::new();
+        c.register_pdo(1, PdoDirection::Tpdo, 3);
+        // SYNC 1: count=1, not multiple of 3
+        assert!(c.on_sync().is_empty());
+        // SYNC 2: count=2, not multiple of 3
+        assert!(c.on_sync().is_empty());
+        // SYNC 3: count=3, IS multiple of 3 — should trigger
+        assert_eq!(c.on_sync().len(), 1);
+        // SYNC 4-5: no trigger
+        assert!(c.on_sync().is_empty());
+        assert!(c.on_sync().is_empty());
+        // SYNC 6: count=6, IS multiple of 3 — should trigger again
+        assert_eq!(c.on_sync().len(), 1);
+    }
+
+    #[test]
     fn test_sync_reset() {
         let mut c = SyncConsumer::new();
         c.register_pdo(1, PdoDirection::Tpdo, 3);
-        c.on_sync(); c.on_sync();
+        c.on_sync();
+        c.on_sync();
         assert_eq!(c.sync_count(), 2);
         c.reset();
         assert_eq!(c.sync_count(), 0);

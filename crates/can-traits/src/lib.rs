@@ -35,7 +35,11 @@ pub trait CanBus: Send + Sync + 'static {
 /// GUI uses `Box<dyn CanBusFactory>` to support runtime backend selection.
 pub trait CanBusFactory: Send + Sync + 'static {
     /// Open a CAN bus channel.
-    fn open(&self, channel: &str, config: &CanConfig) -> Result<Box<dyn CanBusDyn>, error::CanError>;
+    fn open(
+        &self,
+        channel: &str,
+        config: &CanConfig,
+    ) -> Result<Box<dyn CanBusDyn>, error::CanError>;
 
     /// Backend name (e.g. "SocketCAN", "Kvaser", "PCAN").
     fn name(&self) -> &str;
@@ -50,7 +54,9 @@ pub trait CanBusFactory: Send + Sync + 'static {
 /// Blanket impl provided for all `T: CanBus`.
 pub trait CanBusDyn: Send + Sync {
     fn send(&self, frame: &CanFrame) -> Result<(), error::CanError>;
-    fn recv(&self) -> std::pin::Pin<Box<dyn Future<Output = Result<CanFrame, error::CanError>> + Send + '_>>;
+    fn recv(
+        &self,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<CanFrame, error::CanError>> + Send + '_>>;
     fn state(&self) -> CanState;
     fn set_bitrate(&self, bitrate: CanBitrate) -> Result<(), error::CanError>;
 }
@@ -61,7 +67,10 @@ impl<T: CanBus> CanBusDyn for T {
         CanBus::send(self, frame)
     }
 
-    fn recv(&self) -> std::pin::Pin<Box<dyn Future<Output = Result<CanFrame, error::CanError>> + Send + '_>> {
+    fn recv(
+        &self,
+    ) -> std::pin::Pin<Box<dyn Future<Output = Result<CanFrame, error::CanError>> + Send + '_>>
+    {
         Box::pin(CanBus::recv(self))
     }
 
@@ -139,7 +148,12 @@ impl ClassicFrame {
         let len = data.len().min(8) as u8;
         let mut buf = [0u8; 8];
         buf[..len as usize].copy_from_slice(&data[..len as usize]);
-        Self { id, data: buf, len, timestamp_us: None }
+        Self {
+            id,
+            data: buf,
+            len,
+            timestamp_us: None,
+        }
     }
 
     pub fn with_timestamp(mut self, ts_us: u64) -> Self {
@@ -206,11 +220,17 @@ pub struct CanBitrate {
 
 impl CanBitrate {
     pub fn new(nominal: u32) -> Self {
-        Self { nominal, data: None }
+        Self {
+            nominal,
+            data: None,
+        }
     }
 
     pub fn fd(nominal: u32, data: u32) -> Self {
-        Self { nominal, data: Some(data) }
+        Self {
+            nominal,
+            data: Some(data),
+        }
     }
 }
 

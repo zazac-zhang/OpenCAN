@@ -14,7 +14,9 @@ pub struct PcanFactory;
 impl CanBusFactory for PcanFactory {
     fn open(&self, _channel: &str, _config: &CanConfig) -> Result<Box<dyn CanBusDyn>, CanError> {
         // TODO: Implement using peak-can or pcanbasic crate
-        Err(CanError::Unsupported("PCAN backend not yet implemented".to_string()))
+        Err(CanError::Unsupported(
+            "PCAN backend not yet implemented".to_string(),
+        ))
     }
 
     fn name(&self) -> &str {

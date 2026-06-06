@@ -3,10 +3,10 @@
 //! This adapter converts between the physical CAN frame format (CanFrame)
 //! and the CANOpen protocol frame format (CanOpenFrame).
 
+use opencan_can_traits::{CanBus, CanFrame, CanId};
 use opencan_canopen_core::CanDriver;
 use opencan_canopen_core::error::CanOpenError;
 use opencan_canopen_core::frame::CanOpenFrame;
-use opencan_can_traits::{CanBus, CanFrame, CanId};
 
 /// Adapter that wraps a CanBus implementation to provide CanDriver.
 pub struct CanDriverAdapter<B: CanBus> {
@@ -36,7 +36,7 @@ impl<B: CanBus> CanDriverAdapter<B> {
                     CanId::Standard(id) => id,
                     CanId::Extended(_) => {
                         return Err(CanOpenError::Protocol(
-                            "CANOpen does not use extended frames".to_string()
+                            "CANOpen does not use extended frames".to_string(),
                         ));
                     }
                 };
@@ -45,11 +45,9 @@ impl<B: CanBus> CanDriverAdapter<B> {
                 data[..len].copy_from_slice(&f.data[..len]);
                 Ok(CanOpenFrame::new(cob_id, data))
             }
-            CanFrame::Fd(_) => {
-                Err(CanOpenError::Protocol(
-                    "CANOpen does not use CAN FD frames".to_string()
-                ))
-            }
+            CanFrame::Fd(_) => Err(CanOpenError::Protocol(
+                "CANOpen does not use CAN FD frames".to_string(),
+            )),
         }
     }
 }
@@ -57,11 +55,15 @@ impl<B: CanBus> CanDriverAdapter<B> {
 impl<B: CanBus> CanDriver for CanDriverAdapter<B> {
     fn send(&mut self, frame: &CanOpenFrame) -> Result<(), CanOpenError> {
         let can_frame = Self::canopen_to_can(frame);
-        self.bus.send(&can_frame).map_err(|e| CanOpenError::Can(opencan_canopen_core::error::CanError::Io(e.to_string())))
+        self.bus.send(&can_frame).map_err(|e| {
+            CanOpenError::Can(opencan_canopen_core::error::CanError::Io(e.to_string()))
+        })
     }
 
     async fn recv(&mut self) -> Result<CanOpenFrame, CanOpenError> {
-        let can_frame = self.bus.recv().await.map_err(|e| CanOpenError::Can(opencan_canopen_core::error::CanError::Io(e.to_string())))?;
+        let can_frame = self.bus.recv().await.map_err(|e| {
+            CanOpenError::Can(opencan_canopen_core::error::CanError::Io(e.to_string()))
+        })?;
         Self::can_to_canopen(&can_frame)
     }
 }

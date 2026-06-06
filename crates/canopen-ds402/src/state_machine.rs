@@ -74,12 +74,12 @@ impl Ds402State {
 pub struct ControlWord;
 
 impl ControlWord {
-    pub const SWITCH_ON: u16        = 0x0007;
+    pub const SWITCH_ON: u16 = 0x0007;
     pub const ENABLE_OPERATION: u16 = 0x000F;
-    pub const SHUTDOWN: u16         = 0x0006;
-    pub const DISABLE_VOLTAGE: u16  = 0x0000;
-    pub const QUICK_STOP: u16       = 0x0002;
-    pub const FAULT_RESET: u16      = 0x0080;
+    pub const SHUTDOWN: u16 = 0x0006;
+    pub const DISABLE_VOLTAGE: u16 = 0x0000;
+    pub const QUICK_STOP: u16 = 0x0002;
+    pub const FAULT_RESET: u16 = 0x0080;
 
     /// Check if state transition is acknowledged in status word.
     pub fn is_target_reached(status: u16, _control: u16) -> bool {
@@ -92,30 +92,30 @@ pub struct StatusWord;
 
 impl StatusWord {
     pub const READY_TO_SWITCH_ON: u16 = 0x0001;
-    pub const SWITCHED_ON: u16        = 0x0002;
-    pub const OPERATION_ENABLED: u16  = 0x0004;
-    pub const FAULT: u16              = 0x0008;
-    pub const VOLTAGE_ENABLED: u16    = 0x0010;
-    pub const QUICK_STOP: u16         = 0x0020;
+    pub const SWITCHED_ON: u16 = 0x0002;
+    pub const OPERATION_ENABLED: u16 = 0x0004;
+    pub const FAULT: u16 = 0x0008;
+    pub const VOLTAGE_ENABLED: u16 = 0x0010;
+    pub const QUICK_STOP: u16 = 0x0020;
     pub const SWITCH_ON_DISABLED: u16 = 0x0040;
-    pub const WARNING: u16            = 0x0080;
-    pub const REMOTE: u16             = 0x0200;
-    pub const TARGET_REACHED: u16     = 0x0400;
-    pub const INTERNAL_LIMIT: u16     = 0x0800;
+    pub const WARNING: u16 = 0x0080;
+    pub const REMOTE: u16 = 0x0200;
+    pub const TARGET_REACHED: u16 = 0x0400;
+    pub const INTERNAL_LIMIT: u16 = 0x0800;
 }
 
 /// DS402 operation modes (CiA 402 Table 27).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(i8)]
 pub enum OperationMode {
-    ProfilePosition        = 1,
-    Velocity               = 2,
-    ProfileVelocity        = 3,
-    ProfileTorque          = 4,
-    Homing                 = 6,
-    CyclicSyncPosition     = 8,
-    CyclicSyncVelocity     = 9,
-    CyclicSyncTorque       = 10,
+    ProfilePosition = 1,
+    Velocity = 2,
+    ProfileVelocity = 3,
+    ProfileTorque = 4,
+    Homing = 6,
+    CyclicSyncPosition = 8,
+    CyclicSyncVelocity = 9,
+    CyclicSyncTorque = 10,
 }
 
 impl OperationMode {
@@ -141,10 +141,16 @@ mod tests {
     #[test]
     fn test_state_from_status_word() {
         // OperationEnabled: bits 0,1,2,5 = 0b0010_0111 = 0x27
-        assert_eq!(Ds402State::from_status_word(0x0027), Ds402State::OperationEnabled);
+        assert_eq!(
+            Ds402State::from_status_word(0x0027),
+            Ds402State::OperationEnabled
+        );
 
         // SwitchOnDisabled: bit 6 = 0b0100_0000 = 0x40
-        assert_eq!(Ds402State::from_status_word(0x0040), Ds402State::SwitchOnDisabled);
+        assert_eq!(
+            Ds402State::from_status_word(0x0040),
+            Ds402State::SwitchOnDisabled
+        );
 
         // Fault: bit 3 = 0b0000_1000 = 0x08
         assert_eq!(Ds402State::from_status_word(0x0008), Ds402State::Fault);
@@ -185,8 +191,14 @@ mod tests {
 
     #[test]
     fn test_operation_mode_from_i8() {
-        assert_eq!(OperationMode::from_i8(8), Some(OperationMode::CyclicSyncPosition));
-        assert_eq!(OperationMode::from_i8(1), Some(OperationMode::ProfilePosition));
+        assert_eq!(
+            OperationMode::from_i8(8),
+            Some(OperationMode::CyclicSyncPosition)
+        );
+        assert_eq!(
+            OperationMode::from_i8(1),
+            Some(OperationMode::ProfilePosition)
+        );
         assert_eq!(OperationMode::from_i8(99), None);
     }
 }

@@ -8,31 +8,31 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
 pub enum DataType {
-    Boolean       = 0x0001,
-    Integer8      = 0x0002,
-    Integer16     = 0x0003,
-    Integer32     = 0x0004,
-    Unsigned8     = 0x0005,
-    Unsigned16    = 0x0006,
-    Unsigned32    = 0x0007,
-    Real32        = 0x0008,
+    Boolean = 0x0001,
+    Integer8 = 0x0002,
+    Integer16 = 0x0003,
+    Integer32 = 0x0004,
+    Unsigned8 = 0x0005,
+    Unsigned16 = 0x0006,
+    Unsigned32 = 0x0007,
+    Real32 = 0x0008,
     VisibleString = 0x0009,
-    OctetString   = 0x000A,
+    OctetString = 0x000A,
     UnicodeString = 0x000B,
-    TimeOfDay     = 0x000C,
+    TimeOfDay = 0x000C,
     TimeDifference = 0x000D,
-    Domain        = 0x000F,
-    Integer24     = 0x0010,
-    Real64        = 0x0011,
-    Integer40     = 0x0012,
-    Integer48     = 0x0013,
-    Integer56     = 0x0014,
-    Integer64     = 0x0015,
-    Unsigned24    = 0x0016,
-    Unsigned40    = 0x0017,
-    Unsigned48    = 0x0018,
-    Unsigned56    = 0x0019,
-    Unsigned64    = 0x001A,
+    Domain = 0x000F,
+    Integer24 = 0x0010,
+    Real64 = 0x0011,
+    Integer40 = 0x0012,
+    Integer48 = 0x0013,
+    Integer56 = 0x0014,
+    Integer64 = 0x0015,
+    Unsigned24 = 0x0016,
+    Unsigned40 = 0x0017,
+    Unsigned48 = 0x0018,
+    Unsigned56 = 0x0019,
+    Unsigned64 = 0x001A,
 }
 
 impl DataType {
@@ -168,16 +168,34 @@ impl OdValue {
         match data_type {
             DataType::Boolean => data.first().map(|&b| Self::Boolean(b != 0)),
             DataType::Integer8 => data.first().map(|&b| Self::Integer8(b as i8)),
-            DataType::Integer16 => data.get(..2).map(|b| Self::Integer16(i16::from_le_bytes([b[0], b[1]]))),
-            DataType::Integer32 => data.get(..4).map(|b| Self::Integer32(i32::from_le_bytes([b[0], b[1], b[2], b[3]]))),
-            DataType::Integer64 => data.get(..8).map(|b| Self::Integer64(i64::from_le_bytes(b.try_into().unwrap()))),
+            DataType::Integer16 => data
+                .get(..2)
+                .map(|b| Self::Integer16(i16::from_le_bytes([b[0], b[1]]))),
+            DataType::Integer32 => data
+                .get(..4)
+                .map(|b| Self::Integer32(i32::from_le_bytes([b[0], b[1], b[2], b[3]]))),
+            DataType::Integer64 => data
+                .get(..8)
+                .map(|b| Self::Integer64(i64::from_le_bytes(b.try_into().unwrap()))),
             DataType::Unsigned8 => data.first().map(|&b| Self::Unsigned8(b)),
-            DataType::Unsigned16 => data.get(..2).map(|b| Self::Unsigned16(u16::from_le_bytes([b[0], b[1]]))),
-            DataType::Unsigned32 => data.get(..4).map(|b| Self::Unsigned32(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))),
-            DataType::Unsigned64 => data.get(..8).map(|b| Self::Unsigned64(u64::from_le_bytes(b.try_into().unwrap()))),
-            DataType::Real32 => data.get(..4).map(|b| Self::Real32(f32::from_le_bytes([b[0], b[1], b[2], b[3]]))),
-            DataType::Real64 => data.get(..8).map(|b| Self::Real64(f64::from_le_bytes(b.try_into().unwrap()))),
-            DataType::VisibleString => Some(Self::VisibleString(String::from_utf8_lossy(data).to_string())),
+            DataType::Unsigned16 => data
+                .get(..2)
+                .map(|b| Self::Unsigned16(u16::from_le_bytes([b[0], b[1]]))),
+            DataType::Unsigned32 => data
+                .get(..4)
+                .map(|b| Self::Unsigned32(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))),
+            DataType::Unsigned64 => data
+                .get(..8)
+                .map(|b| Self::Unsigned64(u64::from_le_bytes(b.try_into().unwrap()))),
+            DataType::Real32 => data
+                .get(..4)
+                .map(|b| Self::Real32(f32::from_le_bytes([b[0], b[1], b[2], b[3]]))),
+            DataType::Real64 => data
+                .get(..8)
+                .map(|b| Self::Real64(f64::from_le_bytes(b.try_into().unwrap()))),
+            DataType::VisibleString => Some(Self::VisibleString(
+                String::from_utf8_lossy(data).to_string(),
+            )),
             DataType::Domain => Some(Self::Domain(data.to_vec())),
             _ => None,
         }
@@ -187,43 +205,69 @@ impl OdValue {
 // === Type conversions for OdValue ===
 
 impl From<bool> for OdValue {
-    fn from(v: bool) -> Self { Self::Boolean(v) }
+    fn from(v: bool) -> Self {
+        Self::Boolean(v)
+    }
 }
 impl From<i8> for OdValue {
-    fn from(v: i8) -> Self { Self::Integer8(v) }
+    fn from(v: i8) -> Self {
+        Self::Integer8(v)
+    }
 }
 impl From<i16> for OdValue {
-    fn from(v: i16) -> Self { Self::Integer16(v) }
+    fn from(v: i16) -> Self {
+        Self::Integer16(v)
+    }
 }
 impl From<i32> for OdValue {
-    fn from(v: i32) -> Self { Self::Integer32(v) }
+    fn from(v: i32) -> Self {
+        Self::Integer32(v)
+    }
 }
 impl From<i64> for OdValue {
-    fn from(v: i64) -> Self { Self::Integer64(v) }
+    fn from(v: i64) -> Self {
+        Self::Integer64(v)
+    }
 }
 impl From<u8> for OdValue {
-    fn from(v: u8) -> Self { Self::Unsigned8(v) }
+    fn from(v: u8) -> Self {
+        Self::Unsigned8(v)
+    }
 }
 impl From<u16> for OdValue {
-    fn from(v: u16) -> Self { Self::Unsigned16(v) }
+    fn from(v: u16) -> Self {
+        Self::Unsigned16(v)
+    }
 }
 impl From<u32> for OdValue {
-    fn from(v: u32) -> Self { Self::Unsigned32(v) }
+    fn from(v: u32) -> Self {
+        Self::Unsigned32(v)
+    }
 }
 impl From<u64> for OdValue {
-    fn from(v: u64) -> Self { Self::Unsigned64(v) }
+    fn from(v: u64) -> Self {
+        Self::Unsigned64(v)
+    }
 }
 impl From<f32> for OdValue {
-    fn from(v: f32) -> Self { Self::Real32(v) }
+    fn from(v: f32) -> Self {
+        Self::Real32(v)
+    }
 }
 impl From<f64> for OdValue {
-    fn from(v: f64) -> Self { Self::Real64(v) }
+    fn from(v: f64) -> Self {
+        Self::Real64(v)
+    }
 }
 impl From<String> for OdValue {
-    fn from(v: String) -> Self { Self::VisibleString(v) }
+    fn from(v: String) -> Self {
+        Self::VisibleString(v)
+    }
 }
 impl From<Vec<u8>> for OdValue {
-    fn from(v: Vec<u8>) -> Self { Self::Domain(v) }
+    fn from(v: Vec<u8>) -> Self {
+        Self::Domain(v)
+    }
 }
 
 /// Try to extract a concrete type from OdValue.
@@ -308,7 +352,12 @@ impl TryFrom<OdValue> for i32 {
 /// Object Dictionary trait — access to OD entries.
 pub trait ObjectDictionary: Send {
     fn read(&self, index: u16, subindex: u8) -> Result<OdValue, crate::error::OdError>;
-    fn write(&mut self, index: u16, subindex: u8, value: OdValue) -> Result<(), crate::error::OdError>;
+    fn write(
+        &mut self,
+        index: u16,
+        subindex: u8,
+        value: OdValue,
+    ) -> Result<(), crate::error::OdError>;
     fn entry_info(&self, index: u16, subindex: u8) -> Result<EntryInfo, crate::error::OdError>;
 }
 
@@ -320,8 +369,15 @@ pub trait ObjectDictionary: Send {
 /// For physical CAN bus access, see can-traits::CanBus.
 /// A CanDriverAdapter bridges the two.
 pub trait CanDriver: Send {
-    fn send(&mut self, frame: &crate::frame::CanOpenFrame) -> Result<(), crate::error::CanOpenError>;
-    fn recv(&mut self) -> impl std::future::Future<Output = Result<crate::frame::CanOpenFrame, crate::error::CanOpenError>> + Send;
+    fn send(
+        &mut self,
+        frame: &crate::frame::CanOpenFrame,
+    ) -> Result<(), crate::error::CanOpenError>;
+    fn recv(
+        &mut self,
+    ) -> impl std::future::Future<
+        Output = Result<crate::frame::CanOpenFrame, crate::error::CanOpenError>,
+    > + Send;
 }
 
 #[cfg(test)]

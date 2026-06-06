@@ -20,7 +20,10 @@ pub struct EmergencyHandler {
 
 impl EmergencyHandler {
     pub fn new(max_events: usize) -> Self {
-        Self { events: Vec::new(), max_events }
+        Self {
+            events: Vec::new(),
+            max_events,
+        }
     }
 
     /// Record a new emergency event.
@@ -48,7 +51,10 @@ impl EmergencyHandler {
 
     /// Get events for a specific node.
     pub fn events_for_node(&self, node_id: u8) -> Vec<&EmergencyEvent> {
-        self.events.iter().filter(|e| e.node_id == node_id).collect()
+        self.events
+            .iter()
+            .filter(|e| e.node_id == node_id)
+            .collect()
     }
 
     /// Clear all events.

@@ -1,10 +1,10 @@
 //! Mock CAN driver for testing.
 
-use std::collections::VecDeque;
-use std::time::Duration;
 use crate::CanDriver;
 use crate::error::CanOpenError;
 use crate::frame::CanOpenFrame;
+use std::collections::VecDeque;
+use std::time::Duration;
 
 /// Mock CAN driver for unit and integration testing.
 ///
@@ -76,8 +76,7 @@ impl CanDriver for MockCanDriver {
         if let Some(err) = self.error_inject.take() {
             return Err(err);
         }
-        self.rx_queue.pop_front()
-            .ok_or(CanOpenError::Timeout)
+        self.rx_queue.pop_front().ok_or(CanOpenError::Timeout)
     }
 }
 

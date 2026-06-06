@@ -12,12 +12,12 @@
 
 #[cfg(target_os = "linux")]
 mod linux {
+    use opencan_can_traits::{
+        CanBitrate, CanBus, CanBusDyn, CanBusFactory, CanConfig, CanFrame, CanId, CanState,
+        ClassicFrame, error::CanError,
+    };
     use std::future::Future;
     use tokio::sync::Mutex;
-    use opencan_can_traits::{
-        CanBus, CanBusDyn, CanBusFactory, CanBitrate, CanConfig, CanFrame, CanId,
-        CanState, ClassicFrame, error::CanError,
-    };
 
     /// SocketCAN bus implementation.
     ///
@@ -48,19 +48,23 @@ mod linux {
             match frame {
                 CanFrame::Classic(f) => {
                     let id = match f.id {
-                        CanId::Standard(id) => socketcan::StandardId::new(id)
-                            .ok_or_else(|| CanError::InvalidConfig(format!("Invalid CAN ID: {}", id)))?,
-                        CanId::Extended(id) => socketcan::ExtendedId::new(id)
-                            .ok_or_else(|| CanError::InvalidConfig(format!("Invalid extended CAN ID: {}", id)))?,
+                        CanId::Standard(id) => socketcan::StandardId::new(id).ok_or_else(|| {
+                            CanError::InvalidConfig(format!("Invalid CAN ID: {}", id))
+                        })?,
+                        CanId::Extended(id) => socketcan::ExtendedId::new(id).ok_or_else(|| {
+                            CanError::InvalidConfig(format!("Invalid extended CAN ID: {}", id))
+                        })?,
                     };
-                    let data = socketcan::CanData::new(&f.data[..f.len as usize])
-                        .ok_or_else(|| CanError::InvalidConfig("Invalid data length".to_string()))?;
+                    let data =
+                        socketcan::CanData::new(&f.data[..f.len as usize]).ok_or_else(|| {
+                            CanError::InvalidConfig("Invalid data length".to_string())
+                        })?;
                     socketcan::CanFrame::new(id, &data)
                         .ok_or_else(|| CanError::Io("Failed to create CAN frame".to_string()))
                 }
-                CanFrame::Fd(_) => {
-                    Err(CanError::Unsupported("CAN FD not yet supported for SocketCAN".to_string()))
-                }
+                CanFrame::Fd(_) => Err(CanError::Unsupported(
+                    "CAN FD not yet supported for SocketCAN".to_string(),
+                )),
             }
         }
 
@@ -103,7 +107,9 @@ mod linux {
         fn recv(&self) -> impl Future<Output = Result<CanFrame, CanError>> + Send {
             async move {
                 let socket = self.socket.lock().await;
-                let frame = socket.read_frame().await
+                let frame = socket
+                    .read_frame()
+                    .await
                     .map_err(|e| CanError::Io(format!("SocketCAN recv error: {}", e)))?;
                 Ok(Self::from_socketcan_frame(&frame))
             }
@@ -119,7 +125,7 @@ mod linux {
         fn set_bitrate(&self, _bitrate: CanBitrate) -> Result<(), CanError> {
             // Bitrate must be set at the interface level (ip link set can0 type can bitrate 500000)
             Err(CanError::Unsupported(
-                "SocketCAN bitrate must be set at interface level via 'ip link set'".to_string()
+                "SocketCAN bitrate must be set at interface level via 'ip link set'".to_string(),
             ))
         }
     }

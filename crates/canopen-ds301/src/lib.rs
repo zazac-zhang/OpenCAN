@@ -2,19 +2,21 @@
 //!
 //! CANOpen DS301 protocol implementation.
 
-pub mod sdo;
-pub mod sdo_server;
-pub mod nmt;
-pub mod heartbeat;
+pub mod adapter;
 pub mod emcy;
+pub mod heartbeat;
+pub mod nmt;
 pub mod pdo;
 pub mod pdo_config;
-pub mod adapter;
+pub mod sdo;
+pub mod sdo_server;
 pub mod stack;
 
+pub use adapter::CanDriverAdapter;
+pub use heartbeat::{
+    HeartbeatConsumer, HeartbeatProducer, PdoDirection, SyncConsumer, SyncProducer,
+};
+pub use nmt::NmtMaster;
 pub use sdo::SdoClient;
 pub use sdo_server::SdoServer;
-pub use nmt::NmtMaster;
-pub use heartbeat::{HeartbeatConsumer, HeartbeatProducer, SyncProducer, SyncConsumer, PdoDirection};
-pub use adapter::CanDriverAdapter;
-pub use stack::{CanopenStack, CanEvent};
+pub use stack::{CanEvent, CanopenStack};

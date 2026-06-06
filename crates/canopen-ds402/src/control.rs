@@ -2,9 +2,9 @@
 //!
 //! High-level API for controlling CANOpen motion control devices.
 
+use super::state_machine::{ControlWord, Ds402State, OperationMode};
 use opencan_canopen_core::{CanDriver, CanOpenError, OdValue};
 use opencan_canopen_ds301::SdoClient;
-use super::state_machine::{Ds402State, OperationMode, ControlWord};
 
 /// DS402 motion control device.
 ///
@@ -25,25 +25,29 @@ impl<C: CanDriver> Ds402Device<C> {
         let word: u16 = match value {
             OdValue::Unsigned16(v) => v,
             OdValue::Unsigned32(v) => v as u16, // Handle 4-byte response
-            other => return Err(CanOpenError::Protocol(
-                format!("Invalid status word type: {:?}", other)
-            )),
+            other => {
+                return Err(CanOpenError::Protocol(format!(
+                    "Invalid status word type: {:?}",
+                    other
+                )));
+            }
         };
         Ok(Ds402State::from_status_word(word))
     }
 
     /// Write control word (0x6040).
     async fn write_control_word(&mut self, word: u16) -> Result<(), CanOpenError> {
-        self.sdo.download(self.node_id, 0x6040, 0, &OdValue::Unsigned16(word)).await
+        self.sdo
+            .download(self.node_id, 0x6040, 0, &OdValue::Unsigned16(word))
+            .await
     }
 
     /// Execute state transition.
     pub async fn transition(&mut self, target: Ds402State) -> Result<(), CanOpenError> {
         let current = self.state().await?;
-        let cmd = current.transition_to(target)
-            .ok_or_else(|| CanOpenError::Protocol(
-                format!("Invalid transition: {:?} -> {:?}", current, target)
-            ))?;
+        let cmd = current.transition_to(target).ok_or_else(|| {
+            CanOpenError::Protocol(format!("Invalid transition: {:?} -> {:?}", current, target))
+        })?;
         self.write_control_word(cmd).await
     }
 
@@ -86,7 +90,9 @@ impl<C: CanDriver> Ds402Device<C> {
 
     /// Set operation mode (0x6060).
     pub async fn set_mode(&mut self, mode: OperationMode) -> Result<(), CanOpenError> {
-        self.sdo.download(self.node_id, 0x6060, 0, &OdValue::Integer8(mode as i8)).await
+        self.sdo
+            .download(self.node_id, 0x6060, 0, &OdValue::Integer8(mode as i8))
+            .await
     }
 
     /// Read operation mode (0x6061).
@@ -94,9 +100,12 @@ impl<C: CanDriver> Ds402Device<C> {
         let value = self.sdo.upload(self.node_id, 0x6061, 0).await?;
         let mode_val: i8 = match value {
             OdValue::Integer8(v) => v,
-            other => return Err(CanOpenError::Protocol(
-                format!("Invalid mode type: {:?}", other)
-            )),
+            other => {
+                return Err(CanOpenError::Protocol(format!(
+                    "Invalid mode type: {:?}",
+                    other
+                )));
+            }
         };
         OperationMode::from_i8(mode_val)
             .ok_or_else(|| CanOpenError::Protocol(format!("Unknown operation mode: {}", mode_val)))
@@ -106,7 +115,9 @@ impl<C: CanDriver> Ds402Device<C> {
 
     /// Set target position (0x607A).
     pub async fn set_target_position(&mut self, pos: i32) -> Result<(), CanOpenError> {
-        self.sdo.download(self.node_id, 0x607A, 0, &OdValue::Integer32(pos)).await
+        self.sdo
+            .download(self.node_id, 0x607A, 0, &OdValue::Integer32(pos))
+            .await
     }
 
     /// Read actual position (0x6064).
@@ -114,7 +125,10 @@ impl<C: CanDriver> Ds402Device<C> {
         match self.sdo.upload(self.node_id, 0x6064, 0).await? {
             OdValue::Integer32(v) => Ok(v),
             OdValue::Unsigned32(v) => Ok(v as i32),
-            other => Err(CanOpenError::Protocol(format!("Invalid position: {:?}", other))),
+            other => Err(CanOpenError::Protocol(format!(
+                "Invalid position: {:?}",
+                other
+            ))),
         }
     }
 
@@ -122,7 +136,9 @@ impl<C: CanDriver> Ds402Device<C> {
 
     /// Set target velocity (0x60FF).
     pub async fn set_target_velocity(&mut self, vel: i32) -> Result<(), CanOpenError> {
-        self.sdo.download(self.node_id, 0x60FF, 0, &OdValue::Integer32(vel)).await
+        self.sdo
+            .download(self.node_id, 0x60FF, 0, &OdValue::Integer32(vel))
+            .await
     }
 
     /// Read actual velocity (0x606C).
@@ -130,7 +146,10 @@ impl<C: CanDriver> Ds402Device<C> {
         match self.sdo.upload(self.node_id, 0x606C, 0).await? {
             OdValue::Integer32(v) => Ok(v),
             OdValue::Unsigned32(v) => Ok(v as i32),
-            other => Err(CanOpenError::Protocol(format!("Invalid velocity: {:?}", other))),
+            other => Err(CanOpenError::Protocol(format!(
+                "Invalid velocity: {:?}",
+                other
+            ))),
         }
     }
 
@@ -138,14 +157,19 @@ impl<C: CanDriver> Ds402Device<C> {
 
     /// Set target torque (0x6071).
     pub async fn set_target_torque(&mut self, tq: i16) -> Result<(), CanOpenError> {
-        self.sdo.download(self.node_id, 0x6071, 0, &OdValue::Integer16(tq)).await
+        self.sdo
+            .download(self.node_id, 0x6071, 0, &OdValue::Integer16(tq))
+            .await
     }
 
     /// Read actual torque (0x6077).
     pub async fn actual_torque(&mut self) -> Result<i16, CanOpenError> {
         match self.sdo.upload(self.node_id, 0x6077, 0).await? {
             OdValue::Integer16(v) => Ok(v),
-            other => Err(CanOpenError::Protocol(format!("Invalid torque: {:?}", other))),
+            other => Err(CanOpenError::Protocol(format!(
+                "Invalid torque: {:?}",
+                other
+            ))),
         }
     }
 

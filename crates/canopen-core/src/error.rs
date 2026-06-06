@@ -64,10 +64,17 @@ pub enum OdError {
     SubindexNotFound { index: u16, subindex: u8 },
 
     #[error("access denied: {access:?} on {index:#06x}:{subindex}")]
-    AccessDenied { index: u16, subindex: u8, access: AccessType },
+    AccessDenied {
+        index: u16,
+        subindex: u8,
+        access: AccessType,
+    },
 
     #[error("type mismatch: expected {expected:?}, got {actual:?}")]
-    TypeMismatch { expected: DataType, actual: DataType },
+    TypeMismatch {
+        expected: DataType,
+        actual: DataType,
+    },
 }
 
 /// DS402 states (placeholder - full implementation in canopen-ds402).

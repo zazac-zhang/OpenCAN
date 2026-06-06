@@ -3,9 +3,9 @@
 //! Provides [`ConcreteOd`], a BTreeMap-backed [`ObjectDictionary`] that can be
 //! populated programmatically or built from an EDS file via `canopen-eds`.
 
-use std::collections::BTreeMap;
-use crate::od::{AccessType, DataType, EntryInfo, ObjectType, OdValue, ObjectDictionary};
 use crate::error::OdError;
+use crate::od::{AccessType, DataType, EntryInfo, ObjectDictionary, ObjectType, OdValue};
+use std::collections::BTreeMap;
 
 /// A single OD entry with metadata and current value.
 #[derive(Debug, Clone)]
@@ -89,7 +89,8 @@ impl ObjectDictionary for ConcreteOd {
     }
 
     fn write(&mut self, index: u16, subindex: u8, value: OdValue) -> Result<(), OdError> {
-        let entry = self.entries
+        let entry = self
+            .entries
             .get_mut(&(index, subindex))
             .ok_or(OdError::SubindexNotFound { index, subindex })?;
 
@@ -110,7 +111,8 @@ impl ObjectDictionary for ConcreteOd {
     }
 
     fn entry_info(&self, index: u16, subindex: u8) -> Result<EntryInfo, OdError> {
-        let entry = self.entries
+        let entry = self
+            .entries
             .get(&(index, subindex))
             .ok_or(OdError::SubindexNotFound { index, subindex })?;
 

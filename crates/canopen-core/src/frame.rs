@@ -16,7 +16,11 @@ pub struct CanOpenFrame {
 
 impl CanOpenFrame {
     pub fn new(cob_id: u16, data: [u8; 8]) -> Self {
-        Self { cob_id, data, timestamp: None }
+        Self {
+            cob_id,
+            data,
+            timestamp: None,
+        }
     }
 
     pub fn with_timestamp(mut self, ts: Instant) -> Self {
@@ -68,20 +72,20 @@ impl CobId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u16)]
 pub enum FunctionCode {
-    Nmt             = 0x000,
-    SyncOrEmergency = 0x080,  // Sync if node_id=0, Emergency otherwise
-    Timestamp       = 0x100,
-    Tpdo1           = 0x180,
-    Rpdo1           = 0x200,
-    Tpdo2           = 0x280,
-    Rpdo2           = 0x300,
-    Tpdo3           = 0x380,
-    Rpdo3           = 0x400,
-    Tpdo4           = 0x480,
-    Rpdo4           = 0x500,
-    SdoServer       = 0x580,  // SDO response (server → client)
-    SdoClient       = 0x600,  // SDO request (client → server)
-    Heartbeat       = 0x700,
+    Nmt = 0x000,
+    SyncOrEmergency = 0x080, // Sync if node_id=0, Emergency otherwise
+    Timestamp = 0x100,
+    Tpdo1 = 0x180,
+    Rpdo1 = 0x200,
+    Tpdo2 = 0x280,
+    Rpdo2 = 0x300,
+    Tpdo3 = 0x380,
+    Rpdo3 = 0x400,
+    Tpdo4 = 0x480,
+    Rpdo4 = 0x500,
+    SdoServer = 0x580, // SDO response (server → client)
+    SdoClient = 0x600, // SDO request (client → server)
+    Heartbeat = 0x700,
 }
 
 impl FunctionCode {
@@ -130,11 +134,11 @@ impl FunctionCode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum NmtCommandSpecifier {
-    EnterOperational    = 0x01,
-    EnterStopped        = 0x02,
+    EnterOperational = 0x01,
+    EnterStopped = 0x02,
     EnterPreOperational = 0x80,
-    ResetNode           = 0x81,
-    ResetCommunication  = 0x82,
+    ResetNode = 0x81,
+    ResetCommunication = 0x82,
 }
 
 impl NmtCommandSpecifier {
@@ -154,7 +158,7 @@ impl NmtCommandSpecifier {
 #[derive(Debug, Clone, PartialEq)]
 pub struct NmtCommand {
     pub command: NmtCommandSpecifier,
-    pub node_id: u8,  // 0 = broadcast to all nodes
+    pub node_id: u8, // 0 = broadcast to all nodes
 }
 
 impl NmtCommand {
@@ -167,7 +171,10 @@ impl NmtCommand {
             return None;
         }
         let command = NmtCommandSpecifier::from_u8(frame.data[0])?;
-        Some(Self { command, node_id: frame.data[1] })
+        Some(Self {
+            command,
+            node_id: frame.data[1],
+        })
     }
 }
 
@@ -177,10 +184,10 @@ impl NmtCommand {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum NmtState {
-    BootUp          = 0x00,
-    Stopped         = 0x04,
-    Operational     = 0x05,
-    PreOperational  = 0x7F,
+    BootUp = 0x00,
+    Stopped = 0x04,
+    Operational = 0x05,
+    PreOperational = 0x7F,
 }
 
 impl NmtState {
@@ -206,7 +213,10 @@ pub struct HeartbeatFrame {
 
 impl HeartbeatFrame {
     pub fn encode(&self) -> CanOpenFrame {
-        CanOpenFrame::new(0x700 + self.node_id as u16, [self.state as u8, 0, 0, 0, 0, 0, 0, 0])
+        CanOpenFrame::new(
+            0x700 + self.node_id as u16,
+            [self.state as u8, 0, 0, 0, 0, 0, 0, 0],
+        )
     }
 
     pub fn decode(frame: &CanOpenFrame) -> Option<Self> {
@@ -248,7 +258,12 @@ impl EmergencyFrame {
         let error_register = frame.data[2];
         let mut data = [0u8; 5];
         data.copy_from_slice(&frame.data[3..8]);
-        Some(Self { node_id, error_code, error_register, data })
+        Some(Self {
+            node_id,
+            error_code,
+            error_register,
+            data,
+        })
     }
 }
 
@@ -281,7 +296,12 @@ pub enum SdoData {
     /// Initiated segmented download.
     SegmentedInitiated { size: u32 },
     /// Segment download.
-    Segment { toggle: bool, last: bool, data: [u8; 7], size: Option<u8> },
+    Segment {
+        toggle: bool,
+        last: bool,
+        data: [u8; 7],
+        size: Option<u8>,
+    },
     /// Upload request (no data).
     UploadRequest,
     /// Abort.
@@ -311,10 +331,19 @@ impl SdoRequest {
                 data[1..3].copy_from_slice(&self.index.to_le_bytes());
                 data[3] = self.subindex;
             }
-            SdoData::Segment { toggle, last, data: d, size } => {
+            SdoData::Segment {
+                toggle,
+                last,
+                data: d,
+                size,
+            } => {
                 let mut cmd: u8 = 0x00;
-                if *toggle { cmd |= 0x10; }
-                if *last { cmd |= 0x01; }
+                if *toggle {
+                    cmd |= 0x10;
+                }
+                if *last {
+                    cmd |= 0x01;
+                }
                 if let Some(s) = size {
                     let n = 7 - s;
                     cmd |= (n & 0x07) << 1;
@@ -353,7 +382,8 @@ impl SdoRequest {
 
         let data = if cmd == 0x80 {
             // Abort
-            let code = u32::from_le_bytes([frame.data[4], frame.data[5], frame.data[6], frame.data[7]]);
+            let code =
+                u32::from_le_bytes([frame.data[4], frame.data[5], frame.data[6], frame.data[7]]);
             SdoData::Abort { code }
         } else if cmd & 0xE0 == 0x20 {
             // Initiate download (cs=1)
@@ -371,7 +401,12 @@ impl SdoRequest {
                 SdoData::Expedited { data: d, size }
             } else if size_indicated {
                 // Segmented download initiated
-                let size = u32::from_le_bytes([frame.data[4], frame.data[5], frame.data[6], frame.data[7]]);
+                let size = u32::from_le_bytes([
+                    frame.data[4],
+                    frame.data[5],
+                    frame.data[6],
+                    frame.data[7],
+                ]);
                 SdoData::SegmentedInitiated { size }
             } else {
                 SdoData::SegmentedInitiated { size: 0 }
@@ -390,12 +425,22 @@ impl SdoRequest {
             };
             let mut d = [0u8; 7];
             d.copy_from_slice(&frame.data[1..8]);
-            SdoData::Segment { toggle, last, data: d, size }
+            SdoData::Segment {
+                toggle,
+                last,
+                data: d,
+                size,
+            }
         } else {
             return None;
         };
 
-        Some(Self { node_id, index, subindex, data })
+        Some(Self {
+            node_id,
+            index,
+            subindex,
+            data,
+        })
     }
 }
 
@@ -415,7 +460,12 @@ pub enum SdoResponseData {
     /// Segmented upload initiated response.
     SegmentedInitiated { size: u32 },
     /// Upload segment response.
-    Segment { toggle: bool, last: bool, data: [u8; 7], size: Option<u8> },
+    Segment {
+        toggle: bool,
+        last: bool,
+        data: [u8; 7],
+        size: Option<u8>,
+    },
     /// Download confirmed.
     DownloadConfirmed,
     /// Abort.
@@ -435,7 +485,8 @@ impl SdoResponse {
 
         let data = if cmd == 0x80 {
             // Abort
-            let code = u32::from_le_bytes([frame.data[4], frame.data[5], frame.data[6], frame.data[7]]);
+            let code =
+                u32::from_le_bytes([frame.data[4], frame.data[5], frame.data[6], frame.data[7]]);
             SdoResponseData::Abort { code }
         } else if cmd & 0xE0 == 0x40 {
             // Initiate upload response (cs=2)
@@ -452,7 +503,12 @@ impl SdoResponse {
                 d.copy_from_slice(&frame.data[4..8]);
                 SdoResponseData::Expedited { data: d, size }
             } else if size_indicated {
-                let size = u32::from_le_bytes([frame.data[4], frame.data[5], frame.data[6], frame.data[7]]);
+                let size = u32::from_le_bytes([
+                    frame.data[4],
+                    frame.data[5],
+                    frame.data[6],
+                    frame.data[7],
+                ]);
                 SdoResponseData::SegmentedInitiated { size }
             } else {
                 SdoResponseData::SegmentedInitiated { size: 0 }
@@ -471,12 +527,22 @@ impl SdoResponse {
             };
             let mut d = [0u8; 7];
             d.copy_from_slice(&frame.data[1..8]);
-            SdoResponseData::Segment { toggle, last, data: d, size }
+            SdoResponseData::Segment {
+                toggle,
+                last,
+                data: d,
+                size,
+            }
         } else {
             return None;
         };
 
-        Some(Self { node_id, index, subindex, data })
+        Some(Self {
+            node_id,
+            index,
+            subindex,
+            data,
+        })
     }
 
     /// Encode as SDO server response frame (COB-ID = 0x580 + node_id).
@@ -506,10 +572,19 @@ impl SdoResponse {
                 data[3] = self.subindex;
                 data[4..8].copy_from_slice(&size.to_le_bytes());
             }
-            SdoResponseData::Segment { toggle, last, data: d, size } => {
+            SdoResponseData::Segment {
+                toggle,
+                last,
+                data: d,
+                size,
+            } => {
                 let mut cmd: u8 = 0x00;
-                if *toggle { cmd |= 0x10; }
-                if *last { cmd |= 0x01; }
+                if *toggle {
+                    cmd |= 0x10;
+                }
+                if *last {
+                    cmd |= 0x01;
+                }
                 // n = number of bytes that do NOT contain data
                 if let Some(s) = size {
                     let n = 7 - s;
@@ -549,13 +624,11 @@ impl PdoFrame {
     pub fn from_canopen(frame: &CanOpenFrame) -> Option<Self> {
         // TPDO1-4: 0x180-0x4FF, RPDO1-4: 0x200-0x57F
         match frame.cob_id {
-            0x180..=0x57F => {
-                Some(Self {
-                    cob_id: frame.cob_id,
-                    data: frame.data,
-                    timestamp: frame.timestamp,
-                })
-            }
+            0x180..=0x57F => Some(Self {
+                cob_id: frame.cob_id,
+                data: frame.data,
+                timestamp: frame.timestamp,
+            }),
             _ => None,
         }
     }
@@ -577,11 +650,9 @@ pub enum FrameClass {
 pub fn classify_frame(frame: &CanOpenFrame) -> FrameClass {
     let id = frame.cob_id;
     match id {
-        0x000 => {
-            NmtCommand::decode(frame)
-                .map(FrameClass::Nmt)
-                .unwrap_or(FrameClass::Unknown)
-        }
+        0x000 => NmtCommand::decode(frame)
+            .map(FrameClass::Nmt)
+            .unwrap_or(FrameClass::Unknown),
         0x080..=0x0FF => {
             if id == 0x080 {
                 FrameClass::Sync
@@ -603,11 +674,9 @@ pub fn classify_frame(frame: &CanOpenFrame) -> FrameClass {
                 FrameClass::Unknown
             }
         }
-        0x700..=0x77F => {
-            HeartbeatFrame::decode(frame)
-                .map(FrameClass::Heartbeat)
-                .unwrap_or(FrameClass::Unknown)
-        }
+        0x700..=0x77F => HeartbeatFrame::decode(frame)
+            .map(FrameClass::Heartbeat)
+            .unwrap_or(FrameClass::Unknown),
         _ => FrameClass::Unknown,
     }
 }
@@ -654,7 +723,10 @@ mod tests {
 
     #[test]
     fn test_heartbeat_encode_decode() {
-        let hb = HeartbeatFrame { node_id: 5, state: NmtState::Operational };
+        let hb = HeartbeatFrame {
+            node_id: 5,
+            state: NmtState::Operational,
+        };
         let frame = hb.encode();
         assert_eq!(frame.cob_id, 0x705);
         assert_eq!(frame.data[0], 0x05);
@@ -743,12 +815,18 @@ mod tests {
 
     #[test]
     fn test_classify_frame() {
-        let heartbeat = HeartbeatFrame { node_id: 5, state: NmtState::Operational };
+        let heartbeat = HeartbeatFrame {
+            node_id: 5,
+            state: NmtState::Operational,
+        };
         let frame = heartbeat.encode();
         let class = classify_frame(&frame);
         assert!(matches!(class, FrameClass::Heartbeat(_)));
 
-        let nmt = NmtCommand { command: NmtCommandSpecifier::EnterOperational, node_id: 0 };
+        let nmt = NmtCommand {
+            command: NmtCommandSpecifier::EnterOperational,
+            node_id: 0,
+        };
         let frame = nmt.encode();
         let class = classify_frame(&frame);
         assert!(matches!(class, FrameClass::Nmt(_)));

@@ -4,24 +4,18 @@
 //! - Communication parameters: 0x1400-0x1403 (RPDO), 0x1800-0x1803 (TPDO)
 //! - Mapping parameters: 0x1600-0x1603 (RPDO), 0x1A00-0x1A03 (TPDO)
 
-use opencan_canopen_core::CanOpenError;
-use opencan_canopen_core::od::OdValue;
+use crate::heartbeat::PdoDirection;
 use crate::sdo::SdoClient;
 use opencan_canopen_core::CanDriver;
-
-/// PDO direction (TPDO = transmitted by node, RPDO = received by node).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PdoDirection {
-    Tpdo,
-    Rpdo,
-}
+use opencan_canopen_core::CanOpenError;
+use opencan_canopen_core::od::OdValue;
 
 /// PDO communication parameters (0x1400/0x1800 + pdo_number - 1).
 #[derive(Debug, Clone)]
 pub struct PdoCommParams {
     /// COB-ID (bit 31 = valid flag, bits 10:0 = CAN ID)
     pub cob_id: u32,
-    /// Transmission type (0=acysnc, 1=every SYNC, 2-240=every N SYNC, 254/255=event-driven)
+    /// Transmission type (0=acyclic, 1=every SYNC, 2-240=every N SYNC, 254/255=event-driven)
     pub transmission_type: u8,
     /// Inhibit time in 100μs units (0 = not used)
     pub inhibit_time: u16,
@@ -84,19 +78,32 @@ impl<'a, C: CanDriver> PdoConfigManager<'a, C> {
 
     /// Read PDO communication parameters for a remote node.
     pub async fn read_comm_params(
-        &mut self, node_id: u8, pdo_number: u8, direction: PdoDirection,
+        &mut self,
+        node_id: u8,
+        pdo_number: u8,
+        direction: PdoDirection,
     ) -> Result<PdoCommParams, CanOpenError> {
         let base = pdo_comm_index(pdo_number, direction)
             .ok_or_else(|| CanOpenError::Protocol(format!("Invalid PDO number: {}", pdo_number)))?;
 
         let cob_id = match self.sdo.upload(node_id, base, 0).await? {
             OdValue::Unsigned32(v) => v,
-            other => return Err(CanOpenError::Protocol(format!("Expected u32 for COB-ID, got {:?}", other))),
+            other => {
+                return Err(CanOpenError::Protocol(format!(
+                    "Expected u32 for COB-ID, got {:?}",
+                    other
+                )));
+            }
         };
 
         let transmission_type = match self.sdo.upload(node_id, base, 1).await? {
             OdValue::Unsigned8(v) => v,
-            other => return Err(CanOpenError::Protocol(format!("Expected u8 for transmission type, got {:?}", other))),
+            other => {
+                return Err(CanOpenError::Protocol(format!(
+                    "Expected u8 for transmission type, got {:?}",
+                    other
+                )));
+            }
         };
 
         // Sub-index 2: Inhibit Time (optional, may not exist)
@@ -121,7 +128,10 @@ impl<'a, C: CanDriver> PdoConfigManager<'a, C> {
 
     /// Read PDO mapping for a remote node.
     pub async fn read_mapping(
-        &mut self, node_id: u8, pdo_number: u8, direction: PdoDirection,
+        &mut self,
+        node_id: u8,
+        pdo_number: u8,
+        direction: PdoDirection,
     ) -> Result<Vec<PdoMappingEntry>, CanOpenError> {
         let base = pdo_map_index(pdo_number, direction)
             .ok_or_else(|| CanOpenError::Protocol(format!("Invalid PDO number: {}", pdo_number)))?;
@@ -129,14 +139,24 @@ impl<'a, C: CanDriver> PdoConfigManager<'a, C> {
         // Sub-index 0: Number of mapped objects
         let count = match self.sdo.upload(node_id, base, 0).await? {
             OdValue::Unsigned8(v) => v as usize,
-            other => return Err(CanOpenError::Protocol(format!("Expected u8 for mapping count, got {:?}", other))),
+            other => {
+                return Err(CanOpenError::Protocol(format!(
+                    "Expected u8 for mapping count, got {:?}",
+                    other
+                )));
+            }
         };
 
         let mut entries = Vec::with_capacity(count);
         for i in 1..=count {
             let val = match self.sdo.upload(node_id, base, i as u8).await? {
                 OdValue::Unsigned32(v) => v,
-                other => return Err(CanOpenError::Protocol(format!("Expected u32 for mapping entry, got {:?}", other))),
+                other => {
+                    return Err(CanOpenError::Protocol(format!(
+                        "Expected u32 for mapping entry, got {:?}",
+                        other
+                    )));
+                }
             };
             entries.push(PdoMappingEntry::from_u32(val));
         }
@@ -148,22 +168,36 @@ impl<'a, C: CanDriver> PdoConfigManager<'a, C> {
     ///
     /// The caller must ensure the PDO is disabled (bit 31 of COB-ID set) before writing.
     pub async fn write_mapping(
-        &mut self, node_id: u8, pdo_number: u8, direction: PdoDirection,
+        &mut self,
+        node_id: u8,
+        pdo_number: u8,
+        direction: PdoDirection,
         mappings: &[PdoMappingEntry],
     ) -> Result<(), CanOpenError> {
         let base = pdo_map_index(pdo_number, direction)
             .ok_or_else(|| CanOpenError::Protocol(format!("Invalid PDO number: {}", pdo_number)))?;
 
         // Write number of mapped objects (0 to clear)
-        self.sdo.download(node_id, base, 0, &OdValue::Unsigned8(0)).await?;
+        self.sdo
+            .download(node_id, base, 0, &OdValue::Unsigned8(0))
+            .await?;
 
         // Write each mapping entry
         for (i, entry) in mappings.iter().enumerate() {
-            self.sdo.download(node_id, base, (i + 1) as u8, &OdValue::Unsigned32(entry.to_u32())).await?;
+            self.sdo
+                .download(
+                    node_id,
+                    base,
+                    (i + 1) as u8,
+                    &OdValue::Unsigned32(entry.to_u32()),
+                )
+                .await?;
         }
 
         // Write the actual count
-        self.sdo.download(node_id, base, 0, &OdValue::Unsigned8(mappings.len() as u8)).await?;
+        self.sdo
+            .download(node_id, base, 0, &OdValue::Unsigned8(mappings.len() as u8))
+            .await?;
 
         Ok(())
     }
@@ -180,7 +214,10 @@ pub fn validate_mapping(mappings: &[PdoMappingEntry]) -> Result<(), String> {
     // Total bit length must be ≤ 64
     let total_bits: u16 = mappings.iter().map(|m| m.bit_length as u16).sum();
     if total_bits > 64 {
-        return Err(format!("Total bit length {} exceeds maximum 64 bits", total_bits));
+        return Err(format!(
+            "Total bit length {} exceeds maximum 64 bits",
+            total_bits
+        ));
     }
 
     // Each entry's bit length should be 1, 2, 4, 8, 16, 32, or 64
@@ -237,8 +274,16 @@ mod tests {
     #[test]
     fn test_validate_mapping_valid() {
         let mappings = vec![
-            PdoMappingEntry { index: 0x6041, subindex: 0, bit_length: 16 },
-            PdoMappingEntry { index: 0x6064, subindex: 0, bit_length: 32 },
+            PdoMappingEntry {
+                index: 0x6041,
+                subindex: 0,
+                bit_length: 16,
+            },
+            PdoMappingEntry {
+                index: 0x6064,
+                subindex: 0,
+                bit_length: 32,
+            },
         ];
         assert!(validate_mapping(&mappings).is_ok());
     }
@@ -246,26 +291,42 @@ mod tests {
     #[test]
     fn test_validate_mapping_too_large() {
         let mappings = vec![
-            PdoMappingEntry { index: 0x6041, subindex: 0, bit_length: 32 },
-            PdoMappingEntry { index: 0x6064, subindex: 0, bit_length: 32 },
-            PdoMappingEntry { index: 0x606C, subindex: 0, bit_length: 8 },
+            PdoMappingEntry {
+                index: 0x6041,
+                subindex: 0,
+                bit_length: 32,
+            },
+            PdoMappingEntry {
+                index: 0x6064,
+                subindex: 0,
+                bit_length: 32,
+            },
+            PdoMappingEntry {
+                index: 0x606C,
+                subindex: 0,
+                bit_length: 8,
+            },
         ];
         assert!(validate_mapping(&mappings).is_err());
     }
 
     #[test]
     fn test_validate_mapping_invalid_bit_length() {
-        let mappings = vec![
-            PdoMappingEntry { index: 0x6041, subindex: 0, bit_length: 3 },
-        ];
+        let mappings = vec![PdoMappingEntry {
+            index: 0x6041,
+            subindex: 0,
+            bit_length: 3,
+        }];
         assert!(validate_mapping(&mappings).is_err());
     }
 
     #[test]
     fn test_validate_mapping_zero_length() {
-        let mappings = vec![
-            PdoMappingEntry { index: 0x6041, subindex: 0, bit_length: 0 },
-        ];
+        let mappings = vec![PdoMappingEntry {
+            index: 0x6041,
+            subindex: 0,
+            bit_length: 0,
+        }];
         assert!(validate_mapping(&mappings).is_err());
     }
 }

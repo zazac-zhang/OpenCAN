@@ -14,7 +14,9 @@ pub struct KvaserFactory;
 impl CanBusFactory for KvaserFactory {
     fn open(&self, _channel: &str, _config: &CanConfig) -> Result<Box<dyn CanBusDyn>, CanError> {
         // TODO: Implement using can-hal-kvaser or direct FFI to CANlib
-        Err(CanError::Unsupported("Kvaser backend not yet implemented".to_string()))
+        Err(CanError::Unsupported(
+            "Kvaser backend not yet implemented".to_string(),
+        ))
     }
 
     fn name(&self) -> &str {

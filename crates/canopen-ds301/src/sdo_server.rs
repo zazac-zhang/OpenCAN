@@ -3,9 +3,11 @@
 //! The SDO server listens on COB-ID 0x600 + node_id for incoming SDO requests,
 //! reads/writes the local ObjectDictionary, and sends responses on 0x580 + node_id.
 //!
-//! Supports: Expedited, Segmented, and Block transfers.
+//! Supports: Expedited and Segmented transfers.
 
-use opencan_canopen_core::frame::{CanOpenFrame, SdoRequest, SdoData, SdoResponse, SdoResponseData};
+use opencan_canopen_core::frame::{
+    CanOpenFrame, SdoData, SdoRequest, SdoResponse, SdoResponseData,
+};
 use opencan_canopen_core::od::{ObjectDictionary, OdValue};
 
 /// SDO Server — responds to SDO requests from other nodes.
@@ -38,6 +40,7 @@ struct DownloadState {
 }
 
 /// State for block upload.
+/// TODO: Implement block transfer per CiA 301 specification.
 #[allow(dead_code)]
 struct BlockUploadState {
     index: u16,
@@ -63,7 +66,11 @@ impl SdoServer {
     ///
     /// Returns `Some(response_frame)` if this was an SDO request to us,
     /// `None` otherwise (pass through to other processing).
-    pub fn process(&mut self, frame: &CanOpenFrame, od: &mut dyn ObjectDictionary) -> Option<CanOpenFrame> {
+    pub fn process(
+        &mut self,
+        frame: &CanOpenFrame,
+        od: &mut dyn ObjectDictionary,
+    ) -> Option<CanOpenFrame> {
         // Only handle frames addressed to our node
         let expected_cob_id = 0x600 + self.node_id as u16;
         if frame.cob_id != expected_cob_id {
@@ -72,8 +79,8 @@ impl SdoServer {
 
         let cmd = frame.data[0];
 
-        // Check for upload segment request (cs=3, cmd=0x60/0x70)
-        if cmd & 0xE0 == 0x60 && self.upload_state.is_some() {
+        // Check for upload segment request (cs=2: 0x40 or cs=3: 0x60)
+        if (cmd & 0xE0 == 0x40 || cmd & 0xE0 == 0x60) && self.upload_state.is_some() {
             return self.handle_upload_segment(frame);
         }
 
@@ -91,9 +98,7 @@ impl SdoServer {
         };
 
         match &request.data {
-            SdoData::UploadRequest => {
-                self.handle_upload(request.index, request.subindex, od)
-            }
+            SdoData::UploadRequest => self.handle_upload(request.index, request.subindex, od),
             SdoData::Expedited { data, size } => {
                 self.handle_expedited_download(request.index, request.subindex, data, *size, od)
             }
@@ -106,16 +111,31 @@ impl SdoServer {
                 self.download_state = None;
                 None
             }
-            _ => Some(Self::abort(self.node_id, request.index, request.subindex, 0x0504_0001)),
+            _ => Some(Self::abort(
+                self.node_id,
+                request.index,
+                request.subindex,
+                0x0504_0001,
+            )),
         }
     }
 
     /// Handle upload request (client reads from our OD).
-    fn handle_upload(&mut self, index: u16, subindex: u8, od: &mut dyn ObjectDictionary) -> Option<CanOpenFrame> {
+    fn handle_upload(
+        &mut self,
+        index: u16,
+        subindex: u8,
+        od: &mut dyn ObjectDictionary,
+    ) -> Option<CanOpenFrame> {
         let value = match od.read(index, subindex) {
             Ok(v) => v,
             Err(e) => {
-                return Some(Self::abort(self.node_id, index, subindex, od_error_to_sdo_abort(&e)));
+                return Some(Self::abort(
+                    self.node_id,
+                    index,
+                    subindex,
+                    od_error_to_sdo_abort(&e),
+                ));
             }
         };
 
@@ -127,15 +147,18 @@ impl SdoServer {
             let len = bytes.len();
             data[..len].copy_from_slice(&bytes);
 
-            Some(SdoResponse {
-                node_id: self.node_id,
-                index,
-                subindex,
-                data: SdoResponseData::Expedited {
-                    data,
-                    size: Some(len as u8),
-                },
-            }.encode())
+            Some(
+                SdoResponse {
+                    node_id: self.node_id,
+                    index,
+                    subindex,
+                    data: SdoResponseData::Expedited {
+                        data,
+                        size: Some(len as u8),
+                    },
+                }
+                .encode(),
+            )
         } else {
             // Segmented upload — initiate
             let total_size = bytes.len();
@@ -147,14 +170,17 @@ impl SdoServer {
                 toggle: false,
             });
 
-            Some(SdoResponse {
-                node_id: self.node_id,
-                index,
-                subindex,
-                data: SdoResponseData::SegmentedInitiated {
-                    size: total_size as u32,
-                },
-            }.encode())
+            Some(
+                SdoResponse {
+                    node_id: self.node_id,
+                    index,
+                    subindex,
+                    data: SdoResponseData::SegmentedInitiated {
+                        size: total_size as u32,
+                    },
+                }
+                .encode(),
+            )
         }
     }
 
@@ -195,29 +221,41 @@ impl SdoServer {
             self.upload_state = None;
         }
 
-        Some(SdoResponse {
-            node_id,
-            index,
-            subindex,
-            data: SdoResponseData::Segment {
-                toggle: client_toggle,
-                last: is_last,
-                data: seg_data,
-                size: Some(seg_len as u8),
-            },
-        }.encode())
+        Some(
+            SdoResponse {
+                node_id,
+                index,
+                subindex,
+                data: SdoResponseData::Segment {
+                    toggle: client_toggle,
+                    last: is_last,
+                    data: seg_data,
+                    size: Some(seg_len as u8),
+                },
+            }
+            .encode(),
+        )
     }
 
     /// Handle expedited download (client writes ≤4 bytes to our OD).
     fn handle_expedited_download(
-        &mut self, index: u16, subindex: u8,
-        data: &[u8; 4], size: Option<u8>, od: &mut dyn ObjectDictionary,
+        &mut self,
+        index: u16,
+        subindex: u8,
+        data: &[u8; 4],
+        size: Option<u8>,
+        od: &mut dyn ObjectDictionary,
     ) -> Option<CanOpenFrame> {
         // Get the entry info to determine data type
         let info = match od.entry_info(index, subindex) {
             Ok(i) => i,
             Err(e) => {
-                return Some(Self::abort(self.node_id, index, subindex, od_error_to_sdo_abort(&e)));
+                return Some(Self::abort(
+                    self.node_id,
+                    index,
+                    subindex,
+                    od_error_to_sdo_abort(&e),
+                ));
             }
         };
 
@@ -235,19 +273,30 @@ impl SdoServer {
         };
 
         match od.write(index, subindex, value) {
-            Ok(()) => Some(SdoResponse {
-                node_id: self.node_id,
+            Ok(()) => Some(
+                SdoResponse {
+                    node_id: self.node_id,
+                    index,
+                    subindex,
+                    data: SdoResponseData::DownloadConfirmed,
+                }
+                .encode(),
+            ),
+            Err(e) => Some(Self::abort(
+                self.node_id,
                 index,
                 subindex,
-                data: SdoResponseData::DownloadConfirmed,
-            }.encode()),
-            Err(e) => Some(Self::abort(self.node_id, index, subindex, od_error_to_sdo_abort(&e))),
+                od_error_to_sdo_abort(&e),
+            )),
         }
     }
 
     /// Handle segmented download initiate (client starts writing >4 bytes).
     fn handle_segmented_download_init(
-        &mut self, index: u16, subindex: u8, size: usize,
+        &mut self,
+        index: u16,
+        subindex: u8,
+        size: usize,
     ) -> Option<CanOpenFrame> {
         self.download_state = Some(DownloadState {
             index,
@@ -257,16 +306,23 @@ impl SdoServer {
             toggle: false,
         });
 
-        Some(SdoResponse {
-            node_id: self.node_id,
-            index,
-            subindex,
-            data: SdoResponseData::DownloadConfirmed,
-        }.encode())
+        Some(
+            SdoResponse {
+                node_id: self.node_id,
+                index,
+                subindex,
+                data: SdoResponseData::DownloadConfirmed,
+            }
+            .encode(),
+        )
     }
 
     /// Handle download segment (client continues writing).
-    fn handle_download_segment(&mut self, frame: &CanOpenFrame, od: &mut dyn ObjectDictionary) -> Option<CanOpenFrame> {
+    fn handle_download_segment(
+        &mut self,
+        frame: &CanOpenFrame,
+        od: &mut dyn ObjectDictionary,
+    ) -> Option<CanOpenFrame> {
         let state = match &mut self.download_state {
             Some(s) => s,
             None => return None,
@@ -283,7 +339,12 @@ impl SdoServer {
 
         // Verify toggle bit
         if client_toggle != state.toggle {
-            return Some(Self::abort(self.node_id, state.index, state.subindex, 0x0503_0000));
+            return Some(Self::abort(
+                self.node_id,
+                state.index,
+                state.subindex,
+                0x0503_0000,
+            ));
         }
 
         state.data.extend_from_slice(&frame.data[1..1 + seg_size]);
@@ -294,7 +355,12 @@ impl SdoServer {
             let info = match od.entry_info(state.index, state.subindex) {
                 Ok(i) => i,
                 Err(e) => {
-                    let resp = Self::abort(self.node_id, state.index, state.subindex, od_error_to_sdo_abort(&e));
+                    let resp = Self::abort(
+                        self.node_id,
+                        state.index,
+                        state.subindex,
+                        od_error_to_sdo_abort(&e),
+                    );
                     self.download_state = None;
                     return Some(resp);
                 }
@@ -314,22 +380,33 @@ impl SdoServer {
             self.download_state = None;
 
             match od.write(index, subindex, value) {
-                Ok(()) => Some(SdoResponse {
-                    node_id: self.node_id,
+                Ok(()) => Some(
+                    SdoResponse {
+                        node_id: self.node_id,
+                        index,
+                        subindex,
+                        data: SdoResponseData::DownloadConfirmed,
+                    }
+                    .encode(),
+                ),
+                Err(e) => Some(Self::abort(
+                    self.node_id,
                     index,
                     subindex,
-                    data: SdoResponseData::DownloadConfirmed,
-                }.encode()),
-                Err(e) => Some(Self::abort(self.node_id, index, subindex, od_error_to_sdo_abort(&e))),
+                    od_error_to_sdo_abort(&e),
+                )),
             }
         } else {
             // More segments expected
-            Some(SdoResponse {
-                node_id: self.node_id,
-                index: state.index,
-                subindex: state.subindex,
-                data: SdoResponseData::DownloadConfirmed,
-            }.encode())
+            Some(
+                SdoResponse {
+                    node_id: self.node_id,
+                    index: state.index,
+                    subindex: state.subindex,
+                    data: SdoResponseData::DownloadConfirmed,
+                }
+                .encode(),
+            )
         }
     }
 
@@ -340,7 +417,8 @@ impl SdoServer {
             index,
             subindex,
             data: SdoResponseData::Abort { code },
-        }.encode()
+        }
+        .encode()
     }
 
     /// Get the node ID.
@@ -401,6 +479,15 @@ mod tests {
             access: AccessType::ReadWrite,
             name: "Test String".to_string(),
             value: OdValue::VisibleString("Hello".to_string()),
+        });
+        od.add_entry(OdEntry {
+            index: 0x2001,
+            subindex: 0,
+            object_type: ObjectType::Var,
+            data_type: DataType::VisibleString,
+            access: AccessType::ReadWrite,
+            name: "Long String".to_string(),
+            value: OdValue::VisibleString("This is a multi-segment test string!".to_string()),
         });
         od
     }
@@ -545,12 +632,17 @@ mod tests {
             _ => panic!("Expected segmented initiated"),
         }
 
-        // Request first segment
-        let seg_req = CanOpenFrame::new(0x603, [0x60, 0, 0, 0, 0, 0, 0, 0]); // toggle=0
+        // Request first segment (cs=2, toggle at bit 4 = 0x10, so 0x50 has toggle=1)
+        let seg_req = CanOpenFrame::new(0x603, [0x40, 0, 0, 0, 0, 0, 0, 0]); // cs=2, toggle=0
         let response = server.process(&seg_req, &mut od).unwrap();
         let resp = SdoResponse::decode(&response).unwrap();
         match resp.data {
-            SdoResponseData::Segment { toggle, last, data, size } => {
+            SdoResponseData::Segment {
+                toggle,
+                last,
+                data,
+                size,
+            } => {
                 assert!(!toggle); // server echoes client toggle
                 assert!(last); // 5 bytes fits in one segment
                 assert_eq!(size, Some(5));
@@ -558,6 +650,75 @@ mod tests {
             }
             _ => panic!("Expected segment response"),
         }
+    }
+
+    #[test]
+    fn test_segmented_upload_multi_segment() {
+        let mut server = SdoServer::new(3);
+        let mut od = make_od();
+
+        // Upload 0x2001:0 = "This is a multi-segment test string!" (38 bytes, needs 6 segments)
+        let request = SdoRequest {
+            node_id: 3,
+            index: 0x2001,
+            subindex: 0,
+            data: SdoData::UploadRequest,
+        };
+        let frame = request.encode();
+        let response = server.process(&frame, &mut od).unwrap();
+
+        // Should be segmented init with total size
+        let resp = SdoResponse::decode(&response).unwrap();
+        match resp.data {
+            SdoResponseData::SegmentedInitiated { size } => assert_eq!(size, 36),
+            _ => panic!("Expected segmented initiated"),
+        }
+
+        let mut all_data = Vec::new();
+        let mut toggle = false;
+        let expected = b"This is a multi-segment test string!";
+
+        loop {
+            // Send segment request with alternating toggle
+            // Upload segment request: cs=2 (0x40 base), toggle at bit 4 (0x10)
+            let cmd = if toggle { 0x50 } else { 0x40 };
+            let seg_req = CanOpenFrame::new(0x603, [cmd, 0, 0, 0, 0, 0, 0, 0]);
+            let seg_num = all_data.len() / 7 + 1;
+            let response = server.process(&seg_req, &mut od).unwrap();
+            let resp = SdoResponse::decode(&response).unwrap();
+
+            match resp.data {
+                SdoResponseData::Segment {
+                    toggle: t,
+                    last,
+                    data,
+                    size,
+                } => {
+                    assert_eq!(t, toggle, "Server toggle mismatch on segment {}", seg_num);
+                    let len = size.unwrap_or(7) as usize;
+                    all_data.extend_from_slice(&data[..len]);
+                    if last {
+                        break;
+                    }
+                }
+                other => panic!(
+                    "Expected segment response on seg {}, got {:?} (abort code 0x{:08X})",
+                    seg_num,
+                    other,
+                    match other {
+                        SdoResponseData::Abort { code } => code,
+                        _ => 0,
+                    }
+                ),
+            }
+            toggle = !toggle;
+        }
+
+        assert_eq!(
+            &all_data[..],
+            expected,
+            "Multi-segment upload data mismatch"
+        );
     }
 
     #[test]
@@ -591,7 +752,8 @@ mod tests {
                 data: seg_data,
                 size: Some(6),
             },
-        }.encode();
+        }
+        .encode();
         // The segment frame has cs=0, not cs=1, so it won't parse as SdoRequest
         // Let's build it manually
         let mut raw = [0u8; 8];
@@ -628,7 +790,7 @@ mod tests {
         server.process(&request.encode(), &mut od);
 
         // Send segment with wrong toggle (should be false, send true)
-        let seg_req = CanOpenFrame::new(0x603, [0x70, 0, 0, 0, 0, 0, 0, 0]); // toggle=1
+        let seg_req = CanOpenFrame::new(0x603, [0x50, 0, 0, 0, 0, 0, 0, 0]); // cs=2, toggle=1 (wrong!)
         let response = server.process(&seg_req, &mut od).unwrap();
         let resp = SdoResponse::decode(&response).unwrap();
         match resp.data {

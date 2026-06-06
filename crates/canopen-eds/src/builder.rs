@@ -3,9 +3,9 @@
 //! Converts a parsed [`EdsFile`] into a [`ConcreteOd`] that can be used
 //! by the CANOpen protocol stack and GUI.
 
+use crate::model::EdsFile;
 use opencan_canopen_core::concrete_od::{ConcreteOd, OdEntry};
 use opencan_canopen_core::od::{AccessType, DataType, ObjectType, OdValue};
-use crate::model::EdsFile;
 
 /// Build a [`ConcreteOd`] from a parsed EDS file.
 ///
@@ -23,7 +23,8 @@ pub fn build_od(eds: &EdsFile) -> ConcreteOd {
     for (&index, entry) in &eds.entries {
         // Determine access type from sub-entries (use first sub-entry's access)
         // Determine data type: prefer sub-entry, fall back to main entry
-        let data_type = eds.sub_entries
+        let data_type = eds
+            .sub_entries
             .iter()
             .find(|((idx, _), _)| *idx == index)
             .and_then(|(_, sub)| sub.data_type.and_then(DataType::from_u16))
@@ -31,7 +32,8 @@ pub fn build_od(eds: &EdsFile) -> ConcreteOd {
             .unwrap_or(DataType::Unsigned32);
 
         // Determine access type: prefer sub-entry, fall back to main entry
-        let access = eds.sub_entries
+        let access = eds
+            .sub_entries
             .iter()
             .find(|((idx, _), _)| *idx == index)
             .and_then(|(_, sub)| parse_access_type(sub.access_type.as_deref().unwrap_or("rw")))
@@ -39,7 +41,8 @@ pub fn build_od(eds: &EdsFile) -> ConcreteOd {
             .unwrap_or(AccessType::ReadWrite);
 
         // Parse default value: prefer sub-entry, fall back to main entry
-        let default_value = eds.sub_entries
+        let default_value = eds
+            .sub_entries
             .iter()
             .find(|((idx, _), _)| *idx == index)
             .and_then(|(_, sub)| sub.default_value.as_deref())
@@ -68,15 +71,18 @@ pub fn build_od(eds: &EdsFile) -> ConcreteOd {
                     continue;
                 }
 
-                let sub_data_type = sub_entry.data_type
+                let sub_data_type = sub_entry
+                    .data_type
                     .and_then(DataType::from_u16)
                     .unwrap_or(data_type);
 
-                let sub_access = parse_access_type(
-                    sub_entry.access_type.as_deref().unwrap_or("rw")
-                ).unwrap_or(AccessType::ReadWrite);
+                let sub_access =
+                    parse_access_type(sub_entry.access_type.as_deref().unwrap_or("rw"))
+                        .unwrap_or(AccessType::ReadWrite);
 
-                let sub_value = sub_entry.default_value.as_deref()
+                let sub_value = sub_entry
+                    .default_value
+                    .as_deref()
                     .and_then(|v| parse_default_value(v, sub_data_type))
                     .unwrap_or(OdValue::None);
 
@@ -170,7 +176,11 @@ fn parse_default_value(s: &str, data_type: DataType) -> Option<OdValue> {
         DataType::Domain => {
             // Domain values are typically hex strings
             let bytes = parse_hex_bytes(s);
-            if bytes.is_empty() { None } else { Some(OdValue::Domain(bytes)) }
+            if bytes.is_empty() {
+                None
+            } else {
+                Some(OdValue::Domain(bytes))
+            }
         }
         _ => None,
     }
@@ -191,28 +201,44 @@ trait FromStrRadix: Sized {
 }
 
 impl FromStrRadix for u8 {
-    fn from_hex(s: &str) -> Option<Self> { u8::from_str_radix(s, 16).ok() }
+    fn from_hex(s: &str) -> Option<Self> {
+        u8::from_str_radix(s, 16).ok()
+    }
 }
 impl FromStrRadix for u16 {
-    fn from_hex(s: &str) -> Option<Self> { u16::from_str_radix(s, 16).ok() }
+    fn from_hex(s: &str) -> Option<Self> {
+        u16::from_str_radix(s, 16).ok()
+    }
 }
 impl FromStrRadix for u32 {
-    fn from_hex(s: &str) -> Option<Self> { u32::from_str_radix(s, 16).ok() }
+    fn from_hex(s: &str) -> Option<Self> {
+        u32::from_str_radix(s, 16).ok()
+    }
 }
 impl FromStrRadix for u64 {
-    fn from_hex(s: &str) -> Option<Self> { u64::from_str_radix(s, 16).ok() }
+    fn from_hex(s: &str) -> Option<Self> {
+        u64::from_str_radix(s, 16).ok()
+    }
 }
 impl FromStrRadix for i8 {
-    fn from_hex(s: &str) -> Option<Self> { i8::from_str_radix(s, 16).ok() }
+    fn from_hex(s: &str) -> Option<Self> {
+        i8::from_str_radix(s, 16).ok()
+    }
 }
 impl FromStrRadix for i16 {
-    fn from_hex(s: &str) -> Option<Self> { i16::from_str_radix(s, 16).ok() }
+    fn from_hex(s: &str) -> Option<Self> {
+        i16::from_str_radix(s, 16).ok()
+    }
 }
 impl FromStrRadix for i32 {
-    fn from_hex(s: &str) -> Option<Self> { i32::from_str_radix(s, 16).ok() }
+    fn from_hex(s: &str) -> Option<Self> {
+        i32::from_str_radix(s, 16).ok()
+    }
 }
 impl FromStrRadix for i64 {
-    fn from_hex(s: &str) -> Option<Self> { i64::from_str_radix(s, 16).ok() }
+    fn from_hex(s: &str) -> Option<Self> {
+        i64::from_str_radix(s, 16).ok()
+    }
 }
 
 /// Parse a hex byte string (e.g. "01 02 03" or "010203") to Vec<u8>.

@@ -19,7 +19,11 @@ impl NmtMaster {
     }
 
     /// Send NMT command to start a remote node.
-    pub fn start_remote_node<C: CanDriver>(&self, can: &mut C, node_id: u8) -> Result<(), CanOpenError> {
+    pub fn start_remote_node<C: CanDriver>(
+        &self,
+        can: &mut C,
+        node_id: u8,
+    ) -> Result<(), CanOpenError> {
         let cmd = NmtCommand {
             command: NmtCommandSpecifier::EnterOperational,
             node_id,
@@ -28,7 +32,11 @@ impl NmtMaster {
     }
 
     /// Send NMT command to stop a remote node.
-    pub fn stop_remote_node<C: CanDriver>(&self, can: &mut C, node_id: u8) -> Result<(), CanOpenError> {
+    pub fn stop_remote_node<C: CanDriver>(
+        &self,
+        can: &mut C,
+        node_id: u8,
+    ) -> Result<(), CanOpenError> {
         let cmd = NmtCommand {
             command: NmtCommandSpecifier::EnterStopped,
             node_id,
@@ -46,7 +54,11 @@ impl NmtMaster {
     }
 
     /// Send NMT command to reset communication on a remote node.
-    pub fn reset_communication<C: CanDriver>(&self, can: &mut C, node_id: u8) -> Result<(), CanOpenError> {
+    pub fn reset_communication<C: CanDriver>(
+        &self,
+        can: &mut C,
+        node_id: u8,
+    ) -> Result<(), CanOpenError> {
         let cmd = NmtCommand {
             command: NmtCommandSpecifier::ResetCommunication,
             node_id,
@@ -55,7 +67,11 @@ impl NmtMaster {
     }
 
     /// Broadcast NMT command to all nodes (node_id = 0).
-    pub fn broadcast<C: CanDriver>(&self, can: &mut C, command: NmtCommandSpecifier) -> Result<(), CanOpenError> {
+    pub fn broadcast<C: CanDriver>(
+        &self,
+        can: &mut C,
+        command: NmtCommandSpecifier,
+    ) -> Result<(), CanOpenError> {
         let cmd = NmtCommand {
             command,
             node_id: 0,

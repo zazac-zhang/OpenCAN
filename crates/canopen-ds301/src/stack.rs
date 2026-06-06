@@ -7,17 +7,19 @@
 //! - Node scanning
 //! - Heartbeat monitoring + production
 
-use std::time::Duration;
-use opencan_canopen_core::{CanDriver, CanOpenError};
+use opencan_canopen_core::concrete_od::ConcreteOd;
 use opencan_canopen_core::frame::{
-    CanOpenFrame, FrameClass, classify_frame, PdoFrame,
-    NmtCommand, NmtCommandSpecifier, SdoRequest, SdoData, SdoResponse, SdoResponseData,
+    CanOpenFrame, FrameClass, NmtCommand, NmtCommandSpecifier, PdoFrame, SdoData, SdoRequest,
+    SdoResponse, SdoResponseData, classify_frame,
 };
 use opencan_canopen_core::od::{DataType, OdValue};
-use opencan_canopen_core::concrete_od::ConcreteOd;
+use opencan_canopen_core::{CanDriver, CanOpenError};
+use std::time::Duration;
 
-use crate::heartbeat::{HeartbeatConsumer, HeartbeatProducer, SyncProducer, SyncConsumer, PdoDirection};
 use crate::emcy::EmergencyHandler;
+use crate::heartbeat::{
+    HeartbeatConsumer, HeartbeatProducer, PdoDirection, SyncConsumer, SyncProducer,
+};
 use crate::sdo::sdo_abort_reason;
 use crate::sdo_server::SdoServer;
 
@@ -33,9 +35,17 @@ pub enum CanEvent {
     /// PDO frame received.
     PdoReceived { pdo: PdoFrame },
     /// SDO operation completed.
-    SdoComplete { node_id: u8, result: Result<Vec<u8>, String> },
+    SdoComplete {
+        node_id: u8,
+        result: Result<Vec<u8>, String>,
+    },
     /// SYNC received — PDO should be transmitted.
-    SyncTriggered { pdo_number: u8, direction: PdoDirection },
+    SyncTriggered {
+        pdo_number: u8,
+        direction: PdoDirection,
+    },
+    /// SYNC frame received (counter value for monitoring).
+    SyncReceived { counter: u32 },
 }
 
 /// Main CANOpen protocol stack.
@@ -114,8 +124,14 @@ impl<C: CanDriver> CanopenStack<C> {
     }
 
     /// Register a PDO for synchronous triggering.
-    pub fn register_sync_pdo(&mut self, pdo_number: u8, direction: PdoDirection, transmission_type: u8) {
-        self.sync_consumer.register_pdo(pdo_number, direction, transmission_type);
+    pub fn register_sync_pdo(
+        &mut self,
+        pdo_number: u8,
+        direction: PdoDirection,
+        transmission_type: u8,
+    ) {
+        self.sync_consumer
+            .register_pdo(pdo_number, direction, transmission_type);
     }
 
     /// Unregister a synchronous PDO.
@@ -134,56 +150,69 @@ impl<C: CanDriver> CanopenStack<C> {
     pub fn process(&mut self, frame: &CanOpenFrame) -> Vec<CanEvent> {
         let mut events = Vec::new();
 
-        // First, let the SDO server handle the frame if enabled
-        if let (Some(server), Some(od)) = (&mut self.sdo_server, &mut self.od)
-            && let Some(response) = server.process(frame, od) {
-                let _ = self.can.send(&response);
-                return events;
-            }
+        // First, let the SDO server handle the frame if enabled.
+        // SDO request frames (COB-ID 0x600+) will never match any other FrameClass,
+        // so it's safe to skip the rest of processing when the SDO server responds.
+        let sdo_handled = if let (Some(server), Some(od)) = (&mut self.sdo_server, &mut self.od)
+            && let Some(response) = server.process(frame, od)
+        {
+            let _ = self.can.send(&response);
+            true
+        } else {
+            false
+        };
 
-        match classify_frame(frame) {
-            FrameClass::Heartbeat(hb) => {
-                let changed = self.heartbeat.update(&hb);
-                if changed {
-                    events.push(CanEvent::HeartbeatChanged {
-                        node_id: hb.node_id,
-                        alive: self.heartbeat.is_alive(hb.node_id),
+        if !sdo_handled {
+            match classify_frame(frame) {
+                FrameClass::Heartbeat(hb) => {
+                    let changed = self.heartbeat.update(&hb);
+                    if changed {
+                        events.push(CanEvent::HeartbeatChanged {
+                            node_id: hb.node_id,
+                            alive: self.heartbeat.is_alive(hb.node_id),
+                        });
+                    }
+                }
+                FrameClass::Emergency(emcy) => {
+                    self.emergency.record(&emcy);
+                    events.push(CanEvent::Emergency {
+                        node_id: emcy.node_id,
+                        error_code: emcy.error_code,
                     });
                 }
-            }
-            FrameClass::Emergency(emcy) => {
-                self.emergency.record(&emcy);
-                events.push(CanEvent::Emergency {
-                    node_id: emcy.node_id,
-                    error_code: emcy.error_code,
-                });
-            }
-            FrameClass::Pdo(pdo) => {
-                events.push(CanEvent::PdoReceived { pdo });
-            }
-            FrameClass::Nmt(_) => {
-                // NMT commands from other masters — ignore for now
-            }
-            FrameClass::SdoResponse(_) => {
-                // SDO responses are handled by SDO operations directly
-            }
-            FrameClass::Sync => {
-                let triggered = self.sync_consumer.on_sync();
-                for (pdo_num, dir) in triggered {
-                    events.push(CanEvent::SyncTriggered { pdo_number: pdo_num, direction: dir });
+                FrameClass::Pdo(pdo) => {
+                    events.push(CanEvent::PdoReceived { pdo });
+                }
+                FrameClass::Nmt(_) => {
+                    // NMT commands from other masters — ignore for now
+                }
+                FrameClass::SdoResponse(_) => {
+                    // SDO responses are handled by SDO operations directly
+                }
+                FrameClass::Sync => {
+                    let triggered = self.sync_consumer.on_sync();
+                    events.push(CanEvent::SyncReceived {
+                        counter: self.sync_consumer.sync_count(),
+                    });
+                    for (pdo_num, dir) in triggered {
+                        events.push(CanEvent::SyncTriggered {
+                            pdo_number: pdo_num,
+                            direction: dir,
+                        });
+                    }
+                }
+                FrameClass::Timestamp => {
+                    // TODO: Handle TIME
+                }
+                FrameClass::Unknown => {
+                    // Unknown frame — log if needed
                 }
             }
-            FrameClass::Timestamp => {
-                // TODO: Handle TIME
-            }
-            FrameClass::Unknown => {
-                // Unknown frame — log if needed
-            }
-        }
 
-        // Check for heartbeat timeouts
-        for (node_id, _elapsed) in self.heartbeat.check_timeouts() {
-            events.push(CanEvent::HeartbeatTimeout { node_id });
+            // Check for heartbeat timeouts
+            for (node_id, _elapsed) in self.heartbeat.check_timeouts() {
+                events.push(CanEvent::HeartbeatTimeout { node_id });
+            }
         }
 
         events
@@ -242,7 +271,11 @@ impl<C: CanDriver> CanopenStack<C> {
     ///
     /// This is the high-level API that handles expedited and segmented transfers.
     pub async fn sdo_upload(
-        &mut self, node_id: u8, index: u16, subindex: u8, data_type: DataType,
+        &mut self,
+        node_id: u8,
+        index: u16,
+        subindex: u8,
+        data_type: DataType,
     ) -> Result<OdValue, CanOpenError> {
         // Send initiate upload request
         let request = SdoRequest {
@@ -259,7 +292,9 @@ impl<C: CanDriver> CanopenStack<C> {
             .ok_or_else(|| CanOpenError::Protocol("Invalid SDO response".to_string()))?;
 
         if response.index != index || response.subindex != subindex {
-            return Err(CanOpenError::Protocol("SDO response index/subindex mismatch".to_string()));
+            return Err(CanOpenError::Protocol(
+                "SDO response index/subindex mismatch".to_string(),
+            ));
         }
 
         match response.data {
@@ -269,32 +304,39 @@ impl<C: CanDriver> CanopenStack<C> {
                 } else {
                     &data
                 };
-                OdValue::from_bytes(data_type, bytes)
-                    .ok_or_else(|| CanOpenError::Protocol("Failed to decode expedited data".to_string()))
+                OdValue::from_bytes(data_type, bytes).ok_or_else(|| {
+                    CanOpenError::Protocol("Failed to decode expedited data".to_string())
+                })
             }
             SdoResponseData::SegmentedInitiated { size } => {
                 self.sdo_upload_segments(node_id, size as usize).await
             }
-            SdoResponseData::Abort { code } => {
-                Err(CanOpenError::SdoAbort {
-                    code,
-                    reason: sdo_abort_reason(code),
-                })
-            }
-            _ => Err(CanOpenError::Protocol("Unexpected SDO response".to_string())),
+            SdoResponseData::Abort { code } => Err(CanOpenError::SdoAbort {
+                code,
+                reason: sdo_abort_reason(code),
+            }),
+            _ => Err(CanOpenError::Protocol(
+                "Unexpected SDO response".to_string(),
+            )),
         }
     }
 
     /// SDO Upload with default Unsigned32 type.
     pub async fn sdo_upload_u32(
-        &mut self, node_id: u8, index: u16, subindex: u8,
+        &mut self,
+        node_id: u8,
+        index: u16,
+        subindex: u8,
     ) -> Result<OdValue, CanOpenError> {
-        self.sdo_upload(node_id, index, subindex, DataType::Unsigned32).await
+        self.sdo_upload(node_id, index, subindex, DataType::Unsigned32)
+            .await
     }
 
     /// Read segmented upload data.
     async fn sdo_upload_segments(
-        &mut self, node_id: u8, total_size: usize,
+        &mut self,
+        node_id: u8,
+        total_size: usize,
     ) -> Result<OdValue, CanOpenError> {
         let mut data = Vec::with_capacity(total_size);
         let mut toggle = false;
@@ -302,7 +344,7 @@ impl<C: CanDriver> CanopenStack<C> {
         loop {
             // Send upload segment request
             let mut req_data = [0u8; 8];
-            req_data[0] = if toggle { 0x60 } else { 0x40 };
+            req_data[0] = if toggle { 0x50 } else { 0x40 }; // cs=2, toggle at bit 4
             let frame = CanOpenFrame::new(0x600 + node_id as u16, req_data);
             self.can.send(&frame)?;
 
@@ -330,7 +372,11 @@ impl<C: CanDriver> CanopenStack<C> {
 
     /// SDO Download — write a value to a remote node's object dictionary.
     pub async fn sdo_download(
-        &mut self, node_id: u8, index: u16, subindex: u8, value: &OdValue,
+        &mut self,
+        node_id: u8,
+        index: u16,
+        subindex: u8,
+        value: &OdValue,
     ) -> Result<(), CanOpenError> {
         let bytes = value.to_bytes();
 
@@ -352,20 +398,27 @@ impl<C: CanDriver> CanopenStack<C> {
             self.sdo_wait_download_confirm(index, subindex).await
         } else {
             // Segmented download
-            self.sdo_download_segments(node_id, index, subindex, &bytes).await
+            self.sdo_download_segments(node_id, index, subindex, &bytes)
+                .await
         }
     }
 
     /// Segmented download.
     async fn sdo_download_segments(
-        &mut self, node_id: u8, index: u16, subindex: u8, data: &[u8],
+        &mut self,
+        node_id: u8,
+        index: u16,
+        subindex: u8,
+        data: &[u8],
     ) -> Result<(), CanOpenError> {
         // Send initiate segmented download
         let request = SdoRequest {
             node_id,
             index,
             subindex,
-            data: SdoData::SegmentedInitiated { size: data.len() as u32 },
+            data: SdoData::SegmentedInitiated {
+                size: data.len() as u32,
+            },
         };
         self.can.send(&request.encode())?;
         self.sdo_wait_download_confirm(index, subindex).await?;
@@ -408,7 +461,11 @@ impl<C: CanDriver> CanopenStack<C> {
                         reason: sdo_abort_reason(code),
                     });
                 }
-                _ => return Err(CanOpenError::Protocol("Unexpected SDO response".to_string())),
+                _ => {
+                    return Err(CanOpenError::Protocol(
+                        "Unexpected SDO response".to_string(),
+                    ));
+                }
             }
 
             offset += seg_len;
@@ -420,14 +477,18 @@ impl<C: CanDriver> CanopenStack<C> {
 
     /// Wait for SDO download confirmation.
     async fn sdo_wait_download_confirm(
-        &mut self, index: u16, subindex: u8,
+        &mut self,
+        index: u16,
+        subindex: u8,
     ) -> Result<(), CanOpenError> {
         let response_frame = self.recv_with_timeout().await?;
         let response = SdoResponse::decode(&response_frame)
             .ok_or_else(|| CanOpenError::Protocol("Invalid SDO response".to_string()))?;
 
         if response.index != index || response.subindex != subindex {
-            return Err(CanOpenError::Protocol("SDO response index/subindex mismatch".to_string()));
+            return Err(CanOpenError::Protocol(
+                "SDO response index/subindex mismatch".to_string(),
+            ));
         }
 
         match response.data {
@@ -436,7 +497,9 @@ impl<C: CanDriver> CanopenStack<C> {
                 code,
                 reason: sdo_abort_reason(code),
             }),
-            _ => Err(CanOpenError::Protocol("Unexpected SDO response".to_string())),
+            _ => Err(CanOpenError::Protocol(
+                "Unexpected SDO response".to_string(),
+            )),
         }
     }
 
@@ -465,7 +528,8 @@ impl<C: CanDriver> CanopenStack<C> {
             match result {
                 Ok(Ok(frame)) => {
                     if let Some(resp) = SdoResponse::decode(&frame)
-                        && resp.index == 0x1000 && resp.subindex == 0
+                        && resp.index == 0x1000
+                        && resp.subindex == 0
                     {
                         match resp.data {
                             SdoResponseData::Expedited { .. }
@@ -492,7 +556,10 @@ impl<C: CanDriver> CanopenStack<C> {
     // === Heartbeat Production ===
 
     /// Send a heartbeat frame for the local node.
-    pub fn send_heartbeat(&mut self, state: opencan_canopen_core::frame::NmtState) -> Result<(), CanOpenError> {
+    pub fn send_heartbeat(
+        &mut self,
+        state: opencan_canopen_core::frame::NmtState,
+    ) -> Result<(), CanOpenError> {
         let hb = opencan_canopen_core::frame::HeartbeatFrame {
             node_id: self.node_id,
             state,
@@ -541,18 +608,23 @@ impl<C: CanDriver> CanopenStack<C> {
     /// Returns true if a SYNC was sent.
     pub fn poll_sync(&mut self) -> Result<bool, CanOpenError> {
         if let Some(ref mut producer) = self.sync_producer
-            && producer.should_send() {
-                let frame = producer.build_frame();
-                self.can.send(&frame)?;
-                return Ok(true);
-            }
+            && producer.should_send()
+        {
+            let frame = producer.build_frame();
+            self.can.send(&frame)?;
+            return Ok(true);
+        }
         Ok(false)
     }
 
     /// Check if it's time to send a heartbeat, and if so, send it.
     /// Returns true if a heartbeat was sent.
-    pub fn poll_heartbeat(&mut self, state: opencan_canopen_core::frame::NmtState) -> Result<bool, CanOpenError> {
-        let should_send = self.heartbeat_producer
+    pub fn poll_heartbeat(
+        &mut self,
+        state: opencan_canopen_core::frame::NmtState,
+    ) -> Result<bool, CanOpenError> {
+        let should_send = self
+            .heartbeat_producer
             .as_ref()
             .is_some_and(|p| p.should_send());
 
@@ -605,9 +677,9 @@ impl<C: CanDriver> CanopenStack<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use opencan_canopen_core::testing::MockCanDriver;
-    use opencan_canopen_core::frame::{HeartbeatFrame, NmtState, EmergencyFrame};
+    use opencan_canopen_core::frame::{EmergencyFrame, HeartbeatFrame, NmtState};
     use opencan_canopen_core::od::OdValue;
+    use opencan_canopen_core::testing::MockCanDriver;
 
     /// Helper: create an expedited SDO upload response.
     fn sdo_upload_response(node_id: u8, index: u16, subindex: u8, data: [u8; 4]) -> CanOpenFrame {
@@ -631,10 +703,18 @@ mod tests {
     #[tokio::test]
     async fn test_stack_sdo_upload() {
         let mut mock = MockCanDriver::new();
-        mock.enqueue(sdo_upload_response(3, 0x1000, 0, 0x00020192u32.to_le_bytes()));
+        mock.enqueue(sdo_upload_response(
+            3,
+            0x1000,
+            0,
+            0x00020192u32.to_le_bytes(),
+        ));
 
         let mut stack = CanopenStack::new(mock, 0);
-        let result = stack.sdo_upload(3, 0x1000, 0, DataType::Unsigned32).await.unwrap();
+        let result = stack
+            .sdo_upload(3, 0x1000, 0, DataType::Unsigned32)
+            .await
+            .unwrap();
         assert_eq!(result, OdValue::Unsigned32(0x00020192));
 
         let tx = stack.can().tx_log();
@@ -649,7 +729,10 @@ mod tests {
         mock.enqueue(sdo_download_confirm(3, 0x6040, 0));
 
         let mut stack = CanopenStack::new(mock, 0);
-        stack.sdo_download(3, 0x6040, 0, &OdValue::Unsigned16(0x000F)).await.unwrap();
+        stack
+            .sdo_download(3, 0x6040, 0, &OdValue::Unsigned16(0x000F))
+            .await
+            .unwrap();
 
         let tx = stack.can().tx_log();
         assert_eq!(tx.len(), 1);
@@ -669,7 +752,7 @@ mod tests {
         assert_eq!(tx.len(), 1);
         assert_eq!(tx[0].cob_id, 0x000); // NMT
         assert_eq!(tx[0].data[0], 0x01); // EnterOperational
-        assert_eq!(tx[0].data[1], 5);   // node_id
+        assert_eq!(tx[0].data[1], 5); // node_id
     }
 
     #[tokio::test]
@@ -677,13 +760,15 @@ mod tests {
         let mock = MockCanDriver::new();
         let mut stack = CanopenStack::new(mock, 0);
 
-        stack.nmt_broadcast(NmtCommandSpecifier::ResetCommunication).unwrap();
+        stack
+            .nmt_broadcast(NmtCommandSpecifier::ResetCommunication)
+            .unwrap();
 
         let tx = stack.can().tx_log();
         assert_eq!(tx.len(), 1);
         assert_eq!(tx[0].cob_id, 0x000);
         assert_eq!(tx[0].data[0], 0x82); // ResetCommunication
-        assert_eq!(tx[0].data[1], 0);    // broadcast
+        assert_eq!(tx[0].data[1], 0); // broadcast
     }
 
     #[tokio::test]
@@ -691,7 +776,10 @@ mod tests {
         let mock = MockCanDriver::new();
         let mut stack = CanopenStack::new(mock, 0);
 
-        let hb = HeartbeatFrame { node_id: 5, state: NmtState::Operational };
+        let hb = HeartbeatFrame {
+            node_id: 5,
+            state: NmtState::Operational,
+        };
         let events = stack.process(&hb.encode());
         assert_eq!(events.len(), 1);
         match &events[0] {
@@ -717,7 +805,10 @@ mod tests {
         let events = stack.process(&emcy.encode());
         assert_eq!(events.len(), 1);
         match &events[0] {
-            CanEvent::Emergency { node_id, error_code } => {
+            CanEvent::Emergency {
+                node_id,
+                error_code,
+            } => {
                 assert_eq!(*node_id, 3);
                 assert_eq!(*error_code, 0x1000);
             }
@@ -737,7 +828,10 @@ mod tests {
         mock.enqueue(CanOpenFrame::new(0x583, d));
 
         let mut stack = CanopenStack::new(mock, 0);
-        let err = stack.sdo_upload(3, 0x1000, 0, DataType::Unsigned32).await.unwrap_err();
+        let err = stack
+            .sdo_upload(3, 0x1000, 0, DataType::Unsigned32)
+            .await
+            .unwrap_err();
 
         match err {
             CanOpenError::SdoAbort { code, reason } => {

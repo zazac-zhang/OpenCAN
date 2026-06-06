@@ -14,7 +14,9 @@ pub struct ZlgFactory;
 impl CanBusFactory for ZlgFactory {
     fn open(&self, _channel: &str, _config: &CanConfig) -> Result<Box<dyn CanBusDyn>, CanError> {
         // TODO: Implement using zlgcan crate or direct FFI
-        Err(CanError::Unsupported("ZLG backend not yet implemented".to_string()))
+        Err(CanError::Unsupported(
+            "ZLG backend not yet implemented".to_string(),
+        ))
     }
 
     fn name(&self) -> &str {

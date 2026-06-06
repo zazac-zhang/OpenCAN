@@ -1,7 +1,7 @@
 //! EDS data model.
 
-use std::collections::BTreeMap;
 use opencan_canopen_core::od::ObjectType;
+use std::collections::BTreeMap;
 
 /// Parsed EDS file structure.
 pub struct EdsFile {

@@ -56,7 +56,7 @@ pub struct PdoMapping {
 pub struct PdoData {
     pub cob_id: u16,
     pub node_id: u8,
-    pub pdo_number: u8,     // 1-4
+    pub pdo_number: u8, // 1-4
     pub direction: PdoDirection,
     pub data: [u8; 8],
     pub timestamp_ms: u64,
@@ -64,8 +64,8 @@ pub struct PdoData {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PdoDirection {
-    Tpdo,  // Transmit from node
-    Rpdo,  // Receive by node
+    Tpdo, // Transmit from node
+    Rpdo, // Receive by node
 }
 
 /// Parse a CAN frame as a PDO.
