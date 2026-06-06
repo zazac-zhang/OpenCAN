@@ -2,6 +2,7 @@
 
 use std::time::Duration;
 use opencan_canopen_core::{CanDriver, CanOpenError};
+use tokio::time::timeout;
 use opencan_canopen_core::frame::{SdoRequest, SdoData, SdoResponse, SdoResponseData};
 use opencan_canopen_core::od::{DataType, OdValue};
 
@@ -35,8 +36,8 @@ impl<C: CanDriver> SdoClient<C> {
         let frame = request.encode();
         self.can.send(&frame)?;
 
-        // Wait for response
-        let response_frame = self.can.recv().await?;
+        // Wait for response (with timeout)
+        let response_frame = self.recv_with_timeout().await?;
         let response = SdoResponse::decode(&response_frame)
             .ok_or_else(|| CanOpenError::Protocol("Invalid SDO response".to_string()))?;
 
@@ -69,7 +70,7 @@ impl<C: CanDriver> SdoClient<C> {
     }
 
     /// Read segmented upload data.
-    async fn upload_segments(&mut self, _node_id: u8, total_size: usize) -> Result<OdValue, CanOpenError> {
+    async fn upload_segments(&mut self, node_id: u8, total_size: usize) -> Result<OdValue, CanOpenError> {
         let mut data = Vec::with_capacity(total_size);
         let mut toggle = false;
 
@@ -77,11 +78,11 @@ impl<C: CanDriver> SdoClient<C> {
             // Send upload segment request
             let mut req_data = [0u8; 8];
             req_data[0] = if toggle { 0x60 } else { 0x40 }; // toggle bit
-            let frame = opencan_canopen_core::frame::CanOpenFrame::new(0x600 + _node_id as u16, req_data);
+            let frame = opencan_canopen_core::frame::CanOpenFrame::new(0x600 + node_id as u16, req_data);
             self.can.send(&frame)?;
 
-            // Receive segment
-            let response_frame = self.can.recv().await?;
+            // Receive segment (with timeout)
+            let response_frame = self.recv_with_timeout().await?;
             let cmd = response_frame.data[0];
             let is_last = cmd & 0x01 != 0;
             let seg_size = if cmd & 0x0E != 0 {
@@ -167,8 +168,8 @@ impl<C: CanDriver> SdoClient<C> {
             };
             self.can.send(&request.encode())?;
 
-            // Wait for segment confirmation
-            let response_frame = self.can.recv().await?;
+            // Wait for segment confirmation (with timeout)
+            let response_frame = self.recv_with_timeout().await?;
             let response = SdoResponse::decode(&response_frame)
                 .ok_or_else(|| CanOpenError::Protocol("Invalid SDO response".to_string()))?;
 
@@ -192,7 +193,7 @@ impl<C: CanDriver> SdoClient<C> {
 
     /// Wait for download confirmation.
     async fn wait_download_confirm(&mut self, index: u16, subindex: u8) -> Result<(), CanOpenError> {
-        let response_frame = self.can.recv().await?;
+        let response_frame = self.recv_with_timeout().await?;
         let response = SdoResponse::decode(&response_frame)
             .ok_or_else(|| CanOpenError::Protocol("Invalid SDO response".to_string()))?;
 
@@ -207,6 +208,14 @@ impl<C: CanDriver> SdoClient<C> {
                 reason: sdo_abort_reason(code),
             }),
             _ => Err(CanOpenError::Protocol("Unexpected SDO response".to_string())),
+        }
+    }
+
+    /// Receive a frame with timeout.
+    async fn recv_with_timeout(&mut self) -> Result<opencan_canopen_core::frame::CanOpenFrame, CanOpenError> {
+        match timeout(self.timeout, self.can.recv()).await {
+            Ok(result) => result,
+            Err(_) => Err(CanOpenError::SdoTimeout(self.timeout)),
         }
     }
 

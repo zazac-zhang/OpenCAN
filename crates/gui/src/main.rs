@@ -58,6 +58,9 @@ impl App {
                 iced::Task::none()
             }
             Message::Disconnect => {
+                if let Some(ref backend) = self.backend {
+                    backend.send(BackendCommand::Disconnect);
+                }
                 self.backend = None;
                 self.connected = false;
                 self.nodes.clear();
@@ -66,7 +69,8 @@ impl App {
             }
             Message::ScanNodes => {
                 if let Some(ref backend) = self.backend {
-                    let _ = backend.send(BackendCommand::ScanNodes);
+                    let (tx, _rx) = tokio::sync::oneshot::channel();
+                    backend.send(BackendCommand::ScanNodes { respond: tx });
                     self.status_message = "Scanning nodes...".to_string();
                 }
                 iced::Task::none()
@@ -86,19 +90,19 @@ impl App {
             // === NMT ===
             Message::NmtStartNode(id) => {
                 if let Some(ref backend) = self.backend {
-                    let _ = backend.send(BackendCommand::NmtStart(id));
+                    backend.send(BackendCommand::NmtStart(id));
                 }
                 iced::Task::none()
             }
             Message::NmtStopNode(id) => {
                 if let Some(ref backend) = self.backend {
-                    let _ = backend.send(BackendCommand::NmtStop(id));
+                    backend.send(BackendCommand::NmtStop(id));
                 }
                 iced::Task::none()
             }
             Message::NmtResetNode(id) => {
                 if let Some(ref backend) = self.backend {
-                    let _ = backend.send(BackendCommand::NmtReset(id));
+                    backend.send(BackendCommand::NmtReset(id));
                 }
                 iced::Task::none()
             }
@@ -122,7 +126,8 @@ impl App {
                 let subindex: u8 = self.sdo_subindex.parse().unwrap_or(0);
                 self.status_message = format!("SDO read {:04X}:{:02X} from node {}...", index, subindex, node_id);
                 if let Some(ref backend) = self.backend {
-                    let _ = backend.send(BackendCommand::SdoUpload { node_id, index, subindex });
+                    let (tx, _rx) = tokio::sync::oneshot::channel();
+                    backend.send(BackendCommand::SdoUpload { node_id, index, subindex, respond: tx });
                 }
                 iced::Task::none()
             }
@@ -133,7 +138,8 @@ impl App {
                 let value = parse_hex_bytes(&self.sdo_value);
                 self.status_message = format!("SDO write {:04X}:{:02X} to node {}...", index, subindex, node_id);
                 if let Some(ref backend) = self.backend {
-                    let _ = backend.send(BackendCommand::SdoDownload { node_id, index, subindex, value });
+                    let (tx, _rx) = tokio::sync::oneshot::channel();
+                    backend.send(BackendCommand::SdoDownload { node_id, index, subindex, value, respond: tx });
                 }
                 iced::Task::none()
             }
@@ -141,20 +147,23 @@ impl App {
             // === DS402 ===
             Message::Ds402Enable(id) => {
                 if let Some(ref backend) = self.backend {
-                    let _ = backend.send(BackendCommand::Ds402Enable(id));
+                    let (tx, _rx) = tokio::sync::oneshot::channel();
+                    backend.send(BackendCommand::Ds402Enable { node_id: id, respond: tx });
                     self.status_message = format!("DS402 enabling node {}...", id);
                 }
                 iced::Task::none()
             }
             Message::Ds402FaultReset(id) => {
                 if let Some(ref backend) = self.backend {
-                    let _ = backend.send(BackendCommand::Ds402FaultReset(id));
+                    let (tx, _rx) = tokio::sync::oneshot::channel();
+                    backend.send(BackendCommand::Ds402FaultReset { node_id: id, respond: tx });
                 }
                 iced::Task::none()
             }
             Message::Ds402ReadState(id) => {
                 if let Some(ref backend) = self.backend {
-                    let _ = backend.send(BackendCommand::Ds402ReadState(id));
+                    let (tx, _rx) = tokio::sync::oneshot::channel();
+                    backend.send(BackendCommand::Ds402ReadState { node_id: id, respond: tx });
                 }
                 iced::Task::none()
             }
@@ -169,33 +178,31 @@ impl App {
             Message::Ds402SetPosition(id) => {
                 let pos: i32 = self.ds402_state.target_position.parse().unwrap_or(0);
                 if let Some(ref backend) = self.backend {
-                    let _ = backend.send(BackendCommand::Ds402SetPosition { node_id: id, position: pos });
+                    let (tx, _rx) = tokio::sync::oneshot::channel();
+                    backend.send(BackendCommand::Ds402SetPosition { node_id: id, position: pos, respond: tx });
                 }
                 iced::Task::none()
             }
             Message::Ds402SetVelocity(id) => {
                 let vel: i32 = self.ds402_state.target_velocity.parse().unwrap_or(0);
                 if let Some(ref backend) = self.backend {
-                    let _ = backend.send(BackendCommand::Ds402SetVelocity { node_id: id, velocity: vel });
+                    let (tx, _rx) = tokio::sync::oneshot::channel();
+                    backend.send(BackendCommand::Ds402SetVelocity { node_id: id, velocity: vel, respond: tx });
                 }
                 iced::Task::none()
             }
             Message::Ds402ReadPosition(id) => {
                 if let Some(ref backend) = self.backend {
-                    let _ = backend.send(BackendCommand::Ds402ReadPosition(id));
+                    let (tx, _rx) = tokio::sync::oneshot::channel();
+                    backend.send(BackendCommand::Ds402ReadPosition { node_id: id, respond: tx });
                 }
                 iced::Task::none()
             }
             Message::Ds402ReadVelocity(id) => {
                 if let Some(ref backend) = self.backend {
-                    let _ = backend.send(BackendCommand::Ds402ReadVelocity(id));
+                    let (tx, _rx) = tokio::sync::oneshot::channel();
+                    backend.send(BackendCommand::Ds402ReadVelocity { node_id: id, respond: tx });
                 }
-                iced::Task::none()
-            }
-
-            // === Backend events (handled in Tick, but also here for completeness) ===
-            Message::BackendEvent(event) => {
-                self.handle_backend_event(event);
                 iced::Task::none()
             }
         }

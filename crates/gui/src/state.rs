@@ -49,6 +49,7 @@ pub enum View {
 
 /// Node state.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct NodeState {
     pub node_id: u8,
     pub nmt_state: NmtState,
@@ -97,6 +98,7 @@ impl NmtState {
 
 /// DS402 node state.
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub struct Ds402NodeState {
     pub state: String,
     pub status_word: u16,
@@ -107,6 +109,7 @@ pub struct Ds402NodeState {
 
 /// DS402 panel state (UI inputs).
 #[derive(Debug, Clone, Default)]
+#[allow(dead_code)]
 pub struct Ds402PanelState {
     pub target_position: String,
     pub target_velocity: String,
@@ -157,9 +160,6 @@ pub enum Message {
     Ds402ReadPosition(u8),
     Ds402ReadVelocity(u8),
 
-    // Backend events
-    BackendEvent(crate::backend::BackendEvent),
-
-    // Tick
+    // Tick (polls backend events)
     Tick,
 }

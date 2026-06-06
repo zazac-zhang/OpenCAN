@@ -82,3 +82,57 @@ impl HeartbeatConsumer {
         self.states.keys().copied().collect()
     }
 }
+
+/// Heartbeat producer — manages periodic heartbeat transmission for the local node.
+///
+/// Does not own the CAN driver. Instead, the caller checks `should_send()`
+/// and uses the stack's `send_heartbeat()` when it's time.
+pub struct HeartbeatProducer {
+    period: Duration,
+    last_sent: Option<Instant>,
+    state: NmtState,
+}
+
+impl HeartbeatProducer {
+    /// Create a new heartbeat producer with the given period.
+    pub fn new(period: Duration) -> Self {
+        Self {
+            period,
+            last_sent: None,
+            state: NmtState::PreOperational,
+        }
+    }
+
+    /// Set the current NMT state to include in heartbeat frames.
+    pub fn set_state(&mut self, state: NmtState) {
+        self.state = state;
+    }
+
+    /// Get the current NMT state.
+    pub fn state(&self) -> NmtState {
+        self.state
+    }
+
+    /// Check if it's time to send a heartbeat.
+    pub fn should_send(&self) -> bool {
+        match self.last_sent {
+            Some(last) => last.elapsed() >= self.period,
+            None => true,
+        }
+    }
+
+    /// Mark that a heartbeat was sent (call after successful send).
+    pub fn mark_sent(&mut self) {
+        self.last_sent = Some(Instant::now());
+    }
+
+    /// Get the heartbeat period.
+    pub fn period(&self) -> Duration {
+        self.period
+    }
+
+    /// Set a new heartbeat period.
+    pub fn set_period(&mut self, period: Duration) {
+        self.period = period;
+    }
+}
