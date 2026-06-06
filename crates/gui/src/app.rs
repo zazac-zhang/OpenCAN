@@ -361,6 +361,33 @@ impl App {
                 self.drag_target = None;
                 iced::Task::none()
             }
+            Message::OpenEdsFile => {
+                // Open file dialog in a blocking task
+                iced::Task::perform(
+                    async {
+                        let file = rfd::AsyncFileDialog::new()
+                            .add_filter("EDS Files", &["eds", "eds"])
+                            .add_filter("All Files", &["*"])
+                            .set_title("Open EDS File")
+                            .pick_file()
+                            .await;
+
+                        file.map(|f| f.path().to_string_lossy().to_string())
+                    },
+                    |path| {
+                        if let Some(p) = path {
+                            Message::EdsFileLoaded(p)
+                        } else {
+                            Message::ShowAbout // Placeholder for cancel
+                        }
+                    },
+                )
+            }
+            Message::EdsFileLoaded(path) => {
+                self.status_message = format!("Loading EDS file: {}", path);
+                // TODO: Parse EDS file and update OD cache
+                iced::Task::none()
+            }
             Message::ShowAbout => {
                 self.status_message = "OpenCAN v0.1.0 - CAN/CANOpen Debug Tool".to_string();
                 iced::Task::none()

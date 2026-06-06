@@ -164,6 +164,12 @@ pub enum Message {
     /// Stop dragging.
     PanelDragEnd,
 
+    // === EDS ===
+    /// Open EDS file dialog.
+    OpenEdsFile,
+    /// EDS file loaded.
+    EdsFileLoaded(String),
+
     // === System ===
     /// Tick (polls backend events).
     Tick,

@@ -89,6 +89,14 @@ pub fn toolbar(app: &App) -> Element<'_, Message> {
 
     bar = bar.push(separator());
 
+    // EDS file
+    bar = bar.push(
+        button(text("Load EDS").size(12))
+            .on_press(Message::OpenEdsFile)
+    );
+
+    bar = bar.push(separator());
+
     // Detail panel toggle
     let detail_text = if app.detail_collapsed { "◀ Show Detail" } else { "▶ Hide Detail" };
     bar = bar.push(
