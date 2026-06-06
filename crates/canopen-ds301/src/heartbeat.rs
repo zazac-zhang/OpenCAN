@@ -136,3 +136,71 @@ impl HeartbeatProducer {
         self.period = period;
     }
 }
+
+/// SYNC producer — manages periodic SYNC frame transmission.
+///
+/// SYNC frames (COB-ID 0x080) are used to synchronize PDO transmissions.
+/// The producer optionally includes a counter byte (data[0]) for
+/// identifying missed SYNCs.
+pub struct SyncProducer {
+    period: Duration,
+    last_sent: Option<Instant>,
+    counter: u8,
+    counter_enabled: bool,
+}
+
+impl SyncProducer {
+    /// Create a new SYNC producer with the given period.
+    pub fn new(period: Duration) -> Self {
+        Self {
+            period,
+            last_sent: None,
+            counter: 0,
+            counter_enabled: false,
+        }
+    }
+
+    /// Enable or disable the SYNC counter (data[0] byte).
+    pub fn set_counter_enabled(&mut self, enabled: bool) {
+        self.counter_enabled = enabled;
+    }
+
+    /// Check if it's time to send a SYNC.
+    pub fn should_send(&self) -> bool {
+        match self.last_sent {
+            Some(last) => last.elapsed() >= self.period,
+            None => true,
+        }
+    }
+
+    /// Build a SYNC frame and mark it as sent.
+    pub fn build_frame(&mut self) -> opencan_canopen_core::frame::CanOpenFrame {
+        let mut data = [0u8; 8];
+        if self.counter_enabled {
+            data[0] = self.counter;
+            self.counter = self.counter.wrapping_add(1);
+        }
+        self.last_sent = Some(Instant::now());
+        opencan_canopen_core::frame::CanOpenFrame::new(0x080, data)
+    }
+
+    /// Get the SYNC period.
+    pub fn period(&self) -> Duration {
+        self.period
+    }
+
+    /// Set a new SYNC period.
+    pub fn set_period(&mut self, period: Duration) {
+        self.period = period;
+    }
+
+    /// Get the current counter value.
+    pub fn counter(&self) -> u8 {
+        self.counter
+    }
+
+    /// Reset the counter to 0.
+    pub fn reset_counter(&mut self) {
+        self.counter = 0;
+    }
+}

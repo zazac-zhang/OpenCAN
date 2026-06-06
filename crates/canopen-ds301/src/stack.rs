@@ -15,7 +15,7 @@ use opencan_canopen_core::frame::{
 };
 use opencan_canopen_core::od::{DataType, OdValue};
 
-use crate::heartbeat::HeartbeatConsumer;
+use crate::heartbeat::{HeartbeatConsumer, HeartbeatProducer, SyncProducer};
 use crate::emcy::EmergencyHandler;
 use crate::sdo::sdo_abort_reason;
 
@@ -43,6 +43,8 @@ pub struct CanopenStack<C: CanDriver> {
     heartbeat: HeartbeatConsumer,
     emergency: EmergencyHandler,
     sdo_timeout: Duration,
+    sync_producer: Option<SyncProducer>,
+    heartbeat_producer: Option<HeartbeatProducer>,
 }
 
 impl<C: CanDriver> CanopenStack<C> {
@@ -54,6 +56,8 @@ impl<C: CanDriver> CanopenStack<C> {
             heartbeat: HeartbeatConsumer::new(Duration::from_secs(1)),
             emergency: EmergencyHandler::new(1000),
             sdo_timeout: Duration::from_secs(5),
+            sync_producer: None,
+            heartbeat_producer: None,
         }
     }
 
@@ -432,6 +436,72 @@ impl<C: CanDriver> CanopenStack<C> {
             state,
         };
         self.can.send(&hb.encode())
+    }
+
+    /// Enable periodic heartbeat production.
+    pub fn enable_heartbeat_production(&mut self, period: Duration) {
+        self.heartbeat_producer = Some(HeartbeatProducer::new(period));
+    }
+
+    /// Get the heartbeat producer, if enabled.
+    pub fn heartbeat_producer(&self) -> Option<&HeartbeatProducer> {
+        self.heartbeat_producer.as_ref()
+    }
+
+    /// Get the heartbeat producer mutably, if enabled.
+    pub fn heartbeat_producer_mut(&mut self) -> Option<&mut HeartbeatProducer> {
+        self.heartbeat_producer.as_mut()
+    }
+
+    // === SYNC Production ===
+
+    /// Enable periodic SYNC frame production.
+    pub fn enable_sync_production(&mut self, period: Duration) {
+        self.sync_producer = Some(SyncProducer::new(period));
+    }
+
+    /// Disable SYNC production.
+    pub fn disable_sync_production(&mut self) {
+        self.sync_producer = None;
+    }
+
+    /// Get the SYNC producer, if enabled.
+    pub fn sync_producer(&self) -> Option<&SyncProducer> {
+        self.sync_producer.as_ref()
+    }
+
+    /// Get the SYNC producer mutably, if enabled.
+    pub fn sync_producer_mut(&mut self) -> Option<&mut SyncProducer> {
+        self.sync_producer.as_mut()
+    }
+
+    /// Check if it's time to send a SYNC, and if so, send it.
+    /// Returns true if a SYNC was sent.
+    pub fn poll_sync(&mut self) -> Result<bool, CanOpenError> {
+        if let Some(ref mut producer) = self.sync_producer
+            && producer.should_send() {
+                let frame = producer.build_frame();
+                self.can.send(&frame)?;
+                return Ok(true);
+            }
+        Ok(false)
+    }
+
+    /// Check if it's time to send a heartbeat, and if so, send it.
+    /// Returns true if a heartbeat was sent.
+    pub fn poll_heartbeat(&mut self, state: opencan_canopen_core::frame::NmtState) -> Result<bool, CanOpenError> {
+        let should_send = self.heartbeat_producer
+            .as_ref()
+            .is_some_and(|p| p.should_send());
+
+        if should_send {
+            self.send_heartbeat(state)?;
+            if let Some(ref mut producer) = self.heartbeat_producer {
+                producer.mark_sent();
+            }
+            return Ok(true);
+        }
+        Ok(false)
     }
 
     // === Accessors ===
