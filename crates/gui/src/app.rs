@@ -441,6 +441,10 @@ impl App {
 
     fn handle_connection_connect(&mut self) -> iced::Task<Message> {
         let backend_type = self.connection_dialog.selected_backend;
+        let channel = self.connection_dialog.channel.clone();
+        let _bitrate = self.connection_dialog.bitrate.clone();
+        let node_id: u8 = self.connection_dialog.node_id.parse().unwrap_or(0);
+
         match backend_type {
             crate::state::CanBackend::Mock => {
                 let backend = crate::backend::Backend::new_mock();
@@ -449,7 +453,25 @@ impl App {
                 self.status_message = "Connected (Mock)".to_string();
             }
             crate::state::CanBackend::SocketCan => {
-                self.status_message = "SocketCAN connection not available on this platform".to_string();
+                #[cfg(feature = "socketcan")]
+                {
+                    match opencan_can_traits::socketcan::SocketCanBus::open(&channel) {
+                        Ok(bus) => {
+                            let adapter = opencan_canopen_ds301::CanDriverAdapter::new(bus);
+                            let backend = crate::backend::Backend::new_with_driver(adapter, node_id);
+                            self.backend = Some(backend);
+                            self.connected = true;
+                            self.status_message = format!("Connected to {} (SocketCAN)", channel);
+                        }
+                        Err(e) => {
+                            self.status_message = format!("SocketCAN connection failed: {}", e);
+                        }
+                    }
+                }
+                #[cfg(not(feature = "socketcan"))]
+                {
+                    self.status_message = "SocketCAN not available — build with --features socketcan".to_string();
+                }
             }
             _ => {
                 self.status_message = format!("{} backend not yet implemented", backend_type.name());
