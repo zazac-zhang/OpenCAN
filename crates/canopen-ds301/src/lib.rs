@@ -8,6 +8,7 @@ pub mod nmt;
 pub mod heartbeat;
 pub mod emcy;
 pub mod pdo;
+pub mod pdo_config;
 pub mod adapter;
 pub mod stack;
 
