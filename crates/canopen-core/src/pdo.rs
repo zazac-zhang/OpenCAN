@@ -141,7 +141,7 @@ impl PdoMapping {
 
     /// Get the byte length (rounded up).
     pub fn byte_length(&self) -> u8 {
-        (self.bit_length + 7) / 8
+        self.bit_length.div_ceil(8)
     }
 }
 
@@ -320,7 +320,7 @@ pub fn pack_pdo(mappings: &[PdoMapping], values: &[OdValue]) -> Result<[u8; 8], 
 
     for (mapping, value) in mappings.iter().zip(values) {
         // Only byte-aligned packing is supported
-        if bit_offset % 8 != 0 || mapping.bit_length % 8 != 0 {
+        if !bit_offset.is_multiple_of(8) || !mapping.bit_length.is_multiple_of(8) {
             return Err(PdoError::NonByteAligned {
                 index: mapping.index,
                 subindex: mapping.subindex,
@@ -390,7 +390,7 @@ pub fn unpack_pdo(
     let mut bit_offset: u16 = 0;
 
     for (mapping, data_type) in mappings.iter().zip(types) {
-        if bit_offset % 8 != 0 || mapping.bit_length % 8 != 0 {
+        if !bit_offset.is_multiple_of(8) || !mapping.bit_length.is_multiple_of(8) {
             return Err(PdoError::NonByteAligned {
                 index: mapping.index,
                 subindex: mapping.subindex,
@@ -408,7 +408,7 @@ pub fn unpack_pdo(
         }
 
         let slice = &data[byte_start..byte_start + byte_len];
-        let value = OdValue::from_bytes(*data_type, slice).ok_or_else(|| PdoError::DecodeFailed {
+        let value = OdValue::from_bytes(*data_type, slice).ok_or(PdoError::DecodeFailed {
             index: mapping.index,
             subindex: mapping.subindex,
         })?;

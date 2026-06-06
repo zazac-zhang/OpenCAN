@@ -47,7 +47,7 @@ impl NodeId {
 
     /// Create a new `NodeId`. Returns `Err` if value is 0 or > 127.
     pub fn new(id: u8) -> Result<Self, InvalidNodeId> {
-        if id >= Self::MIN && id <= Self::MAX {
+        if (Self::MIN..=Self::MAX).contains(&id) {
             Ok(Self(id))
         } else {
             Err(InvalidNodeId(id))

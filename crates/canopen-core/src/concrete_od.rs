@@ -302,13 +302,13 @@ impl ObjectDictionary for ConcreteOd {
         }
 
         // Validate data type (skip for OdValue::None which has no inherent type)
-        if let Some(value_type) = value.data_type() {
-            if value_type != entry.data_type {
-                return Err(OdError::TypeMismatch {
-                    expected: entry.data_type,
-                    actual: value_type,
-                });
-            }
+        if let Some(value_type) = value.data_type()
+            && value_type != entry.data_type
+        {
+            return Err(OdError::TypeMismatch {
+                expected: entry.data_type,
+                actual: value_type,
+            });
         }
 
         entry.value = value;
