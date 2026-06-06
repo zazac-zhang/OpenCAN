@@ -79,6 +79,9 @@ impl ConcreteOd {
 
 impl ObjectDictionary for ConcreteOd {
     fn read(&self, index: u16, subindex: u8) -> Result<OdValue, OdError> {
+        if !self.entries.keys().any(|(i, _)| *i == index) {
+            return Err(OdError::IndexNotFound { index });
+        }
         self.entries
             .get(&(index, subindex))
             .map(|e| e.value.clone())

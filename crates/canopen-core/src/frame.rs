@@ -316,8 +316,8 @@ impl SdoRequest {
                 if *toggle { cmd |= 0x10; }
                 if *last { cmd |= 0x01; }
                 if let Some(s) = size {
-                    cmd |= 0x0C; // size indicated
-                    cmd |= (7 - s) << 4;
+                    let n = 7 - s;
+                    cmd |= (n & 0x07) << 1;
                 }
                 data[0] = cmd;
                 data[1..8].copy_from_slice(d);
@@ -339,6 +339,63 @@ impl SdoRequest {
         }
 
         CanOpenFrame::new(0x600 + self.node_id as u16, data)
+    }
+
+    /// Decode from SDO client request frame (COB-ID = 0x600 + node_id).
+    pub fn decode(frame: &CanOpenFrame) -> Option<Self> {
+        if frame.cob_id < 0x600 || frame.cob_id > 0x67F {
+            return None;
+        }
+        let node_id = (frame.cob_id - 0x600) as u8;
+        let cmd = frame.data[0];
+        let index = u16::from_le_bytes([frame.data[1], frame.data[2]]);
+        let subindex = frame.data[3];
+
+        let data = if cmd == 0x80 {
+            // Abort
+            let code = u32::from_le_bytes([frame.data[4], frame.data[5], frame.data[6], frame.data[7]]);
+            SdoData::Abort { code }
+        } else if cmd & 0xE0 == 0x20 {
+            // Initiate download (cs=1)
+            let expedited = cmd & 0x02 != 0;
+            let size_indicated = cmd & 0x01 != 0;
+
+            if expedited {
+                let size = if size_indicated {
+                    Some(4 - ((cmd >> 2) & 0x03))
+                } else {
+                    None
+                };
+                let mut d = [0u8; 4];
+                d.copy_from_slice(&frame.data[4..8]);
+                SdoData::Expedited { data: d, size }
+            } else if size_indicated {
+                // Segmented download initiated
+                let size = u32::from_le_bytes([frame.data[4], frame.data[5], frame.data[6], frame.data[7]]);
+                SdoData::SegmentedInitiated { size }
+            } else {
+                SdoData::SegmentedInitiated { size: 0 }
+            }
+        } else if cmd & 0xE0 == 0x40 {
+            // Initiate upload (cs=2)
+            SdoData::UploadRequest
+        } else if cmd & 0xE0 == 0x00 {
+            // Segment (cs=0 — used for both upload segment request and download segment)
+            let toggle = cmd & 0x10 != 0;
+            let last = cmd & 0x01 != 0;
+            let size = if cmd & 0x0E != 0 {
+                Some(7 - ((cmd >> 1) & 0x07))
+            } else {
+                None
+            };
+            let mut d = [0u8; 7];
+            d.copy_from_slice(&frame.data[1..8]);
+            SdoData::Segment { toggle, last, data: d, size }
+        } else {
+            return None;
+        };
+
+        Some(Self { node_id, index, subindex, data })
     }
 }
 
@@ -400,15 +457,15 @@ impl SdoResponse {
             } else {
                 SdoResponseData::SegmentedInitiated { size: 0 }
             }
-        } else if cmd & 0xE0 == 0x20 {
-            // Download confirmed (cs=1)
+        } else if cmd & 0xE0 == 0x20 || cmd & 0xE0 == 0x60 {
+            // Download confirmed (cs=1 or cs=3)
             SdoResponseData::DownloadConfirmed
         } else if cmd & 0xE0 == 0x00 {
             // Segment download response (cs=0)
             let toggle = cmd & 0x10 != 0;
             let last = cmd & 0x01 != 0;
             let size = if cmd & 0x0E != 0 {
-                Some(7 - ((cmd >> 4) & 0x07))
+                Some(7 - ((cmd >> 1) & 0x07))
             } else {
                 None
             };
@@ -420,6 +477,61 @@ impl SdoResponse {
         };
 
         Some(Self { node_id, index, subindex, data })
+    }
+
+    /// Encode as SDO server response frame (COB-ID = 0x580 + node_id).
+    pub fn encode(&self) -> CanOpenFrame {
+        let mut data = [0u8; 8];
+
+        match &self.data {
+            SdoResponseData::Expedited { data: d, size } => {
+                let mut cmd: u8 = 0x40; // initiate upload response (cs=2)
+                cmd |= 0x02; // expedited
+                if let Some(s) = size {
+                    cmd |= 0x01; // size indicated
+                    cmd |= (4 - s) << 2;
+                }
+                data[0] = cmd;
+                data[1..3].copy_from_slice(&self.index.to_le_bytes());
+                data[3] = self.subindex;
+                data[4..8].copy_from_slice(d);
+            }
+            SdoResponseData::SegmentedInitiated { size } => {
+                let mut cmd: u8 = 0x41; // initiate upload response, not expedited
+                if *size > 0 {
+                    cmd |= 0x01; // size indicated
+                }
+                data[0] = cmd;
+                data[1..3].copy_from_slice(&self.index.to_le_bytes());
+                data[3] = self.subindex;
+                data[4..8].copy_from_slice(&size.to_le_bytes());
+            }
+            SdoResponseData::Segment { toggle, last, data: d, size } => {
+                let mut cmd: u8 = 0x00;
+                if *toggle { cmd |= 0x10; }
+                if *last { cmd |= 0x01; }
+                // n = number of bytes that do NOT contain data
+                if let Some(s) = size {
+                    let n = 7 - s;
+                    cmd |= (n & 0x07) << 1;
+                }
+                data[0] = cmd;
+                data[1..8].copy_from_slice(d);
+            }
+            SdoResponseData::DownloadConfirmed => {
+                data[0] = 0x20; // download confirmed (cs=1)
+                data[1..3].copy_from_slice(&self.index.to_le_bytes());
+                data[3] = self.subindex;
+            }
+            SdoResponseData::Abort { code } => {
+                data[0] = 0x80;
+                data[1..3].copy_from_slice(&self.index.to_le_bytes());
+                data[3] = self.subindex;
+                data[4..8].copy_from_slice(&code.to_le_bytes());
+            }
+        }
+
+        CanOpenFrame::new(0x580 + self.node_id as u16, data)
     }
 }
 

@@ -14,10 +14,12 @@ use opencan_canopen_core::frame::{
     NmtCommand, NmtCommandSpecifier, SdoRequest, SdoData, SdoResponse, SdoResponseData,
 };
 use opencan_canopen_core::od::{DataType, OdValue};
+use opencan_canopen_core::concrete_od::ConcreteOd;
 
 use crate::heartbeat::{HeartbeatConsumer, HeartbeatProducer, SyncProducer};
 use crate::emcy::EmergencyHandler;
 use crate::sdo::sdo_abort_reason;
+use crate::sdo_server::SdoServer;
 
 /// CANOpen protocol events emitted by the stack.
 #[derive(Debug, Clone)]
@@ -45,6 +47,10 @@ pub struct CanopenStack<C: CanDriver> {
     sdo_timeout: Duration,
     sync_producer: Option<SyncProducer>,
     heartbeat_producer: Option<HeartbeatProducer>,
+    /// Local ObjectDictionary (for SDO server)
+    od: Option<ConcreteOd>,
+    /// SDO Server (responds to incoming SDO requests)
+    sdo_server: Option<SdoServer>,
 }
 
 impl<C: CanDriver> CanopenStack<C> {
@@ -58,6 +64,8 @@ impl<C: CanDriver> CanopenStack<C> {
             sdo_timeout: Duration::from_secs(5),
             sync_producer: None,
             heartbeat_producer: None,
+            od: None,
+            sdo_server: None,
         }
     }
 
@@ -76,11 +84,42 @@ impl<C: CanDriver> CanopenStack<C> {
         self.heartbeat.set_period(node_id, period);
     }
 
+    // === SDO Server ===
+
+    /// Enable the SDO server with a local ObjectDictionary.
+    /// The server will respond to SDO requests from other nodes.
+    pub fn enable_sdo_server(&mut self, od: ConcreteOd) {
+        self.sdo_server = Some(SdoServer::new(self.node_id));
+        self.od = Some(od);
+    }
+
+    /// Get a reference to the local ObjectDictionary, if enabled.
+    pub fn od(&self) -> Option<&ConcreteOd> {
+        self.od.as_ref()
+    }
+
+    /// Get a mutable reference to the local ObjectDictionary, if enabled.
+    pub fn od_mut(&mut self) -> Option<&mut ConcreteOd> {
+        self.od.as_mut()
+    }
+
+    /// Get a reference to the SDO server, if enabled.
+    pub fn sdo_server(&self) -> Option<&SdoServer> {
+        self.sdo_server.as_ref()
+    }
+
     // === Frame Processing ===
 
     /// Process one CAN frame — call this in a loop for incoming frames.
     pub fn process(&mut self, frame: &CanOpenFrame) -> Vec<CanEvent> {
         let mut events = Vec::new();
+
+        // First, let the SDO server handle the frame if enabled
+        if let (Some(server), Some(od)) = (&mut self.sdo_server, &mut self.od)
+            && let Some(response) = server.process(frame, od) {
+                let _ = self.can.send(&response);
+                return events;
+            }
 
         match classify_frame(frame) {
             FrameClass::Heartbeat(hb) => {
