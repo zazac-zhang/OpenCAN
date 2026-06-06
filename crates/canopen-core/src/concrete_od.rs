@@ -1,7 +1,7 @@
 //! Concrete Object Dictionary implementation.
 //!
 //! Provides [`ConcreteOd`], a BTreeMap-backed [`ObjectDictionary`] that can be
-//! populated programmatically or built from an EDS file via [`canopen-eds`].
+//! populated programmatically or built from an EDS file via `canopen-eds`.
 
 use std::collections::BTreeMap;
 use crate::od::{AccessType, DataType, EntryInfo, ObjectType, OdValue, ObjectDictionary};

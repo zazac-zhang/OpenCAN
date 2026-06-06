@@ -140,7 +140,7 @@ impl HeartbeatProducer {
 /// SYNC producer — manages periodic SYNC frame transmission.
 ///
 /// SYNC frames (COB-ID 0x080) are used to synchronize PDO transmissions.
-/// The producer optionally includes a counter byte (data[0]) for
+/// The producer optionally includes a counter byte (`data[0]`) for
 /// identifying missed SYNCs.
 pub struct SyncProducer {
     period: Duration,
@@ -160,7 +160,7 @@ impl SyncProducer {
         }
     }
 
-    /// Enable or disable the SYNC counter (data[0] byte).
+    /// Enable or disable the SYNC counter (`data[0]` byte).
     pub fn set_counter_enabled(&mut self, enabled: bool) {
         self.counter_enabled = enabled;
     }
