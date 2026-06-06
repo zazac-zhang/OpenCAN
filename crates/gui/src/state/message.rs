@@ -5,6 +5,7 @@ use super::node::Ds402Mode;
 use super::connection::CanBackend;
 use super::log::LogEntry;
 use super::sdo::SdoDataType;
+use super::DragTarget;
 
 /// Application messages.
 #[derive(Debug, Clone)]
@@ -154,6 +155,14 @@ pub enum Message {
     // === PDO ===
     /// Read PDO mapping for a node.
     ReadPdoMapping(u8),
+
+    // === Panel Layout ===
+    /// Start dragging a panel divider.
+    PanelDragStart(DragTarget),
+    /// Update panel width during drag.
+    PanelDragUpdate(f32),
+    /// Stop dragging.
+    PanelDragEnd,
 
     // === System ===
     /// Tick (polls backend events).

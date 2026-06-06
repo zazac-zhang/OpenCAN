@@ -5,7 +5,7 @@ use iced::{Element, Length, Subscription, Theme, time};
 
 use crate::state::{
     App, Message, Tab, NmtState, NodeState, LogEntry, Direction,
-    EmcyEntry, HeartbeatStatus,
+    EmcyEntry, HeartbeatStatus, DragTarget,
 };
 use crate::backend::{BackendCommand, BackendEvent};
 use crate::views;
@@ -333,6 +333,32 @@ impl App {
                     });
                     self.status_message = format!("Reading PDO mapping for node {}...", node_id);
                 }
+                iced::Task::none()
+            }
+            Message::PanelDragStart(target) => {
+                self.is_dragging = true;
+                self.drag_target = Some(target);
+                iced::Task::none()
+            }
+            Message::PanelDragUpdate(delta) => {
+                if self.is_dragging {
+                    match self.drag_target {
+                        Some(DragTarget::NodePanel) => {
+                            let new_width = (self.node_panel_width as f32 + delta).max(100.0).min(400.0);
+                            self.node_panel_width = new_width as u16;
+                        }
+                        Some(DragTarget::DetailPanel) => {
+                            let new_width = (self.detail_panel_width as f32 - delta).max(100.0).min(400.0);
+                            self.detail_panel_width = new_width as u16;
+                        }
+                        None => {}
+                    }
+                }
+                iced::Task::none()
+            }
+            Message::PanelDragEnd => {
+                self.is_dragging = false;
+                self.drag_target = None;
                 iced::Task::none()
             }
             Message::ShowAbout => {
@@ -711,14 +737,30 @@ impl App {
         let detail_panel = views::detail_panel(self);
         let statusbar = views::statusbar(self);
 
-        // Build main layout
+        // Node panel divider
+        let node_divider = iced::widget::vertical_rule(2);
+
+        // Detail panel divider
+        let detail_divider = iced::widget::vertical_rule(2);
+
+        // Build main layout with panel widths
+        let node_panel_container = iced::widget::container(node_panel)
+            .width(self.node_panel_width)
+            .height(Length::Fill);
+
+        let detail_panel_container = iced::widget::container(detail_panel)
+            .width(self.detail_panel_width)
+            .height(Length::Fill);
+
         let workspace = if self.detail_collapsed {
             row![main_content].width(Length::Fill).height(Length::Fill)
         } else {
-            row![main_content, detail_panel].width(Length::Fill).height(Length::Fill)
+            row![main_content, detail_divider, detail_panel_container]
+                .width(Length::Fill)
+                .height(Length::Fill)
         };
 
-        let content = row![node_panel, workspace]
+        let content = row![node_panel_container, node_divider, workspace]
             .width(Length::Fill)
             .height(Length::Fill);
 

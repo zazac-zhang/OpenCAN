@@ -10,6 +10,13 @@ mod protocol;
 mod message;
 mod sdo;
 
+/// Drag target for panel resizing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DragTarget {
+    NodePanel,
+    DetailPanel,
+}
+
 // Re-export all types
 pub use tab::{Tab, PrimaryTab};
 pub use node::{
@@ -69,6 +76,12 @@ pub struct App {
     // UI state
     pub status_message: String,
     pub toolbar_bitrate: u32,
+
+    // Panel layout state
+    pub node_panel_width: u16,
+    pub detail_panel_width: u16,
+    pub is_dragging: bool,
+    pub drag_target: Option<DragTarget>,
 }
 
 /// SDO history entry.
@@ -157,6 +170,12 @@ impl Default for App {
             // UI state
             status_message: "Ready — Connect to start".to_string(),
             toolbar_bitrate: 500000,
+
+            // Panel layout state
+            node_panel_width: 200,
+            detail_panel_width: 200,
+            is_dragging: false,
+            drag_target: None,
         }
     }
 }
