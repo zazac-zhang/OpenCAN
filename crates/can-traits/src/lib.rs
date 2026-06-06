@@ -1,13 +1,35 @@
 //! # opencan-can-traits
 //!
-//! Unified CAN bus trait abstraction for OpenCAN.
+//! CAN bus trait abstraction and hardware backends for OpenCAN.
 //!
 //! This crate provides:
 //! - [`CanBus`] trait for physical CAN bus I/O (trait-object safe)
 //! - [`CanBusFactory`] trait for dynamic backend creation
 //! - CAN frame types (Classic and FD)
+//! - Hardware backend implementations (feature-gated)
+//!
+//! ## Backends
+//!
+//! | Feature     | Backend    | Platform |
+//! |-------------|------------|----------|
+//! | `socketcan` | SocketCAN  | Linux    |
+//! | `kvaser`    | Kvaser     | Stub     |
+//! | `pcan`      | PCAN       | Stub     |
+//! | `zlg`       | ZLG        | Stub     |
 
 pub mod error;
+
+#[cfg(feature = "socketcan")]
+pub mod socketcan;
+
+#[cfg(feature = "kvaser")]
+pub mod kvaser;
+
+#[cfg(feature = "pcan")]
+pub mod pcan;
+
+#[cfg(feature = "zlg")]
+pub mod zlg;
 
 use std::future::Future;
 

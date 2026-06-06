@@ -169,6 +169,22 @@ pub fn ds402_control(app: &App) -> Element<'_, Message> {
         }
     }
 
+    content = content.push(horizontal_rule(1));
+
+    // Trend Chart
+    content = content.push(text("Trend Chart:").size(14));
+    content = content.push(
+        row![
+            button(text("Position").size(10)).on_press(Message::Ds402ToggleRawValues),
+            button(text("Velocity").size(10)).on_press(Message::Ds402ToggleRawValues),
+            button(text("Torque").size(10)).on_press(Message::Ds402ToggleRawValues),
+        ].spacing(4)
+    );
+    content = content.push(
+        crate::views::canopen::trend_chart::trend_chart(&app.trend_chart)
+            .map(|_| Message::Tick) // Placeholder message
+    );
+
     container(scrollable(content))
         .width(Length::Fill)
         .height(Length::Fill)

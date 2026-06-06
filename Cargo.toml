@@ -1,14 +1,8 @@
 [workspace]
 members = [
     "crates/can-traits",
-    "crates/can-socketcan",
-    "crates/can-kvaser",
-    "crates/can-pcan",
-    "crates/can-zlg",
     "crates/canopen-core",
     "crates/canopen-ds301",
-    "crates/canopen-ds402",
-    "crates/canopen-eds",
     "crates/gui",
 ]
 exclude = []

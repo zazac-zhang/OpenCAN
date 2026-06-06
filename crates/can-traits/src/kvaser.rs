@@ -6,7 +6,7 @@
 //! - Windows: canlib32.dll
 //! - Linux: Kvaser driver + canlib
 
-use opencan_can_traits::{CanBusDyn, CanBusFactory, CanConfig, error::CanError};
+use crate::{CanBusDyn, CanBusFactory, CanConfig, error::CanError};
 
 /// Factory for creating Kvaser CAN bus instances.
 pub struct KvaserFactory;

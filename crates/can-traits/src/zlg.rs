@@ -6,7 +6,7 @@
 //! - Windows: ControlCAN.dll
 //! - Linux: libcontrolcan.so
 
-use opencan_can_traits::{CanBusDyn, CanBusFactory, CanConfig, error::CanError};
+use crate::{CanBusDyn, CanBusFactory, CanConfig, error::CanError};
 
 /// Factory for creating ZLG CAN bus instances.
 pub struct ZlgFactory;

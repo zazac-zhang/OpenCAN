@@ -13,23 +13,17 @@ path = "src/main.rs"
 opencan-can-traits = { path = "../can-traits" }
 opencan-canopen-core = { path = "../canopen-core" }
 opencan-canopen-ds301 = { path = "../canopen-ds301", features = ["ds402"] }
-opencan-canopen-ds402 = { path = "../canopen-ds402" }
-opencan-canopen-eds = { path = "../canopen-eds", optional = true }
-opencan-can-socketcan = { path = "../can-socketcan", optional = true }
-opencan-can-kvaser = { path = "../can-kvaser", optional = true }
-opencan-can-pcan = { path = "../can-pcan", optional = true }
-opencan-can-zlg = { path = "../can-zlg", optional = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 # GUI framework
-iced = { version = "0.13", features = ["tokio"] }
+iced = { version = "0.13", features = ["tokio", "canvas"] }
 
 [features]
 default = []
-socketcan = ["dep:opencan-can-socketcan"]
-kvaser = ["dep:opencan-can-kvaser"]
-pcan = ["dep:opencan-can-pcan"]
-zlg = ["dep:opencan-can-zlg"]
+socketcan = ["opencan-can-traits/socketcan"]
+kvaser = ["opencan-can-traits/kvaser"]
+pcan = ["opencan-can-traits/pcan"]
+zlg = ["opencan-can-traits/zlg"]
 eds = ["opencan-canopen-core/eds"]

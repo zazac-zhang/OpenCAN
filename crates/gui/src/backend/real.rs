@@ -138,7 +138,7 @@ pub async fn real_backend_task<C: CanDriver>(
                 let result = stack.sdo_upload(node_id, 0x6041, 0, DataType::Unsigned16).await;
                 match result {
                     Ok(OdValue::Unsigned16(word)) => {
-                        let state = opencan_canopen_ds402::Ds402State::from_status_word(word);
+                        let state = opencan_canopen_ds301::ds402::Ds402State::from_status_word(word);
                         let state_str = format!("{:?}", state);
                         let _ = respond.send(Ok(word));
                         let _ = evt_tx.send(BackendEvent::Ds402StateResult {

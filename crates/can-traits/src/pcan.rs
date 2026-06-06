@@ -6,7 +6,7 @@
 //! - Windows: PCANBasic.dll
 //! - Linux: libpcanbasic.so
 
-use opencan_can_traits::{CanBusDyn, CanBusFactory, CanConfig, error::CanError};
+use crate::{CanBusDyn, CanBusFactory, CanConfig, error::CanError};
 
 /// Factory for creating PCAN bus instances.
 pub struct PcanFactory;

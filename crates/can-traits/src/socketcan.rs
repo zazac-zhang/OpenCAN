@@ -12,7 +12,7 @@
 
 #[cfg(target_os = "linux")]
 mod linux {
-    use opencan_can_traits::{
+    use crate::{
         CanBitrate, CanBus, CanBusDyn, CanBusFactory, CanConfig, CanFrame, CanId, CanState,
         ClassicFrame, error::CanError,
     };

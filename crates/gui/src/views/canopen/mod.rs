@@ -7,3 +7,4 @@ pub mod ds402;
 pub mod emcy;
 pub mod heartbeat;
 pub mod sync;
+pub mod trend_chart;

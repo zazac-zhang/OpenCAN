@@ -64,6 +64,7 @@ pub struct App {
 
     // DS402 state
     pub ds402_state: Ds402PanelState,
+    pub trend_chart: crate::views::canopen::trend_chart::TrendChartState,
 
     // UI state
     pub status_message: String,
@@ -151,6 +152,7 @@ impl Default for App {
 
             // DS402 state
             ds402_state: Ds402PanelState::default(),
+            trend_chart: crate::views::canopen::trend_chart::TrendChartState::default(),
 
             // UI state
             status_message: "Ready — Connect to start".to_string(),

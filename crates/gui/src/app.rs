@@ -585,16 +585,19 @@ impl App {
                 if let Some(node) = self.get_node_mut(node_id) {
                     node.ds402.push_position(position);
                 }
+                self.trend_chart.push_position(position as f32);
             }
             BackendEvent::Ds402VelocityResult { node_id, velocity } => {
                 if let Some(node) = self.get_node_mut(node_id) {
                     node.ds402.push_velocity(velocity);
                 }
+                self.trend_chart.push_velocity(velocity as f32);
             }
             BackendEvent::Ds402TorqueResult { node_id, torque } => {
                 if let Some(node) = self.get_node_mut(node_id) {
                     node.ds402.push_torque(torque);
                 }
+                self.trend_chart.push_torque(torque as f32);
             }
             BackendEvent::FrameReceived { cob_id, data, dlc, timestamp_ms } => {
                 if !self.paused {
