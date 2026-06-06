@@ -461,6 +461,7 @@ mod tests {
             access: AccessType::ReadOnly,
             name: "Device Type".to_string(),
             value: OdValue::Unsigned32(0x00020192),
+            default_value: None,
         });
         od.add_entry(OdEntry {
             index: 0x6040,
@@ -470,6 +471,7 @@ mod tests {
             access: AccessType::ReadWrite,
             name: "Control Word".to_string(),
             value: OdValue::Unsigned16(0),
+            default_value: None,
         });
         od.add_entry(OdEntry {
             index: 0x2000,
@@ -479,6 +481,7 @@ mod tests {
             access: AccessType::ReadWrite,
             name: "Test String".to_string(),
             value: OdValue::VisibleString("Hello".to_string()),
+            default_value: None,
         });
         od.add_entry(OdEntry {
             index: 0x2001,
@@ -488,6 +491,7 @@ mod tests {
             access: AccessType::ReadWrite,
             name: "Long String".to_string(),
             value: OdValue::VisibleString("This is a multi-segment test string!".to_string()),
+            default_value: None,
         });
         od
     }

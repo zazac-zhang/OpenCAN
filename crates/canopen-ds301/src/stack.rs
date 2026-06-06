@@ -189,7 +189,10 @@ impl<C: CanDriver> CanopenStack<C> {
                 FrameClass::SdoResponse(_) => {
                     // SDO responses are handled by SDO operations directly
                 }
-                FrameClass::Sync => {
+                FrameClass::SdoRequest(_) => {
+                    // Incoming SDO request — handled by SDO server if enabled
+                }
+                FrameClass::Sync(_) => {
                     let triggered = self.sync_consumer.on_sync();
                     events.push(CanEvent::SyncReceived {
                         counter: self.sync_consumer.sync_count(),
@@ -201,11 +204,12 @@ impl<C: CanDriver> CanopenStack<C> {
                         });
                     }
                 }
-                FrameClass::Timestamp => {
-                    // TODO: Handle TIME
+                FrameClass::TimestampFrame(_) => {
+                    // TODO: Handle TIME_STAMP
                 }
-                FrameClass::Unknown => {
+                FrameClass::Unknown { cob_id } => {
                     // Unknown frame — log if needed
+                    let _ = cob_id;
                 }
             }
 

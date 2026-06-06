@@ -71,6 +71,7 @@ impl CobId {
 /// and use helper methods to distinguish them based on context (node_id).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum FunctionCode {
     Nmt = 0x000,
     SyncOrEmergency = 0x080, // Sync if node_id=0, Emergency otherwise
@@ -150,6 +151,18 @@ impl NmtCommandSpecifier {
             0x81 => Some(Self::ResetNode),
             0x82 => Some(Self::ResetCommunication),
             _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for NmtCommandSpecifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EnterOperational => write!(f, "Start"),
+            Self::EnterStopped => write!(f, "Stop"),
+            Self::EnterPreOperational => write!(f, "PreOp"),
+            Self::ResetNode => write!(f, "ResetNode"),
+            Self::ResetCommunication => write!(f, "ResetComm"),
         }
     }
 }
@@ -264,6 +277,116 @@ impl EmergencyFrame {
             error_register,
             data,
         })
+    }
+}
+
+// === Sync Frame ===
+
+/// SYNC frame (COB-ID = 0x080).
+///
+/// SYNC frames are used to synchronize PDO transmissions.
+/// An optional counter byte (data[0]) can be used to detect missed SYNCs.
+/// Counter values 1-240 are valid per DS301.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SyncFrame {
+    /// Optional counter value (1-240). None means no counter.
+    pub counter: Option<u8>,
+}
+
+impl SyncFrame {
+    /// Create a SYNC frame without a counter.
+    pub fn new() -> Self {
+        Self { counter: None }
+    }
+
+    /// Create a SYNC frame with a counter value.
+    pub fn with_counter(counter: u8) -> Self {
+        Self {
+            counter: Some(counter),
+        }
+    }
+
+    /// Encode as a CanOpenFrame.
+    pub fn encode(&self) -> CanOpenFrame {
+        let mut data = [0u8; 8];
+        if let Some(c) = self.counter {
+            data[0] = c;
+        }
+        CanOpenFrame::new(0x080, data)
+    }
+
+    /// Decode from a CanOpenFrame.
+    /// Returns None if the frame is not a SYNC (COB-ID != 0x080).
+    pub fn decode(frame: &CanOpenFrame) -> Option<Self> {
+        if frame.cob_id != 0x080 {
+            return None;
+        }
+        // Per DS301: data[0] = 0 means no counter, 1-240 is counter value
+        let counter = if frame.data[0] == 0 {
+            None
+        } else {
+            Some(frame.data[0])
+        };
+        Some(Self { counter })
+    }
+}
+
+impl Default for SyncFrame {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// === Timestamp Frame ===
+
+/// TIME_STAMP frame (COB-ID = 0x100).
+///
+/// Transmits the CANOpen TIME_OF_DAY object as a 6-byte payload:
+/// - bytes[0..4]: milliseconds since midnight (u32 LE)
+/// - bytes[4..6]: days since Jan 1, 1984 (u16 LE)
+///
+/// DS301 Section 7.2.4.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TimestampFrame {
+    /// Milliseconds since midnight (0..=86399999).
+    pub ms_of_day: u32,
+    /// Days since January 1, 1984.
+    pub days: u16,
+}
+
+impl TimestampFrame {
+    /// Create a new timestamp frame.
+    pub fn new(ms_of_day: u32, days: u16) -> Self {
+        Self { ms_of_day, days }
+    }
+
+    /// Encode as a CanOpenFrame.
+    pub fn encode(&self) -> CanOpenFrame {
+        let mut data = [0u8; 8];
+        data[0..4].copy_from_slice(&self.ms_of_day.to_le_bytes());
+        data[4..6].copy_from_slice(&self.days.to_le_bytes());
+        CanOpenFrame::new(0x100, data)
+    }
+
+    /// Decode from a CanOpenFrame.
+    /// Returns None if the frame is not a TIME_STAMP (COB-ID != 0x100).
+    pub fn decode(frame: &CanOpenFrame) -> Option<Self> {
+        if frame.cob_id != 0x100 {
+            return None;
+        }
+        let ms_of_day = u32::from_le_bytes([
+            frame.data[0],
+            frame.data[1],
+            frame.data[2],
+            frame.data[3],
+        ]);
+        let days = u16::from_le_bytes([frame.data[4], frame.data[5]]);
+        Some(Self { ms_of_day, days })
+    }
+
+    /// Convert to total milliseconds since Jan 1, 1984 00:00:00.
+    pub fn to_total_ms(&self) -> u64 {
+        (self.days as u64) * 86_400_000 + self.ms_of_day as u64
     }
 }
 
@@ -638,13 +761,15 @@ impl PdoFrame {
 #[derive(Debug, Clone, PartialEq)]
 pub enum FrameClass {
     Nmt(NmtCommand),
-    Sync,
+    Sync(SyncFrame),
     Emergency(EmergencyFrame),
-    Timestamp,
+    TimestampFrame(TimestampFrame),
     Pdo(PdoFrame),
+    SdoRequest(SdoRequest),
     SdoResponse(SdoResponse),
     Heartbeat(HeartbeatFrame),
-    Unknown,
+    /// Unrecognized or malformed frame. Carries the raw COB-ID for diagnostics.
+    Unknown { cob_id: u16 },
 }
 
 pub fn classify_frame(frame: &CanOpenFrame) -> FrameClass {
@@ -652,32 +777,82 @@ pub fn classify_frame(frame: &CanOpenFrame) -> FrameClass {
     match id {
         0x000 => NmtCommand::decode(frame)
             .map(FrameClass::Nmt)
-            .unwrap_or(FrameClass::Unknown),
-        0x080..=0x0FF => {
-            if id == 0x080 {
-                FrameClass::Sync
-            } else {
-                EmergencyFrame::decode(frame)
-                    .map(FrameClass::Emergency)
-                    .unwrap_or(FrameClass::Unknown)
-            }
-        }
-        0x100..=0x17F => FrameClass::Timestamp,
-        0x180..=0x57F => {
-            if let Some(hb) = HeartbeatFrame::decode(frame) {
-                FrameClass::Heartbeat(hb)
-            } else if let Some(resp) = SdoResponse::decode(frame) {
-                FrameClass::SdoResponse(resp)
-            } else if let Some(pdo) = PdoFrame::from_canopen(frame) {
-                FrameClass::Pdo(pdo)
-            } else {
-                FrameClass::Unknown
-            }
-        }
+            .unwrap_or(FrameClass::Unknown { cob_id: id }),
+        0x080 => SyncFrame::decode(frame)
+            .map(FrameClass::Sync)
+            .unwrap_or(FrameClass::Unknown { cob_id: id }),
+        0x081..=0x0FF => EmergencyFrame::decode(frame)
+            .map(FrameClass::Emergency)
+            .unwrap_or(FrameClass::Unknown { cob_id: id }),
+        0x100 => TimestampFrame::decode(frame)
+            .map(FrameClass::TimestampFrame)
+            .unwrap_or(FrameClass::Unknown { cob_id: id }),
+        0x180..=0x57F => PdoFrame::from_canopen(frame)
+            .map(FrameClass::Pdo)
+            .unwrap_or(FrameClass::Unknown { cob_id: id }),
+        0x580..=0x5FF => SdoResponse::decode(frame)
+            .map(FrameClass::SdoResponse)
+            .unwrap_or(FrameClass::Unknown { cob_id: id }),
+        0x600..=0x67F => SdoRequest::decode(frame)
+            .map(FrameClass::SdoRequest)
+            .unwrap_or(FrameClass::Unknown { cob_id: id }),
         0x700..=0x77F => HeartbeatFrame::decode(frame)
             .map(FrameClass::Heartbeat)
-            .unwrap_or(FrameClass::Unknown),
-        _ => FrameClass::Unknown,
+            .unwrap_or(FrameClass::Unknown { cob_id: id }),
+        _ => FrameClass::Unknown { cob_id: id },
+    }
+}
+
+// === Display impls ===
+
+impl std::fmt::Display for FunctionCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Nmt => write!(f, "NMT"),
+            Self::SyncOrEmergency => write!(f, "SYNC/EMCY"),
+            Self::Timestamp => write!(f, "TIMESTAMP"),
+            Self::Tpdo1 => write!(f, "TPDO1"),
+            Self::Rpdo1 => write!(f, "RPDO1"),
+            Self::Tpdo2 => write!(f, "TPDO2"),
+            Self::Rpdo2 => write!(f, "RPDO2"),
+            Self::Tpdo3 => write!(f, "TPDO3"),
+            Self::Rpdo3 => write!(f, "RPDO3"),
+            Self::Tpdo4 => write!(f, "TPDO4"),
+            Self::Rpdo4 => write!(f, "RPDO4"),
+            Self::SdoServer => write!(f, "SDO-S"),
+            Self::SdoClient => write!(f, "SDO-C"),
+            Self::Heartbeat => write!(f, "HB"),
+        }
+    }
+}
+
+impl std::fmt::Display for CobId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}(node={})", self.function, self.node_id)
+    }
+}
+
+impl std::fmt::Display for NmtState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::BootUp => write!(f, "BootUp"),
+            Self::Stopped => write!(f, "Stopped"),
+            Self::Operational => write!(f, "Operational"),
+            Self::PreOperational => write!(f, "PreOperational"),
+        }
+    }
+}
+
+impl std::fmt::Display for CanOpenFrame {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let fc = CobId::from_u16(self.cob_id & 0x7FF);
+        let fc_str = fc.map(|c| c.to_string()).unwrap_or_else(|| format!("0x{:03X}", self.cob_id));
+        write!(f, "COB-ID=0x{:03X} ({}) data=[", self.cob_id, fc_str)?;
+        for (i, b) in self.data.iter().enumerate() {
+            if i > 0 { write!(f, " ")?; }
+            write!(f, "{:02X}", b)?;
+        }
+        write!(f, "]")
     }
 }
 
@@ -830,5 +1005,108 @@ mod tests {
         let frame = nmt.encode();
         let class = classify_frame(&frame);
         assert!(matches!(class, FrameClass::Nmt(_)));
+
+        // SYNC without counter
+        let sync = SyncFrame::new();
+        let frame = sync.encode();
+        let class = classify_frame(&frame);
+        assert!(matches!(class, FrameClass::Sync(_)));
+
+        // SYNC with counter
+        let sync = SyncFrame::with_counter(42);
+        let frame = sync.encode();
+        let class = classify_frame(&frame);
+        match &class {
+            FrameClass::Sync(s) => assert_eq!(s.counter, Some(42)),
+            _ => panic!("Expected Sync"),
+        }
+
+        // Timestamp
+        let ts = TimestampFrame::new(12345, 100);
+        let frame = ts.encode();
+        let class = classify_frame(&frame);
+        assert!(matches!(class, FrameClass::TimestampFrame(_)));
+
+        // Emergency
+        let emcy = EmergencyFrame {
+            node_id: 3,
+            error_code: 0x1000,
+            error_register: 0x01,
+            data: [0; 5],
+        };
+        let frame = emcy.encode();
+        let class = classify_frame(&frame);
+        assert!(matches!(class, FrameClass::Emergency(_)));
+
+        // SDO client frame should be classified
+        let sdo_req = SdoRequest {
+            node_id: 3,
+            index: 0x1000,
+            subindex: 0,
+            data: SdoData::UploadRequest,
+        };
+        let frame = sdo_req.encode();
+        let class = classify_frame(&frame);
+        assert!(matches!(class, FrameClass::SdoRequest(_)));
+
+        // Unknown FC (e.g. 0x780) should carry cob_id
+        let frame = CanOpenFrame::new(0x780, [0; 8]);
+        let class = classify_frame(&frame);
+        assert!(matches!(class, FrameClass::Unknown { cob_id: 0x780 }));
+    }
+
+    #[test]
+    fn test_sync_frame_no_counter() {
+        let sync = SyncFrame::new();
+        let frame = sync.encode();
+        assert_eq!(frame.cob_id, 0x080);
+        assert_eq!(frame.data[0], 0); // no counter
+
+        let decoded = SyncFrame::decode(&frame).unwrap();
+        assert_eq!(decoded.counter, None);
+    }
+
+    #[test]
+    fn test_sync_frame_with_counter() {
+        let sync = SyncFrame::with_counter(42);
+        let frame = sync.encode();
+        assert_eq!(frame.cob_id, 0x080);
+        assert_eq!(frame.data[0], 42);
+
+        let decoded = SyncFrame::decode(&frame).unwrap();
+        assert_eq!(decoded.counter, Some(42));
+    }
+
+    #[test]
+    fn test_sync_frame_decode_wrong_cob_id() {
+        let frame = CanOpenFrame::new(0x081, [0; 8]);
+        assert!(SyncFrame::decode(&frame).is_none());
+    }
+
+    #[test]
+    fn test_timestamp_frame_encode_decode() {
+        // 43200000 ms = 12 hours, day 365
+        let ts = TimestampFrame::new(43_200_000, 365);
+        let frame = ts.encode();
+        assert_eq!(frame.cob_id, 0x100);
+
+        let decoded = TimestampFrame::decode(&frame).unwrap();
+        assert_eq!(decoded.ms_of_day, 43_200_000);
+        assert_eq!(decoded.days, 365);
+    }
+
+    #[test]
+    fn test_timestamp_frame_total_ms() {
+        let ts = TimestampFrame::new(0, 1);
+        assert_eq!(ts.to_total_ms(), 86_400_000); // 1 day
+
+        let ts = TimestampFrame::new(1000, 0);
+        assert_eq!(ts.to_total_ms(), 1000);
+    }
+
+    #[test]
+    fn test_timestamp_frame_decode_wrong_cob_id() {
+        let frame = CanOpenFrame::new(0x101, [0; 8]);
+        assert!(TimestampFrame::decode(&frame).is_none());
     }
 }

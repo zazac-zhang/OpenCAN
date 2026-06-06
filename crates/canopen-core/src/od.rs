@@ -7,6 +7,7 @@
 /// CANOpen data types (DS301 Table 37).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
+#[non_exhaustive]
 pub enum DataType {
     Boolean = 0x0001,
     Integer8 = 0x0002,
@@ -66,6 +67,67 @@ impl DataType {
             _ => None,
         }
     }
+
+    /// Get the fixed byte size for this data type.
+    ///
+    /// Returns `None` for variable-length types (VisibleString, OctetString,
+    /// UnicodeString, TimeOfDay, TimeDifference, Domain).
+    pub fn byte_size(&self) -> Option<usize> {
+        match self {
+            Self::Boolean => Some(1),
+            Self::Integer8 | Self::Unsigned8 => Some(1),
+            Self::Integer16 | Self::Unsigned16 => Some(2),
+            Self::Integer24 | Self::Unsigned24 => Some(3),
+            Self::Integer32 | Self::Unsigned32 | Self::Real32 => Some(4),
+            Self::Integer40 | Self::Unsigned40 => Some(5),
+            Self::Integer48 | Self::Unsigned48 => Some(6),
+            Self::Integer56 | Self::Unsigned56 => Some(7),
+            Self::Integer64 | Self::Unsigned64 | Self::Real64 => Some(8),
+            // Variable-length types and unknown future types
+            _ => None,
+        }
+    }
+
+    /// Check if this data type is a numeric type (integer or real).
+    pub fn is_numeric(&self) -> bool {
+        matches!(
+            self,
+            Self::Boolean
+                | Self::Integer8
+                | Self::Integer16
+                | Self::Integer24
+                | Self::Integer32
+                | Self::Integer40
+                | Self::Integer48
+                | Self::Integer56
+                | Self::Integer64
+                | Self::Unsigned8
+                | Self::Unsigned16
+                | Self::Unsigned24
+                | Self::Unsigned32
+                | Self::Unsigned40
+                | Self::Unsigned48
+                | Self::Unsigned56
+                | Self::Unsigned64
+                | Self::Real32
+                | Self::Real64
+        )
+    }
+
+    /// Check if this data type is a signed integer type.
+    pub fn is_signed(&self) -> bool {
+        matches!(
+            self,
+            Self::Integer8
+                | Self::Integer16
+                | Self::Integer24
+                | Self::Integer32
+                | Self::Integer40
+                | Self::Integer48
+                | Self::Integer56
+                | Self::Integer64
+        )
+    }
 }
 
 /// Access type for OD entries.
@@ -77,6 +139,17 @@ pub enum AccessType {
     Constant,
 }
 
+impl std::fmt::Display for AccessType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ReadOnly => write!(f, "ro"),
+            Self::WriteOnly => write!(f, "wo"),
+            Self::ReadWrite => write!(f, "rw"),
+            Self::Constant => write!(f, "const"),
+        }
+    }
+}
+
 /// Object type (DS301).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjectType {
@@ -86,6 +159,16 @@ pub enum ObjectType {
     Array,
     /// Record (multiple subindices, potentially different data types).
     Record,
+}
+
+impl std::fmt::Display for ObjectType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Var => write!(f, "VAR"),
+            Self::Array => write!(f, "ARRAY"),
+            Self::Record => write!(f, "RECORD"),
+        }
+    }
 }
 
 /// OD entry metadata.
@@ -108,10 +191,14 @@ pub enum OdValue {
     Boolean(bool),
     Integer8(i8),
     Integer16(i16),
+    /// 24-bit signed integer (stored as i32, serialized as 3 bytes LE).
+    Integer24(i32),
     Integer32(i32),
     Integer64(i64),
     Unsigned8(u8),
     Unsigned16(u16),
+    /// 24-bit unsigned integer (stored as u32, serialized as 3 bytes LE).
+    Unsigned24(u32),
     Unsigned32(u32),
     Unsigned64(u64),
     Real32(f32),
@@ -129,10 +216,12 @@ impl OdValue {
             Self::Boolean(_) => Some(DataType::Boolean),
             Self::Integer8(_) => Some(DataType::Integer8),
             Self::Integer16(_) => Some(DataType::Integer16),
+            Self::Integer24(_) => Some(DataType::Integer24),
             Self::Integer32(_) => Some(DataType::Integer32),
             Self::Integer64(_) => Some(DataType::Integer64),
             Self::Unsigned8(_) => Some(DataType::Unsigned8),
             Self::Unsigned16(_) => Some(DataType::Unsigned16),
+            Self::Unsigned24(_) => Some(DataType::Unsigned24),
             Self::Unsigned32(_) => Some(DataType::Unsigned32),
             Self::Unsigned64(_) => Some(DataType::Unsigned64),
             Self::Real32(_) => Some(DataType::Real32),
@@ -150,10 +239,18 @@ impl OdValue {
             Self::Boolean(v) => vec![*v as u8],
             Self::Integer8(v) => vec![*v as u8],
             Self::Integer16(v) => v.to_le_bytes().to_vec(),
+            Self::Integer24(v) => {
+                let bytes = v.to_le_bytes();
+                vec![bytes[0], bytes[1], bytes[2]]
+            }
             Self::Integer32(v) => v.to_le_bytes().to_vec(),
             Self::Integer64(v) => v.to_le_bytes().to_vec(),
             Self::Unsigned8(v) => vec![*v],
             Self::Unsigned16(v) => v.to_le_bytes().to_vec(),
+            Self::Unsigned24(v) => {
+                let bytes = v.to_le_bytes();
+                vec![bytes[0], bytes[1], bytes[2]]
+            }
             Self::Unsigned32(v) => v.to_le_bytes().to_vec(),
             Self::Unsigned64(v) => v.to_le_bytes().to_vec(),
             Self::Real32(v) => v.to_le_bytes().to_vec(),
@@ -171,6 +268,10 @@ impl OdValue {
             DataType::Integer16 => data
                 .get(..2)
                 .map(|b| Self::Integer16(i16::from_le_bytes([b[0], b[1]]))),
+            DataType::Integer24 => data.get(..3).map(|b| {
+                let raw = i32::from_le_bytes([b[0], b[1], b[2], 0]);
+                Self::Integer24((raw << 8) >> 8) // sign-extend from 24-bit
+            }),
             DataType::Integer32 => data
                 .get(..4)
                 .map(|b| Self::Integer32(i32::from_le_bytes([b[0], b[1], b[2], b[3]]))),
@@ -181,6 +282,9 @@ impl OdValue {
             DataType::Unsigned16 => data
                 .get(..2)
                 .map(|b| Self::Unsigned16(u16::from_le_bytes([b[0], b[1]]))),
+            DataType::Unsigned24 => data.get(..3).map(|b| {
+                Self::Unsigned24(u32::from_le_bytes([b[0], b[1], b[2], 0]))
+            }),
             DataType::Unsigned32 => data
                 .get(..4)
                 .map(|b| Self::Unsigned32(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))),
@@ -196,9 +300,147 @@ impl OdValue {
             DataType::VisibleString => Some(Self::VisibleString(
                 String::from_utf8_lossy(data).to_string(),
             )),
+            DataType::OctetString => Some(Self::OctetString(data.to_vec())),
             DataType::Domain => Some(Self::Domain(data.to_vec())),
+            // Variable-length types without OdValue variant
+            DataType::UnicodeString
+            | DataType::TimeOfDay
+            | DataType::TimeDifference
+            // 40/48/56-bit types not yet represented in OdValue
+            | DataType::Integer40
+            | DataType::Integer48
+            | DataType::Integer56
+            | DataType::Unsigned40
+            | DataType::Unsigned48
+            | DataType::Unsigned56 => None,
+        }
+    }
+
+    // === Convenience extractors ===
+
+    /// Try to extract a u8 value.
+    pub fn try_as_u8(&self) -> Option<u8> {
+        match self {
+            Self::Unsigned8(v) => Some(*v),
             _ => None,
         }
+    }
+
+    /// Try to extract a u16 value.
+    pub fn try_as_u16(&self) -> Option<u16> {
+        match self {
+            Self::Unsigned16(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Try to extract a u32 value.
+    pub fn try_as_u32(&self) -> Option<u32> {
+        match self {
+            Self::Unsigned32(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Try to extract a u64 value.
+    pub fn try_as_u64(&self) -> Option<u64> {
+        match self {
+            Self::Unsigned64(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Try to extract an i8 value.
+    pub fn try_as_i8(&self) -> Option<i8> {
+        match self {
+            Self::Integer8(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Try to extract an i16 value.
+    pub fn try_as_i16(&self) -> Option<i16> {
+        match self {
+            Self::Integer16(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Try to extract an i32 value.
+    pub fn try_as_i32(&self) -> Option<i32> {
+        match self {
+            Self::Integer32(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Try to extract a 24-bit signed integer value (stored as i32).
+    pub fn try_as_i24(&self) -> Option<i32> {
+        match self {
+            Self::Integer24(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Try to extract a 24-bit unsigned integer value (stored as u32).
+    pub fn try_as_u24(&self) -> Option<u32> {
+        match self {
+            Self::Unsigned24(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Try to extract an i64 value.
+    pub fn try_as_i64(&self) -> Option<i64> {
+        match self {
+            Self::Integer64(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Try to extract a bool value.
+    pub fn try_as_bool(&self) -> Option<bool> {
+        match self {
+            Self::Boolean(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Try to extract a f32 value.
+    pub fn try_as_f32(&self) -> Option<f32> {
+        match self {
+            Self::Real32(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Try to extract a f64 value.
+    pub fn try_as_f64(&self) -> Option<f64> {
+        match self {
+            Self::Real64(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    /// Try to extract a string reference.
+    pub fn try_as_str(&self) -> Option<&str> {
+        match self {
+            Self::VisibleString(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// Try to extract a byte slice.
+    pub fn try_as_bytes(&self) -> Option<&[u8]> {
+        match self {
+            Self::OctetString(b) | Self::Domain(b) => Some(b),
+            _ => None,
+        }
+    }
+
+    /// Check if this value is None (empty).
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
     }
 }
 
@@ -341,6 +583,7 @@ impl TryFrom<OdValue> for i32 {
     fn try_from(v: OdValue) -> Result<Self, Self::Error> {
         match v {
             OdValue::Integer32(v) => Ok(v),
+            OdValue::Integer24(v) => Ok(v),
             _ => Err(crate::error::OdError::TypeMismatch {
                 expected: DataType::Integer32,
                 actual: v.data_type().unwrap_or(DataType::Boolean),
@@ -380,6 +623,66 @@ pub trait CanDriver: Send {
     > + Send;
 }
 
+impl std::fmt::Display for OdValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::None => write!(f, "None"),
+            Self::Boolean(v) => write!(f, "{}", v),
+            Self::Integer8(v) => write!(f, "{}", v),
+            Self::Integer16(v) => write!(f, "{}", v),
+            Self::Integer24(v) => write!(f, "{}", v),
+            Self::Integer32(v) => write!(f, "{}", v),
+            Self::Integer64(v) => write!(f, "{}", v),
+            Self::Unsigned8(v) => write!(f, "{}", v),
+            Self::Unsigned16(v) => write!(f, "{}", v),
+            Self::Unsigned24(v) => write!(f, "{}", v),
+            Self::Unsigned32(v) => write!(f, "{}", v),
+            Self::Unsigned64(v) => write!(f, "{}", v),
+            Self::Real32(v) => write!(f, "{}", v),
+            Self::Real64(v) => write!(f, "{}", v),
+            Self::VisibleString(s) => write!(f, "\"{}\"", s),
+            Self::OctetString(b) => {
+                write!(f, "OctetString[{}]", b.len())
+            }
+            Self::Domain(b) => {
+                write!(f, "Domain[{}]", b.len())
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for DataType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Boolean => write!(f, "Boolean"),
+            Self::Integer8 => write!(f, "Integer8"),
+            Self::Integer16 => write!(f, "Integer16"),
+            Self::Integer24 => write!(f, "Integer24"),
+            Self::Integer32 => write!(f, "Integer32"),
+            Self::Integer40 => write!(f, "Integer40"),
+            Self::Integer48 => write!(f, "Integer48"),
+            Self::Integer56 => write!(f, "Integer56"),
+            Self::Integer64 => write!(f, "Integer64"),
+            Self::Unsigned8 => write!(f, "Unsigned8"),
+            Self::Unsigned16 => write!(f, "Unsigned16"),
+            Self::Unsigned24 => write!(f, "Unsigned24"),
+            Self::Unsigned32 => write!(f, "Unsigned32"),
+            Self::Unsigned40 => write!(f, "Unsigned40"),
+            Self::Unsigned48 => write!(f, "Unsigned48"),
+            Self::Unsigned56 => write!(f, "Unsigned56"),
+            Self::Unsigned64 => write!(f, "Unsigned64"),
+            Self::Real32 => write!(f, "Real32"),
+            Self::Real64 => write!(f, "Real64"),
+            Self::VisibleString => write!(f, "VisibleString"),
+            Self::OctetString => write!(f, "OctetString"),
+            Self::UnicodeString => write!(f, "UnicodeString"),
+            Self::TimeOfDay => write!(f, "TimeOfDay"),
+            Self::TimeDifference => write!(f, "TimeDifference"),
+            Self::Domain => write!(f, "Domain"),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -408,5 +711,73 @@ mod tests {
         let val = OdValue::Unsigned16(42);
         let result: Result<u32, _> = val.try_into();
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_data_type_byte_size() {
+        assert_eq!(DataType::Boolean.byte_size(), Some(1));
+        assert_eq!(DataType::Integer8.byte_size(), Some(1));
+        assert_eq!(DataType::Unsigned16.byte_size(), Some(2));
+        assert_eq!(DataType::Integer24.byte_size(), Some(3));
+        assert_eq!(DataType::Real32.byte_size(), Some(4));
+        assert_eq!(DataType::Integer64.byte_size(), Some(8));
+        assert_eq!(DataType::Real64.byte_size(), Some(8));
+
+        // Variable-length types return None
+        assert_eq!(DataType::VisibleString.byte_size(), None);
+        assert_eq!(DataType::Domain.byte_size(), None);
+        assert_eq!(DataType::OctetString.byte_size(), None);
+    }
+
+    #[test]
+    fn test_data_type_is_numeric() {
+        assert!(DataType::Unsigned32.is_numeric());
+        assert!(DataType::Real64.is_numeric());
+        assert!(DataType::Boolean.is_numeric());
+        assert!(!DataType::VisibleString.is_numeric());
+        assert!(!DataType::Domain.is_numeric());
+    }
+
+    #[test]
+    fn test_data_type_is_signed() {
+        assert!(DataType::Integer16.is_signed());
+        assert!(DataType::Integer64.is_signed());
+        assert!(!DataType::Unsigned16.is_signed());
+        assert!(!DataType::Boolean.is_signed());
+        assert!(!DataType::Real32.is_signed());
+    }
+
+    #[test]
+    fn test_od_value_try_as_convenience() {
+        let val = OdValue::Unsigned32(1234);
+        assert_eq!(val.try_as_u32(), Some(1234));
+        assert_eq!(val.try_as_u16(), None);
+        assert_eq!(val.try_as_str(), None);
+
+        let val = OdValue::VisibleString("hello".to_string());
+        assert_eq!(val.try_as_str(), Some("hello"));
+        assert_eq!(val.try_as_u32(), None);
+
+        let val = OdValue::Boolean(true);
+        assert_eq!(val.try_as_bool(), Some(true));
+
+        let val = OdValue::Real32(3.14);
+        assert!(val.try_as_f32().is_some());
+        assert_eq!(val.try_as_u32(), None);
+    }
+
+    #[test]
+    fn test_od_value_is_none() {
+        assert!(OdValue::None.is_none());
+        assert!(!OdValue::Unsigned8(0).is_none());
+    }
+
+    #[test]
+    fn test_od_value_try_as_bytes() {
+        let val = OdValue::Domain(vec![1, 2, 3]);
+        assert_eq!(val.try_as_bytes(), Some(&[1, 2, 3][..]));
+
+        let val = OdValue::Unsigned32(0);
+        assert_eq!(val.try_as_bytes(), None);
     }
 }

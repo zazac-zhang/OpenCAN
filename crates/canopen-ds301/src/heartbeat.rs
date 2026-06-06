@@ -211,11 +211,7 @@ impl SyncProducer {
 }
 
 /// PDO direction for SYNC triggering.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum PdoDirection {
-    Tpdo,
-    Rpdo,
-}
+pub use opencan_canopen_core::pdo::PdoDirection;
 
 /// SYNC consumer — tracks SYNC events and determines which PDOs to trigger.
 pub struct SyncConsumer {

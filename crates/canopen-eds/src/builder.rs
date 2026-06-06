@@ -60,6 +60,7 @@ pub fn build_od(eds: &EdsFile) -> ConcreteOd {
                 access,
                 name: entry.parameter_name.clone(),
                 value: default_value.clone().unwrap_or(OdValue::None),
+                default_value: default_value.clone(),
             });
         }
 
@@ -93,7 +94,8 @@ pub fn build_od(eds: &EdsFile) -> ConcreteOd {
                     data_type: sub_data_type,
                     access: sub_access,
                     name: sub_entry.parameter_name.clone(),
-                    value: sub_value,
+                    value: sub_value.clone(),
+                    default_value: Some(sub_value),
                 });
             }
         } else if entry.object_type != ObjectType::Var {
@@ -105,7 +107,8 @@ pub fn build_od(eds: &EdsFile) -> ConcreteOd {
                 data_type,
                 access,
                 name: entry.parameter_name.clone(),
-                value: default_value.unwrap_or(OdValue::None),
+                value: default_value.clone().unwrap_or(OdValue::None),
+                default_value,
             });
         }
     }

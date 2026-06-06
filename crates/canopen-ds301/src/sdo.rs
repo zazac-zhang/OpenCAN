@@ -270,36 +270,10 @@ impl<C: CanDriver> SdoClient<C> {
 }
 
 /// Get human-readable SDO abort reason.
+///
+/// Delegates to [`opencan_canopen_core::sdo_abort::abort_reason`].
 pub fn sdo_abort_reason(code: u32) -> &'static str {
-    match code {
-        0x0503_0000 => "Toggle bit not alternated",
-        0x0504_0000 => "SDO protocol timed out",
-        0x0504_0001 => "Command specifier not valid or unknown",
-        0x0504_0002 => "Invalid block size",
-        0x0504_0003 => "Invalid sequence number",
-        0x0504_0004 => "CRC error",
-        0x0504_0005 => "Out of memory",
-        0x0601_0000 => "Unsupported access to an object",
-        0x0601_0001 => "Attempt to read a write only object",
-        0x0601_0002 => "Attempt to write a read only object",
-        0x0602_0000 => "Object does not exist",
-        0x0604_0041 => "Object cannot be mapped to the PDO",
-        0x0604_0042 => "Number and length of objects exceed PDO",
-        0x0604_0043 => "General parameter incompatibility",
-        0x0606_0000 => "Access failed due to hardware error",
-        0x0607_0010 => "Data type does not match, length too high",
-        0x0607_0012 => "Data type does not match, length too low",
-        0x0609_0011 => "Sub-index does not exist",
-        0x0609_0030 => "Value range of parameter exceeded",
-        0x0609_0031 => "Value of parameter written too high",
-        0x0609_0032 => "Value of parameter written too low",
-        0x0609_0036 => "Maximum value is less than minimum value",
-        0x0800_0000 => "General error",
-        0x0800_0020 => "Data cannot be transferred or stored",
-        0x0800_0021 => "Data cannot be transferred because of local control",
-        0x0800_0022 => "Data cannot be transferred because of device state",
-        _ => "Unknown abort code",
-    }
+    opencan_canopen_core::sdo_abort::abort_reason(code)
 }
 
 #[cfg(test)]
