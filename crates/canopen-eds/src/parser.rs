@@ -75,11 +75,26 @@ fn process_section(
         let sub_number = props.get("SubNumber")
             .and_then(|s| s.parse::<u8>().ok());
 
+        let data_type: Option<u16> = props.get("DataType")
+            .and_then(|s| {
+                if s.starts_with("0x") || s.starts_with("0X") {
+                    u16::from_str_radix(&s[2..], 16).ok()
+                } else {
+                    s.parse::<u16>().ok()
+                }
+            });
+
+        let access_type = props.get("AccessType").cloned();
+        let default_value = props.get("DefaultValue").cloned();
+
         entries.insert(index, EdsEntry {
             index,
             parameter_name,
             object_type,
             sub_number,
+            data_type,
+            access_type,
+            default_value,
         });
     }
 

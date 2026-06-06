@@ -5,6 +5,7 @@
 pub mod error;
 pub mod frame;
 pub mod od;
+pub mod concrete_od;
 
 #[cfg(feature = "testing")]
 pub mod testing;

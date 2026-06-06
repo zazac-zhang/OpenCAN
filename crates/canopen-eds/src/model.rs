@@ -16,6 +16,9 @@ pub struct EdsEntry {
     pub parameter_name: String,
     pub object_type: ObjectType,
     pub sub_number: Option<u8>,
+    pub data_type: Option<u16>,
+    pub access_type: Option<String>,
+    pub default_value: Option<String>,
 }
 
 /// EDS sub-entry.
