@@ -19,16 +19,38 @@ A CAN/CANOpen debugging tool with GUI, written in pure Rust.
 OpenCAN (Cargo Workspace)
 │
 ├── crates/
-│   ├── can-traits/             ← Unified CAN trait abstraction
-│   ├── can-socketcan/          ← Linux SocketCAN backend
-│   ├── can-kvaser/             ← Kvaser CANlib backend
-│   ├── can-pcan/               ← Peak PCAN backend
-│   ├── can-zlg/                ← ZLG backend
-│   ├── canopen-core/           ← Core traits + Object Dictionary [no_std]
-│   ├── canopen-ds301/          ← DS301 protocol (NMT/SDO/PDO/EMCY/Heartbeat/SYNC)
-│   ├── canopen-ds402/          ← DS402 motion control
-│   ├── canopen-eds/            ← EDS file parser + OD builder
-│   └── gui/                    ← iced GUI application
+│   ├── can-traits/             ← Unified CAN trait abstraction + hardware backends
+│   │   └── src/
+│   │       ├── socketcan.rs    ← Linux SocketCAN backend (feature-gated)
+│   │       ├── kvaser.rs       ← Kvaser CANlib backend (stub)
+│   │       ├── pcan.rs         ← Peak PCAN backend (stub)
+│   │       └── zlg.rs          ← ZLG backend (stub)
+│   ├── canopen-core/           ← Core traits, frames, Object Dictionary, EDS parser
+│   │   └── src/
+│   │       ├── eds/            ← EDS file parser + OD builder (feature: eds)
+│   │       ├── frame.rs        ← CANOpen frame types
+│   │       ├── od.rs           ← Object Dictionary trait + ConcreteOd
+│   │       └── testing.rs      ← MockCanDriver for unit tests
+│   ├── canopen-ds301/          ← DS301 protocol stack + DS402
+│   │   └── src/
+│   │       ├── ds402/          ← DS402 state machine + motion control modes
+│   │       │   ├── state_machine.rs
+│   │       │   ├── control.rs
+│   │       │   └── modes/      ← CSP, CST, CSV, PP, PV, PT, Homing
+│   │       ├── stack.rs        ← Main protocol loop
+│   │       ├── sdo.rs          ← SDO client (expedited + segmented)
+│   │       ├── sdo_server.rs   ← SDO server
+│   │       ├── adapter.rs      ← CanDriverAdapter bridge
+│   │       ├── nmt.rs          ← NMT management
+│   │       ├── heartbeat.rs    ← Heartbeat producer/consumer
+│   │       ├── emcy.rs         ← Emergency messages
+│   │       ├── pdo.rs          ← PDO processing
+│   │       └── pdo_config.rs   ← PDO configuration
+│   └── gui/                    ← iced GUI application (binary: opencan)
+│       └── src/
+│           ├── backend/        ← Backend communication (mpsc channels)
+│           ├── state/          ← Application state modules
+│           └── views/          ← UI views (CAN + CANOpen pages)
 └── docs/
     └── spark/                  ← Design specifications
 ```
@@ -85,15 +107,10 @@ cargo build -p opencan-gui --features zlg
 
 | Crate | Description | Tests |
 |-------|-------------|-------|
-| `canopen-core` | Core traits, frames, Object Dictionary, MockCanDriver | 15 |
-| `canopen-ds301` | DS301 protocol stack (SDO, NMT, Heartbeat, EMCY, PDO, SYNC) | 17+8 |
-| `canopen-ds402` | DS402 state machine + motion control device | 3 |
-| `canopen-eds` | EDS parser + Object Dictionary builder | 8 |
-| `can-traits` | CAN bus trait abstraction (CanBus, CanBusFactory) | — |
-| `can-socketcan` | Linux SocketCAN backend | — |
-| `gui` | iced GUI application | — |
-
-**Total: 53 tests, 0 clippy warnings**
+| `canopen-core` | Core traits, frames, Object Dictionary, EDS parser, MockCanDriver | 15 |
+| `canopen-ds301` | DS301 protocol stack + DS402 (SDO, NMT, Heartbeat, EMCY, PDO, SYNC) | 17+8 |
+| `can-traits` | CAN bus trait abstraction (CanBus, CanBusFactory) + hardware backends | — |
+| `opencan-gui` | iced GUI application | — |
 
 ## Protocol Stack Usage
 
@@ -124,8 +141,8 @@ async fn main() {
 ## EDS → Object Dictionary
 
 ```rust
-use opencan_canopen_eds::parser::parse_eds;
-use opencan_canopen_eds::builder::build_od;
+use opencan_canopen_core::eds::parser::parse_eds;
+use opencan_canopen_core::eds::builder::build_od;
 use opencan_canopen_core::od::ObjectDictionary;
 
 let eds_content = std::fs::read_to_string("device.eds").unwrap();
@@ -137,13 +154,27 @@ let device_type = od.read(0x1000, 0).unwrap();
 
 ## GUI Pages
 
+### CAN Layer
+
+| Page | Description |
+|------|-------------|
+| **Frame Monitor** | Real-time CAN frame capture with Classic/FD support |
+| **Bus Statistics** | Bus load, error counters, throughput metrics |
+| **Error Frames** | CAN error frame analysis and logging |
+
+### CANOpen Layer
+
 | Page | Description |
 |------|-------------|
 | **Network Overview** | Node list, NMT control, status cards |
 | **Node Detail** | SDO read/write, OD browser, quick reads |
-| **DS402 Panel** | State machine, enable sequence, position/velocity control |
+| **DS402 Panel** | State machine, enable sequence, motion control |
 | **PDO Monitor** | Real-time PDO table with type, node, data |
-| **CAN Log** | Frame log with text search, type filter, clear |
+| **SDO Editor** | SDO read/write with object dictionary navigation |
+| **EMCY Monitor** | Emergency message capture and decoding |
+| **Heartbeat** | Node heartbeat status monitoring |
+| **SYNC** | SYNC producer configuration and status |
+| **Trend Chart** | Real-time data visualization with Canvas |
 
 ## Hardware Backends
 
