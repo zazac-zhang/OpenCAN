@@ -16,7 +16,7 @@ use opencan_canopen_core::frame::{
 use opencan_canopen_core::od::{DataType, OdValue};
 use opencan_canopen_core::concrete_od::ConcreteOd;
 
-use crate::heartbeat::{HeartbeatConsumer, HeartbeatProducer, SyncProducer};
+use crate::heartbeat::{HeartbeatConsumer, HeartbeatProducer, SyncProducer, SyncConsumer, PdoDirection};
 use crate::emcy::EmergencyHandler;
 use crate::sdo::sdo_abort_reason;
 use crate::sdo_server::SdoServer;
@@ -34,6 +34,8 @@ pub enum CanEvent {
     PdoReceived { pdo: PdoFrame },
     /// SDO operation completed.
     SdoComplete { node_id: u8, result: Result<Vec<u8>, String> },
+    /// SYNC received — PDO should be transmitted.
+    SyncTriggered { pdo_number: u8, direction: PdoDirection },
 }
 
 /// Main CANOpen protocol stack.
@@ -51,6 +53,8 @@ pub struct CanopenStack<C: CanDriver> {
     od: Option<ConcreteOd>,
     /// SDO Server (responds to incoming SDO requests)
     sdo_server: Option<SdoServer>,
+    /// SYNC Consumer (tracks SYNC and triggers synchronous PDOs)
+    sync_consumer: SyncConsumer,
 }
 
 impl<C: CanDriver> CanopenStack<C> {
@@ -66,6 +70,7 @@ impl<C: CanDriver> CanopenStack<C> {
             heartbeat_producer: None,
             od: None,
             sdo_server: None,
+            sync_consumer: SyncConsumer::new(),
         }
     }
 
@@ -108,6 +113,21 @@ impl<C: CanDriver> CanopenStack<C> {
         self.sdo_server.as_ref()
     }
 
+    /// Register a PDO for synchronous triggering.
+    pub fn register_sync_pdo(&mut self, pdo_number: u8, direction: PdoDirection, transmission_type: u8) {
+        self.sync_consumer.register_pdo(pdo_number, direction, transmission_type);
+    }
+
+    /// Unregister a synchronous PDO.
+    pub fn unregister_sync_pdo(&mut self, pdo_number: u8, direction: PdoDirection) {
+        self.sync_consumer.unregister_pdo(pdo_number, direction);
+    }
+
+    /// Get the SYNC consumer.
+    pub fn sync_consumer(&self) -> &SyncConsumer {
+        &self.sync_consumer
+    }
+
     // === Frame Processing ===
 
     /// Process one CAN frame — call this in a loop for incoming frames.
@@ -148,7 +168,10 @@ impl<C: CanDriver> CanopenStack<C> {
                 // SDO responses are handled by SDO operations directly
             }
             FrameClass::Sync => {
-                // TODO: Handle SYNC
+                let triggered = self.sync_consumer.on_sync();
+                for (pdo_num, dir) in triggered {
+                    events.push(CanEvent::SyncTriggered { pdo_number: pdo_num, direction: dir });
+                }
             }
             FrameClass::Timestamp => {
                 // TODO: Handle TIME

@@ -15,6 +15,6 @@ pub mod stack;
 pub use sdo::SdoClient;
 pub use sdo_server::SdoServer;
 pub use nmt::NmtMaster;
-pub use heartbeat::{HeartbeatConsumer, HeartbeatProducer, SyncProducer};
+pub use heartbeat::{HeartbeatConsumer, HeartbeatProducer, SyncProducer, SyncConsumer, PdoDirection};
 pub use adapter::CanDriverAdapter;
 pub use stack::{CanopenStack, CanEvent};

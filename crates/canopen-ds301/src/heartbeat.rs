@@ -204,3 +204,113 @@ impl SyncProducer {
         self.counter = 0;
     }
 }
+
+/// PDO direction for SYNC triggering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PdoDirection {
+    Tpdo,
+    Rpdo,
+}
+
+/// SYNC consumer — tracks SYNC events and determines which PDOs to trigger.
+pub struct SyncConsumer {
+    sync_count: u32,
+    sync_pdos: HashMap<(u8, PdoDirection), u8>,
+}
+
+impl SyncConsumer {
+    pub fn new() -> Self {
+        Self {
+            sync_count: 0,
+            sync_pdos: HashMap::new(),
+        }
+    }
+
+    /// Register a PDO for synchronous triggering.
+    pub fn register_pdo(&mut self, pdo_number: u8, direction: PdoDirection, transmission_type: u8) {
+        self.sync_pdos.insert((pdo_number, direction), transmission_type);
+    }
+
+    pub fn unregister_pdo(&mut self, pdo_number: u8, direction: PdoDirection) {
+        self.sync_pdos.remove(&(pdo_number, direction));
+    }
+
+    /// Process a received SYNC. Returns PDOs that should be triggered.
+    pub fn on_sync(&mut self) -> Vec<(u8, PdoDirection)> {
+        self.sync_count = self.sync_count.wrapping_add(1);
+        let mut triggered = Vec::new();
+        for (&(pdo_num, dir), &trans_type) in &self.sync_pdos {
+            match trans_type {
+                1 => triggered.push((pdo_num, dir)),
+                2..=240 => {
+                    if self.sync_count.is_multiple_of(trans_type as u32) {
+                        triggered.push((pdo_num, dir));
+                    }
+                }
+                _ => {}
+            }
+        }
+        triggered
+    }
+
+    pub fn sync_count(&self) -> u32 { self.sync_count }
+    pub fn reset(&mut self) { self.sync_count = 0; }
+    pub fn registered_count(&self) -> usize { self.sync_pdos.len() }
+}
+
+impl Default for SyncConsumer {
+    fn default() -> Self { Self::new() }
+}
+
+#[cfg(test)]
+mod sync_tests {
+    use super::*;
+
+    #[test]
+    fn test_sync_type1() {
+        let mut c = SyncConsumer::new();
+        c.register_pdo(1, PdoDirection::Tpdo, 1);
+        assert_eq!(c.on_sync().len(), 1);
+        assert_eq!(c.on_sync().len(), 1);
+    }
+
+    #[test]
+    fn test_sync_type2() {
+        let mut c = SyncConsumer::new();
+        c.register_pdo(1, PdoDirection::Tpdo, 2);
+        assert!(c.on_sync().is_empty());
+        assert_eq!(c.on_sync().len(), 1);
+        assert!(c.on_sync().is_empty());
+        assert_eq!(c.on_sync().len(), 1);
+    }
+
+    #[test]
+    fn test_sync_multiple_pdos() {
+        let mut c = SyncConsumer::new();
+        c.register_pdo(1, PdoDirection::Tpdo, 1);
+        c.register_pdo(2, PdoDirection::Tpdo, 2);
+        assert_eq!(c.on_sync().len(), 1); // SYNC 1: only PDO1
+        assert_eq!(c.on_sync().len(), 2); // SYNC 2: both
+    }
+
+    #[test]
+    fn test_sync_reset() {
+        let mut c = SyncConsumer::new();
+        c.register_pdo(1, PdoDirection::Tpdo, 3);
+        c.on_sync(); c.on_sync();
+        assert_eq!(c.sync_count(), 2);
+        c.reset();
+        assert_eq!(c.sync_count(), 0);
+        assert!(c.on_sync().is_empty()); // count=1, need 3
+    }
+
+    #[test]
+    fn test_sync_unregister() {
+        let mut c = SyncConsumer::new();
+        c.register_pdo(1, PdoDirection::Tpdo, 1);
+        assert_eq!(c.registered_count(), 1);
+        c.unregister_pdo(1, PdoDirection::Tpdo);
+        assert_eq!(c.registered_count(), 0);
+        assert!(c.on_sync().is_empty());
+    }
+}
