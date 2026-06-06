@@ -4,6 +4,7 @@ use super::tab::{Tab, PrimaryTab};
 use super::node::Ds402Mode;
 use super::connection::CanBackend;
 use super::log::LogEntry;
+use super::sdo::SdoDataType;
 
 /// Application messages.
 #[derive(Debug, Clone)]
@@ -76,7 +77,7 @@ pub enum Message {
     /// SDO value changed.
     SdoValueChanged(String),
     /// SDO data type changed.
-    SdoDataTypeChanged(String),
+    SdoDataTypeChanged(SdoDataType),
     /// Execute SDO read.
     SdoRead,
     /// Execute SDO write.
@@ -141,6 +142,18 @@ pub enum Message {
     LogFilterToggleHeartbeat,
     /// Set node ID filter.
     LogFilterNodeId(Option<u8>),
+
+    // === SYNC ===
+    /// Start SYNC producer.
+    SyncStartProducer(String),
+    /// Stop SYNC producer.
+    SyncStopProducer,
+    /// SYNC period changed.
+    SyncPeriodChanged(String),
+
+    // === PDO ===
+    /// Read PDO mapping for a node.
+    ReadPdoMapping(u8),
 
     // === System ===
     /// Tick (polls backend events).

@@ -12,7 +12,7 @@ path = "src/main.rs"
 [dependencies]
 opencan-can-traits = { path = "../can-traits" }
 opencan-canopen-core = { path = "../canopen-core" }
-opencan-canopen-ds301 = { path = "../canopen-ds301" }
+opencan-canopen-ds301 = { path = "../canopen-ds301", features = ["ds402"] }
 opencan-canopen-ds402 = { path = "../canopen-ds402" }
 opencan-canopen-eds = { path = "../canopen-eds", optional = true }
 opencan-can-socketcan = { path = "../can-socketcan", optional = true }
@@ -32,4 +32,4 @@ socketcan = ["dep:opencan-can-socketcan"]
 kvaser = ["dep:opencan-can-kvaser"]
 pcan = ["dep:opencan-can-pcan"]
 zlg = ["dep:opencan-can-zlg"]
-eds = ["dep:opencan-canopen-eds"]
+eds = ["opencan-canopen-core/eds"]

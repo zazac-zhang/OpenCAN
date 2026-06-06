@@ -248,6 +248,17 @@ impl App {
             }
             Message::Ds402ModeChanged(mode) => {
                 self.ds402_state.selected_mode = mode;
+                // Send mode to backend
+                let node_id = self.selected_node.unwrap_or(1);
+                if let Some(ref backend) = self.backend {
+                    let (tx, _rx) = tokio::sync::oneshot::channel();
+                    backend.send(BackendCommand::Ds402SetMode {
+                        node_id,
+                        mode: mode.mode_value(),
+                        respond: tx,
+                    });
+                    self.status_message = format!("DS402 mode changed to {}", mode.name());
+                }
                 iced::Task::none()
             }
             Message::Ds402ToggleAutoRefresh => {
@@ -294,6 +305,36 @@ impl App {
                 self.log_filter.node_id_filter = node_id;
                 iced::Task::none()
             }
+            Message::SyncStartProducer(period_str) => {
+                let period: u32 = period_str.parse().unwrap_or(1000);
+                self.sync_status.start_producer(period);
+                self.status_message = format!("SYNC producer started ({} μs)", period);
+                iced::Task::none()
+            }
+            Message::SyncStopProducer => {
+                self.sync_status.stop_producer();
+                self.status_message = "SYNC producer stopped".to_string();
+                iced::Task::none()
+            }
+            Message::SyncPeriodChanged(period_str) => {
+                if let Ok(period) = period_str.parse::<u32>() {
+                    self.sync_status.producer_period_us = period;
+                }
+                iced::Task::none()
+            }
+            Message::ReadPdoMapping(node_id) => {
+                if let Some(ref backend) = self.backend {
+                    // Read TPDO1 mapping (0x1A00)
+                    let (tx, _rx) = tokio::sync::oneshot::channel();
+                    backend.send(BackendCommand::ReadPdoMapping {
+                        node_id,
+                        pdo_index: 1,
+                        respond: tx,
+                    });
+                    self.status_message = format!("Reading PDO mapping for node {}...", node_id);
+                }
+                iced::Task::none()
+            }
             Message::ShowAbout => {
                 self.status_message = "OpenCAN v0.1.0 - CAN/CANOpen Debug Tool".to_string();
                 iced::Task::none()
@@ -308,9 +349,32 @@ impl App {
                 events.push(event);
             }
         }
+
+        // Count frames before processing
+        let frames_before = self.can_log.len();
+
         for event in events {
             self.handle_backend_event(event);
         }
+
+        // Update bus statistics
+        let frames_after = self.can_log.len();
+        let new_frames = frames_after - frames_before;
+        if new_frames > 0 {
+            // Frame rate is approximate (ticks every 50ms)
+            let instant_rate = (new_frames as f32 * 20.0) as u32; // 20 ticks per second
+            self.bus_stats.update_frame_rate(instant_rate);
+
+            // Estimate bus load (rough approximation)
+            // Each standard CAN frame is ~130 bits at 500kbps = ~0.26ms
+            let load = (new_frames as f32 * 0.26 * 20.0).min(100.0);
+            self.bus_stats.update_bus_load(load);
+        } else {
+            // No frames, update with 0
+            self.bus_stats.update_frame_rate(0);
+            self.bus_stats.update_bus_load(0.0);
+        }
+
         iced::Task::none()
     }
 
@@ -418,16 +482,79 @@ impl App {
                     node.nmt_state = NmtState::PreOperational;
                     self.nodes.push(node);
                 }
-                self.status_message = format!("Found {} nodes: {:?}", nodes.len(), nodes);
+                self.status_message = format!("Found {} nodes", nodes.len());
+
+                // Auto-read node info for each discovered node
+                if let Some(ref backend) = self.backend {
+                    for &id in &nodes {
+                        // Read Device Type (0x1000:0)
+                        let (tx1, _rx1) = tokio::sync::oneshot::channel();
+                        backend.send(BackendCommand::SdoUpload {
+                            node_id: id, index: 0x1000, subindex: 0, respond: tx1
+                        });
+
+                        // Read Vendor ID (0x1018:1)
+                        let (tx2, _rx2) = tokio::sync::oneshot::channel();
+                        backend.send(BackendCommand::SdoUpload {
+                            node_id: id, index: 0x1018, subindex: 1, respond: tx2
+                        });
+
+                        // Read Heartbeat Producer Period (0x1017:0)
+                        let (tx3, _rx3) = tokio::sync::oneshot::channel();
+                        backend.send(BackendCommand::SdoUpload {
+                            node_id: id, index: 0x1017, subindex: 0, respond: tx3
+                        });
+                    }
+                }
             }
             BackendEvent::SdoResult { node_id, index, subindex, result } => {
                 match result {
                     Ok(data) => {
                         let hex = helpers::bytes_to_hex(&data);
                         self.sdo_value = hex.clone();
+
+                        // Store in OD cache and update node info
                         if let Some(node) = self.get_node_mut(node_id) {
                             node.set_od(index, subindex, crate::state::OdEntry::new(hex.clone()));
+
+                            // Auto-update node info fields
+                            match (index, subindex) {
+                                (0x1000, 0) => {
+                                    // Device Type
+                                    if data.len() >= 4 {
+                                        node.device_type = Some(u32::from_le_bytes([
+                                            data[0], data[1], data[2], data[3]
+                                        ]));
+                                    }
+                                }
+                                (0x1018, 1) => {
+                                    // Vendor ID
+                                    if data.len() >= 4 {
+                                        node.vendor_id = Some(u32::from_le_bytes([
+                                            data[0], data[1], data[2], data[3]
+                                        ]));
+                                    }
+                                }
+                                (0x1017, 0) => {
+                                    // Heartbeat Producer Period
+                                    if data.len() >= 2 {
+                                        node.heartbeat_period = Some(u16::from_le_bytes([
+                                            data[0], data[1]
+                                        ]) as u32);
+                                    }
+                                }
+                                (0x6041, 0) => {
+                                    // DS402 Status Word
+                                    if data.len() >= 2 {
+                                        node.ds402.status_word = u16::from_le_bytes([
+                                            data[0], data[1]
+                                        ]);
+                                    }
+                                }
+                                _ => {}
+                            }
                         }
+
                         self.status_message = format!("SDO {:04X}:{:02X} = {}", index, subindex, hex);
                         self.sdo_history.push(crate::state::SdoHistoryEntry::success(
                             node_id, index, subindex, hex, true

@@ -8,6 +8,7 @@ mod bus;
 mod ds402;
 mod protocol;
 mod message;
+mod sdo;
 
 // Re-export all types
 pub use tab::{Tab, PrimaryTab};
@@ -20,6 +21,7 @@ pub use log::{LogEntry, LogFilter, LogRecorder, Direction};
 pub use bus::{BusStatistics, ErrorFrame, ErrorType};
 pub use ds402::Ds402PanelState;
 pub use protocol::{EmcyEntry, HeartbeatStatus, SyncStatus};
+pub use sdo::SdoDataType;
 pub use message::Message;
 
 /// Application state.
@@ -57,7 +59,7 @@ pub struct App {
     pub sdo_index: String,
     pub sdo_subindex: String,
     pub sdo_value: String,
-    pub sdo_data_type: String,
+    pub sdo_data_type: SdoDataType,
     pub sdo_history: Vec<SdoHistoryEntry>,
 
     // DS402 state
@@ -144,7 +146,7 @@ impl Default for App {
             sdo_index: String::new(),
             sdo_subindex: "0".to_string(),
             sdo_value: String::new(),
-            sdo_data_type: "UNS32".to_string(),
+            sdo_data_type: SdoDataType::Unsigned32,
             sdo_history: Vec::new(),
 
             // DS402 state

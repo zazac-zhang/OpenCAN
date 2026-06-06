@@ -11,6 +11,8 @@ opencan-can-traits = { path = "../can-traits" }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 
+[features]
+ds402 = []
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util", "time"] }
-opencan-canopen-ds402 = { path = "../canopen-ds402" }

@@ -9,6 +9,10 @@ use crate::sdo::SdoClient;
 use opencan_canopen_core::CanDriver;
 use opencan_canopen_core::CanOpenError;
 use opencan_canopen_core::od::OdValue;
+use opencan_canopen_core::pdo::{PdoMapping, pdo_comm_index, pdo_map_index};
+
+// Re-export core PDO utilities for downstream consumers
+pub use opencan_canopen_core::pdo::validate_mapping;
 
 /// PDO communication parameters (0x1400/0x1800 + pdo_number - 1).
 #[derive(Debug, Clone)]
@@ -21,48 +25,6 @@ pub struct PdoCommParams {
     pub inhibit_time: u16,
     /// Event timer in ms (0 = not used)
     pub event_timer: u16,
-}
-
-/// PDO mapping entry (index:16 + subindex:8 + bit_length:8).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PdoMappingEntry {
-    pub index: u16,
-    pub subindex: u8,
-    pub bit_length: u8,
-}
-
-impl PdoMappingEntry {
-    /// Encode as a 32-bit value for OD storage.
-    pub fn to_u32(&self) -> u32 {
-        ((self.index as u32) << 16) | ((self.subindex as u32) << 8) | (self.bit_length as u32)
-    }
-
-    /// Decode from a 32-bit OD value.
-    pub fn from_u32(val: u32) -> Self {
-        Self {
-            index: ((val >> 16) & 0xFFFF) as u16,
-            subindex: ((val >> 8) & 0xFF) as u8,
-            bit_length: (val & 0xFF) as u8,
-        }
-    }
-}
-
-/// Get the OD index for PDO communication parameters.
-pub fn pdo_comm_index(pdo_number: u8, direction: PdoDirection) -> Option<u16> {
-    match (pdo_number, direction) {
-        (1..=4, PdoDirection::Rpdo) => Some(0x1400 + (pdo_number - 1) as u16),
-        (1..=4, PdoDirection::Tpdo) => Some(0x1800 + (pdo_number - 1) as u16),
-        _ => None,
-    }
-}
-
-/// Get the OD index for PDO mapping parameters.
-pub fn pdo_map_index(pdo_number: u8, direction: PdoDirection) -> Option<u16> {
-    match (pdo_number, direction) {
-        (1..=4, PdoDirection::Rpdo) => Some(0x1600 + (pdo_number - 1) as u16),
-        (1..=4, PdoDirection::Tpdo) => Some(0x1A00 + (pdo_number - 1) as u16),
-        _ => None,
-    }
 }
 
 /// PDO configuration manager — reads/writes PDO config via SDO.
@@ -132,7 +94,7 @@ impl<'a, C: CanDriver> PdoConfigManager<'a, C> {
         node_id: u8,
         pdo_number: u8,
         direction: PdoDirection,
-    ) -> Result<Vec<PdoMappingEntry>, CanOpenError> {
+    ) -> Result<Vec<PdoMapping>, CanOpenError> {
         let base = pdo_map_index(pdo_number, direction)
             .ok_or_else(|| CanOpenError::Protocol(format!("Invalid PDO number: {}", pdo_number)))?;
 
@@ -158,7 +120,7 @@ impl<'a, C: CanDriver> PdoConfigManager<'a, C> {
                     )));
                 }
             };
-            entries.push(PdoMappingEntry::from_u32(val));
+            entries.push(PdoMapping::from_u32(val));
         }
 
         Ok(entries)
@@ -172,7 +134,7 @@ impl<'a, C: CanDriver> PdoConfigManager<'a, C> {
         node_id: u8,
         pdo_number: u8,
         direction: PdoDirection,
-        mappings: &[PdoMappingEntry],
+        mappings: &[PdoMapping],
     ) -> Result<(), CanOpenError> {
         let base = pdo_map_index(pdo_number, direction)
             .ok_or_else(|| CanOpenError::Protocol(format!("Invalid PDO number: {}", pdo_number)))?;
@@ -203,39 +165,6 @@ impl<'a, C: CanDriver> PdoConfigManager<'a, C> {
     }
 }
 
-/// Validate PDO mapping entries (GUI layer helper).
-///
-/// Returns Ok(()) if valid, Err(description) if invalid.
-pub fn validate_mapping(mappings: &[PdoMappingEntry]) -> Result<(), String> {
-    if mappings.is_empty() {
-        return Ok(());
-    }
-
-    // Total bit length must be ≤ 64
-    let total_bits: u16 = mappings.iter().map(|m| m.bit_length as u16).sum();
-    if total_bits > 64 {
-        return Err(format!(
-            "Total bit length {} exceeds maximum 64 bits",
-            total_bits
-        ));
-    }
-
-    // Each entry's bit length should be 1, 2, 4, 8, 16, 32, or 64
-    for (i, entry) in mappings.iter().enumerate() {
-        if entry.bit_length == 0 {
-            return Err(format!("Mapping entry {} has zero bit length", i));
-        }
-        if !matches!(entry.bit_length, 1 | 2 | 4 | 8 | 16 | 32 | 64) {
-            return Err(format!(
-                "Mapping entry {} has invalid bit length {} (must be 1, 2, 4, 8, 16, 32, or 64)",
-                i, entry.bit_length
-            ));
-        }
-    }
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -260,30 +189,18 @@ mod tests {
 
     #[test]
     fn test_mapping_entry_roundtrip() {
-        let entry = PdoMappingEntry {
-            index: 0x6041,
-            subindex: 0,
-            bit_length: 16,
-        };
+        let entry = PdoMapping::new(0x6041, 0, 16);
         let val = entry.to_u32();
         assert_eq!(val, 0x60410010);
-        let decoded = PdoMappingEntry::from_u32(val);
+        let decoded = PdoMapping::from_u32(val);
         assert_eq!(decoded, entry);
     }
 
     #[test]
     fn test_validate_mapping_valid() {
         let mappings = vec![
-            PdoMappingEntry {
-                index: 0x6041,
-                subindex: 0,
-                bit_length: 16,
-            },
-            PdoMappingEntry {
-                index: 0x6064,
-                subindex: 0,
-                bit_length: 32,
-            },
+            PdoMapping::new(0x6041, 0, 16),
+            PdoMapping::new(0x6064, 0, 32),
         ];
         assert!(validate_mapping(&mappings).is_ok());
     }
@@ -291,42 +208,22 @@ mod tests {
     #[test]
     fn test_validate_mapping_too_large() {
         let mappings = vec![
-            PdoMappingEntry {
-                index: 0x6041,
-                subindex: 0,
-                bit_length: 32,
-            },
-            PdoMappingEntry {
-                index: 0x6064,
-                subindex: 0,
-                bit_length: 32,
-            },
-            PdoMappingEntry {
-                index: 0x606C,
-                subindex: 0,
-                bit_length: 8,
-            },
+            PdoMapping::new(0x6041, 0, 32),
+            PdoMapping::new(0x6064, 0, 32),
+            PdoMapping::new(0x606C, 0, 8),
         ];
         assert!(validate_mapping(&mappings).is_err());
     }
 
     #[test]
     fn test_validate_mapping_invalid_bit_length() {
-        let mappings = vec![PdoMappingEntry {
-            index: 0x6041,
-            subindex: 0,
-            bit_length: 3,
-        }];
+        let mappings = vec![PdoMapping::new(0x6041, 0, 3)];
         assert!(validate_mapping(&mappings).is_err());
     }
 
     #[test]
     fn test_validate_mapping_zero_length() {
-        let mappings = vec![PdoMappingEntry {
-            index: 0x6041,
-            subindex: 0,
-            bit_length: 0,
-        }];
+        let mappings = vec![PdoMapping::new(0x6041, 0, 0)];
         assert!(validate_mapping(&mappings).is_err());
     }
 }

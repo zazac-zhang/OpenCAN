@@ -7,8 +7,8 @@ use opencan_canopen_core::frame::CanOpenFrame;
 use opencan_canopen_core::od::OdValue;
 use opencan_canopen_core::testing::MockCanDriver;
 use opencan_canopen_ds301::SdoClient;
-use opencan_canopen_ds402::control::Ds402Device;
-use opencan_canopen_ds402::state_machine::{Ds402State, OperationMode};
+use opencan_canopen_ds301::ds402::control::Ds402Device;
+use opencan_canopen_ds301::ds402::state_machine::{Ds402State, OperationMode};
 use std::time::Duration;
 
 /// Helper: create an expedited SDO upload response for u16 value (cs=2, expedited, 4 bytes).

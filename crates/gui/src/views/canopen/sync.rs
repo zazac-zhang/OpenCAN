@@ -1,6 +1,6 @@
 //! Sync management view.
 
-use iced::widget::{column, container, horizontal_rule, row, scrollable, text};
+use iced::widget::{button, column, container, horizontal_rule, row, scrollable, text, text_input};
 use iced::{Element, Length};
 use crate::state::{App, Message};
 
@@ -22,13 +22,28 @@ pub fn sync_management(app: &App) -> Element<'_, Message> {
         ].spacing(8)
     );
 
+    // Period configuration
+    content = content.push(
+        row![
+            text("Period (μs):").size(11),
+            text_input("1000", &sync.producer_period_us.to_string())
+                .on_input(Message::SyncPeriodChanged)
+                .width(100),
+            text(format!("({:.1} ms)", sync.period_ms())).size(10),
+            text(format!("Freq: {}", sync.frequency_str())).size(10),
+        ].spacing(4)
+    );
+
+    // Control buttons
     if sync.producer_enabled {
         content = content.push(
-            row![
-                text(format!("Period: {} μs", sync.producer_period_us)).size(12),
-                text(format!("({:.1} ms)", sync.period_ms())).size(12),
-                text(format!("Frequency: {}", sync.frequency_str())).size(12),
-            ].spacing(8)
+            button(text("Stop SYNC Producer").size(12))
+                .on_press(Message::SyncStopProducer)
+        );
+    } else {
+        content = content.push(
+            button(text("Start SYNC Producer").size(12))
+                .on_press(Message::SyncStartProducer(sync.producer_period_us.to_string()))
         );
     }
 
@@ -78,6 +93,16 @@ pub fn sync_management(app: &App) -> Element<'_, Message> {
     content = content.push(text("Standard SYNC COB-ID: 0x080").size(12));
     content = content.push(
         text("This is the default COB-ID for SYNC messages in CANOpen.").size(11)
+    );
+
+    // Common SYNC periods
+    content = content.push(text("Common SYNC Periods:").size(12));
+    content = content.push(
+        row![
+            button(text("1ms").size(10)).on_press(Message::SyncStartProducer("1000".to_string())),
+            button(text("10ms").size(10)).on_press(Message::SyncStartProducer("10000".to_string())),
+            button(text("100ms").size(10)).on_press(Message::SyncStartProducer("100000".to_string())),
+        ].spacing(4)
     );
 
     container(scrollable(content))

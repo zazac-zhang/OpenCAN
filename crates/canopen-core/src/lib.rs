@@ -10,6 +10,9 @@ pub mod od;
 pub mod pdo;
 pub mod sdo_abort;
 
+#[cfg(feature = "eds")]
+pub mod eds;
+
 #[cfg(feature = "testing")]
 pub mod testing;
 

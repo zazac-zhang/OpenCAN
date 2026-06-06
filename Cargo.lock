@@ -2400,7 +2400,6 @@ version = "0.1.0"
 dependencies = [
  "opencan-can-traits",
  "opencan-canopen-core",
- "opencan-canopen-ds402",
  "thiserror 2.0.18",
  "tokio",
 ]

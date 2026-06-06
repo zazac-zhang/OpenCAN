@@ -41,12 +41,25 @@ pub fn sdo_client(app: &App) -> Element<'_, Message> {
         ].spacing(4)
     );
 
-    // Data type (simplified for now)
+    // Data type selection
+    content = content.push(text("Data Type:").size(11));
+    let mut dtype_row = row![].spacing(2);
+    for dtype in crate::state::SdoDataType::all() {
+        let is_selected = app.sdo_data_type == *dtype;
+        let btn = if is_selected {
+            button(text(format!("[{}]", dtype.name())).size(9))
+                .on_press(Message::SdoDataTypeChanged(*dtype))
+        } else {
+            button(text(dtype.name()).size(9))
+                .on_press(Message::SdoDataTypeChanged(*dtype))
+        };
+        dtype_row = dtype_row.push(btn);
+    }
+    content = content.push(dtype_row);
     content = content.push(
-        row![
-            text("Data Type:").size(11),
-            text(&app.sdo_data_type).size(11),
-        ].spacing(4)
+        text(format!("Selected: {} ({} bytes)", app.sdo_data_type.name(),
+            app.sdo_data_type.byte_size().map(|s| s.to_string()).unwrap_or_else(|| "variable".to_string())
+        )).size(10)
     );
 
     // Value input

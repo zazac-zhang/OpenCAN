@@ -12,6 +12,9 @@ pub mod sdo;
 pub mod sdo_server;
 pub mod stack;
 
+#[cfg(feature = "ds402")]
+pub mod ds402;
+
 pub use adapter::CanDriverAdapter;
 pub use heartbeat::{
     HeartbeatConsumer, HeartbeatProducer, PdoDirection, SyncConsumer, SyncProducer,

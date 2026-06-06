@@ -1,6 +1,6 @@
 //! PDO monitor view.
 
-use iced::widget::{column, container, horizontal_rule, row, scrollable, text};
+use iced::widget::{button, column, container, horizontal_rule, row, scrollable, text};
 use iced::{Element, Length};
 use crate::state::{App, Message};
 
@@ -16,6 +16,17 @@ pub fn pdo_monitor(app: &App) -> Element<'_, Message> {
         ].spacing(8)
     );
     content = content.push(horizontal_rule(1));
+
+    // PDO mapping read button
+    if let Some(node_id) = app.selected_node {
+        content = content.push(
+            row![
+                text("Read PDO Mapping for Node:").size(11),
+                button(text("Read").size(11))
+                    .on_press(Message::ReadPdoMapping(node_id)),
+            ].spacing(4)
+        );
+    }
 
     if !app.connected {
         content = content.push(text("Not connected. PDO data will appear here when connected.").size(12));
