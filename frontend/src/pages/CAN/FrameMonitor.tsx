@@ -1,7 +1,8 @@
 /**
- * FrameMonitor — Real-time CAN frame monitor with filtering and cycle time.
+ * FrameMonitor — Real-time CAN frame monitor with filtering, cycle time, and frame type decoding.
  *
  * Displays live CAN frames in a virtualized table with:
+ * - Frame type auto-decoding (SYNC/HB/TPDO/RPDO/SDO/NMT/EMCY) with color-coded labels
  * - COB-ID filter (exact or range)
  * - Direction filter (RX/TX/All)
  * - Data content filter (hex substring)
@@ -14,6 +15,26 @@ import { useState, useRef, useMemo, useEffect } from 'react';
 import { useFrames, useAppStore } from '@/lib/store';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Pause, Play, ArrowDown } from 'lucide-react';
+
+function decodeFrameType(cobId: number) {
+  if (cobId === 0x080) return { label: 'SYNC', color: 'text-purple-400', bgColor: 'bg-purple-500/10' };
+  if (cobId >= 0x700 && cobId <= 0x77F) return { label: 'HB', color: 'text-green-400', bgColor: 'bg-green-500/10' };
+  if (cobId >= 0x180 && cobId <= 0x1FF) return { label: 'TPDO1', color: 'text-blue-400', bgColor: 'bg-blue-500/10' };
+  if (cobId >= 0x280 && cobId <= 0x2FF) return { label: 'TPDO2', color: 'text-blue-300', bgColor: 'bg-blue-500/10' };
+  if (cobId >= 0x380 && cobId <= 0x3FF) return { label: 'TPDO3', color: 'text-blue-200', bgColor: 'bg-blue-500/10' };
+  if (cobId >= 0x480 && cobId <= 0x4FF) return { label: 'TPDO4', color: 'text-blue-100', bgColor: 'bg-blue-500/10' };
+  if (cobId >= 0x200 && cobId <= 0x27F) return { label: 'RPDO1', color: 'text-orange-400', bgColor: 'bg-orange-500/10' };
+  if (cobId >= 0x300 && cobId <= 0x37F) return { label: 'RPDO2', color: 'text-orange-300', bgColor: 'bg-orange-500/10' };
+  if (cobId >= 0x400 && cobId <= 0x47F) return { label: 'RPDO3', color: 'text-orange-200', bgColor: 'bg-orange-500/10' };
+  if (cobId >= 0x500 && cobId <= 0x57F) return { label: 'RPDO4', color: 'text-orange-100', bgColor: 'bg-orange-500/10' };
+  if ((cobId >= 0x580 && cobId <= 0x5FF) || (cobId >= 0x600 && cobId <= 0x67F)) {
+    return { label: 'SDO', color: 'text-yellow-400', bgColor: 'bg-yellow-500/10' };
+  }
+  if (cobId >= 0x081 && cobId <= 0x0FF) return { label: 'NMT', color: 'text-pink-400', bgColor: 'bg-pink-500/10' };
+  if (cobId >= 0x80 && cobId <= 0x7F) return { label: 'NMT', color: 'text-pink-400', bgColor: 'bg-pink-500/10' };
+  if (cobId >= 0x81 && cobId <= 0xBF) return { label: 'EMCY', color: 'text-red-400', bgColor: 'bg-red-500/10' };
+  return { label: '—', color: 'text-muted-foreground', bgColor: '' };
+}
 
 export function FrameMonitor() {
   const frames = useFrames();
@@ -67,9 +88,6 @@ export function FrameMonitor() {
     return result;
   }, [framesWithCycle, cobFilter, dirFilter, dataFilter]);
 
-  // Track original indexes for selection (used by detail panel)
-  // Selection is tracked via selectedFrameIdx state
-
   const rowVirtualizer = useVirtualizer({
     count: filteredFrames.length,
     getScrollElement: () => parentRef.current,
@@ -90,6 +108,26 @@ export function FrameMonitor() {
     useAppStore.getState().frames.clearFrames();
     setSelectedFrameIdx(null);
   };
+
+  // Format helpers
+  const formatData = (bytes: number[]) =>
+    bytes.map((b) => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+
+  const formatTimestamp = (ms: number) => {
+    const sec = Math.floor(ms / 1000);
+    const millis = ms % 1000;
+    return `${sec}.${millis.toString().padStart(3, '0')}`;
+  };
+
+  // Count by type for the status bar
+  const typeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const f of frames) {
+      const t = decodeFrameType(f.cob_id).label;
+      counts[t] = (counts[t] || 0) + 1;
+    }
+    return counts;
+  }, [frames]);
 
   return (
     <div className="flex flex-col h-full">
@@ -129,16 +167,6 @@ export function FrameMonitor() {
         </button>
       </div>
 
-      {/* Table header */}
-      <div className="flex items-center gap-2 px-3 py-1 bg-muted text-xs font-medium border-b shrink-0">
-        <span className="w-16">Time</span>
-        <span className="w-20">COB-ID</span>
-        <span className="w-8">Dir</span>
-        <span className="w-8">DLC</span>
-        <span className="w-16 text-muted-foreground">Cycle</span>
-        <span className="flex-1">Data</span>
-      </div>
-
       {/* Controls bar */}
       <div className="flex items-center gap-2 px-3 py-1 border-b bg-card shrink-0">
         <button
@@ -159,6 +187,31 @@ export function FrameMonitor() {
           <ArrowDown className="h-3 w-3" />
           Auto-scroll
         </button>
+        <div className="flex-1" />
+        {/* Type legend */}
+        <div className="flex items-center gap-2 text-[10px]">
+          {['SYNC', 'HB', 'TPDO1', 'RPDO1', 'SDO', 'NMT'].map((type) => {
+            const sample = frames.find((f) => decodeFrameType(f.cob_id).label === type);
+            if (!sample) return null;
+            const info = decodeFrameType(sample.cob_id);
+            return (
+              <span key={type} className={`font-mono ${info.color}`}>
+                {type}
+              </span>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Table header */}
+      <div className="flex items-center gap-2 px-3 py-1 bg-muted text-xs font-medium border-b shrink-0">
+        <span className="w-16">Time</span>
+        <span className="w-16">COB-ID</span>
+        <span className="w-14">Type</span>
+        <span className="w-8">Dir</span>
+        <span className="w-8">DLC</span>
+        <span className="w-16 text-muted-foreground">Cycle</span>
+        <span className="flex-1">Data</span>
       </div>
 
       {/* Virtualized rows */}
@@ -166,6 +219,12 @@ export function FrameMonitor() {
         {paused && (
           <div className="sticky top-0 z-10 px-3 py-0.5 text-xs bg-yellow-500/10 text-yellow-500 border-b">
             Paused — {filteredFrames.length} frames frozen
+          </div>
+        )}
+        {filteredFrames.length === 0 && !paused && (
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <p className="text-sm text-muted-foreground">No frames captured</p>
+            <p className="text-xs text-muted-foreground">Connect to a CAN bus to start monitoring</p>
           </div>
         )}
         <div
@@ -177,6 +236,7 @@ export function FrameMonitor() {
           {rowVirtualizer.getVirtualItems().map((virtualRow) => {
             const frame = filteredFrames[virtualRow.index];
             const isSelected = selectedFrameIdx === virtualRow.index;
+            const typeInfo = decodeFrameType(frame.cob_id);
             return (
               <div
                 key={virtualRow.index}
@@ -198,8 +258,13 @@ export function FrameMonitor() {
                 <span className="w-16 text-muted-foreground">
                   {formatTimestamp(frame.timestamp_ms)}
                 </span>
-                <span className="w-20">0x{frame.cob_id.toString(16).padStart(3, '0').toUpperCase()}</span>
-                <span className={`w-8 ${frame.direction === 'tx' ? 'text-blue-500' : 'text-green-500'}`}>
+                <span className="w-16 font-medium">
+                  0x{frame.cob_id.toString(16).padStart(3, '0').toUpperCase()}
+                </span>
+                <span className={`w-14 ${typeInfo.color}`}>
+                  {typeInfo.label}
+                </span>
+                <span className={`w-8 ${frame.direction === 'tx' ? 'text-blue-400' : 'text-green-400'}`}>
                   {frame.direction.toUpperCase()}
                 </span>
                 <span className="w-8">{frame.dlc}</span>
@@ -207,7 +272,7 @@ export function FrameMonitor() {
                   {frame.cycleTime !== null ? `${frame.cycleTime}ms` : '—'}
                 </span>
                 <span className="flex-1 truncate">
-                  {frame.data.map((b) => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}
+                  {formatData(frame.data)}
                 </span>
               </div>
             );
@@ -222,6 +287,21 @@ export function FrameMonitor() {
             ? `Showing ${filteredFrames.length} of ${frames.length} frames`
             : `${frames.length} frames`}
         </span>
+        {/* Type distribution */}
+        <div className="flex items-center gap-2">
+          {Object.entries(typeCounts)
+            .filter(([, count]) => count > 0)
+            .slice(0, 5)
+            .map(([type, count]) => {
+              const typeInfo = frames.find((f) => decodeFrameType(f.cob_id).label === type);
+              const color = typeInfo ? decodeFrameType(typeInfo.cob_id).color : 'text-muted-foreground';
+              return (
+                <span key={type} className={`font-mono ${color}`}>
+                  {type}: {count}
+                </span>
+              );
+            })}
+        </div>
         {selectedFrameIdx !== null && filteredFrames[selectedFrameIdx] && (
           <span className="font-mono">
             Selected: COB-ID 0x{filteredFrames[selectedFrameIdx].cob_id.toString(16).toUpperCase()}
@@ -230,10 +310,4 @@ export function FrameMonitor() {
       </div>
     </div>
   );
-}
-
-function formatTimestamp(ms: number): string {
-  const sec = Math.floor(ms / 1000);
-  const millis = ms % 1000;
-  return `${sec}.${millis.toString().padStart(3, '0')}`;
 }

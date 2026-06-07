@@ -50,6 +50,7 @@ fn main() {
             commands::connection::connect_backend,
             commands::connection::disconnect,
             commands::connection::get_backends,
+            commands::connection::send_frame,
             // nmt
             commands::nmt::scan_nodes,
             commands::nmt::nmt_command,

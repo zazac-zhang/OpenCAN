@@ -261,3 +261,14 @@ export function useStartRecordingWithPath() {
     },
   });
 }
+
+// CAN frame send hook
+export function useSendFrame() {
+  return useMutation({
+    mutationFn: ({ cobId, data }: { cobId: number; data: number[] }) =>
+      tauri.sendFrame(cobId, data),
+    onError: (err) => {
+      useAppStore.getState().ui.setStatusMessage(`Send frame failed: ${err}`);
+    },
+  });
+}

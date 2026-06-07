@@ -1,6 +1,7 @@
-//! Connection commands: connect, disconnect, list backends.
+//! Connection commands: connect, disconnect, list backends, send frames.
 
 use crate::state::{BackendDescriptor, BackendInfo, SharedStack, SharedState};
+use opencan_canopen_core::frame::CanOpenFrame;
 use opencan_canopen_core::testing::MockCanDriver;
 use opencan_canopen_ds301::stack::CanopenStack;
 use serde::Deserialize;
@@ -86,4 +87,28 @@ pub async fn get_backends() -> Result<Vec<BackendDescriptor>, String> {
     }
 
     Ok(backends)
+}
+
+/// Send a raw CANOpen frame on the bus
+#[tauri::command]
+pub async fn send_frame(
+    app_state: tauri::State<'_, SharedState>,
+    stack_state: tauri::State<'_, SharedStack>,
+    cob_id: u16,
+    data: Vec<u8>,
+) -> Result<(), String> {
+    let guard = app_state.lock().await;
+    if !guard.connected {
+        return Err("Not connected".to_string());
+    }
+    drop(guard);
+
+    let mut frame_data = [0u8; 8];
+    let len = data.len().min(8);
+    frame_data[..len].copy_from_slice(&data[..len]);
+
+    let frame = CanOpenFrame::new(cob_id, frame_data);
+
+    let mut guard = stack_state.lock().await;
+    guard.send_frame(frame).map_err(|e| format!("{:?}", e))
 }

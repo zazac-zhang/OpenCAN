@@ -587,6 +587,11 @@ impl<C: CanDriver> CanopenStack<C> {
         self.can.send(&hb.encode())
     }
 
+    /// Send a raw CANOpen frame on the bus.
+    pub fn send_frame(&mut self, frame: CanOpenFrame) -> Result<(), CanOpenError> {
+        self.can.send(&frame)
+    }
+
     /// Enable periodic heartbeat production.
     pub fn enable_heartbeat_production(&mut self, period: Duration) {
         self.heartbeat_producer = Some(HeartbeatProducer::new(period));

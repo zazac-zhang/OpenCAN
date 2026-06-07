@@ -6,6 +6,54 @@ import type { CanFrame, BusStats, ErrorFrame } from '../types/can';
 import type { Ds402NodeState } from '../types/ds402';
 import type { RecordingState } from '../types/recording';
 
+// Navigation group keys
+export type NavGroup = 'can' | 'canopen' | 'recording' | 'eds';
+
+// Tab keys per group
+export const GROUP_TABS: Record<NavGroup, { key: string; label: string }[]> = {
+  can: [
+    { key: 'Frames', label: 'Frames' },
+    { key: 'Send', label: 'Send' },
+    { key: 'Statistics', label: 'Statistics' },
+    { key: 'Errors', label: 'Errors' },
+  ],
+  canopen: [
+    { key: 'Network', label: 'Network' },
+    { key: 'Nodes', label: 'Nodes' },
+    { key: 'PDO', label: 'PDO' },
+    { key: 'DS402', label: 'DS402' },
+    { key: 'EMCY', label: 'EMCY' },
+    { key: 'Heartbeat', label: 'Heartbeat' },
+    { key: 'SYNC', label: 'SYNC' },
+  ],
+  recording: [
+    { key: 'Record', label: 'Record' },
+    { key: 'Playback', label: 'Playback' },
+  ],
+  eds: [
+    { key: 'EDS Files', label: 'EDS Files' },
+    { key: 'OD Browser', label: 'OD Browser' },
+  ],
+};
+
+// Legacy tab key mapping for backwards compatibility
+const LEGACY_TAB_MAP: Record<string, { group: NavGroup; tab: string }> = {
+  FrameMonitor: { group: 'can', tab: 'Frames' },
+  BusStatistics: { group: 'can', tab: 'Statistics' },
+  ErrorFrames: { group: 'can', tab: 'Errors' },
+  NetworkOverview: { group: 'canopen', tab: 'Network' },
+  NodeDetail: { group: 'canopen', tab: 'Nodes' },
+  PdoMonitor: { group: 'canopen', tab: 'PDO' },
+  Ds402Control: { group: 'canopen', tab: 'DS402' },
+  EmcyMonitor: { group: 'canopen', tab: 'EMCY' },
+  HeartbeatMonitor: { group: 'canopen', tab: 'Heartbeat' },
+  SyncManagement: { group: 'canopen', tab: 'SYNC' },
+  SessionRecorder: { group: 'recording', tab: 'Record' },
+  SessionPlayer: { group: 'recording', tab: 'Playback' },
+  ConnectionSettings: { group: 'eds', tab: 'EDS Files' },
+  EdsManagement: { group: 'eds', tab: 'OD Browser' },
+};
+
 // CAN connection state
 interface CanState {
   connected: boolean;
@@ -76,15 +124,31 @@ interface ConnectionDialogState {
   hide: () => void;
 }
 
+// Sidebar state
+interface SidebarState {
+  activeGroup: NavGroup;
+  groupsCollapsed: Record<string, boolean>;
+  setActiveGroup: (group: NavGroup) => void;
+  toggleGroup: (group: string) => void;
+}
+
+// Bottom panel state
+interface BottomPanelState {
+  visible: boolean;
+  activeTab: string;
+  height: number;
+  setVisible: (visible: boolean) => void;
+  setActiveTab: (tab: string) => void;
+  setHeight: (height: number) => void;
+}
+
 // UI state
 interface UiState {
   currentTab: string;
-  primaryTab: 'can' | 'canopen' | 'recording' | 'settings';
   detailPanelVisible: boolean;
   paused: boolean;
   statusMessage: string;
   setCurrentTab: (tab: string) => void;
-  setPrimaryTab: (tab: 'can' | 'canopen' | 'recording' | 'settings') => void;
   toggleDetailPanel: () => void;
   togglePause: () => void;
   setStatusMessage: (msg: string) => void;
@@ -114,10 +178,20 @@ interface AppState {
   ds402: Ds402State;
   sync: SyncState;
   connectionDialog: ConnectionDialogState;
+  sidebar: SidebarState;
+  bottomPanel: BottomPanelState;
   ui: UiState;
   recording: RecordingStateStore;
   errors: ErrorFrameState;
 }
+
+// Default bottom panel tabs per group
+const DEFAULT_BOTTOM_TAB: Record<NavGroup, string> = {
+  can: 'Bus Load',
+  canopen: 'PDO Stream',
+  recording: 'Session Info',
+  eds: 'OD Entries',
+};
 
 export const useAppStore = create<AppState>()((set) => ({
   can: {
@@ -259,14 +333,45 @@ export const useAppStore = create<AppState>()((set) => ({
     show: () => set((state) => ({ connectionDialog: { ...state.connectionDialog, visible: true } })),
     hide: () => set((state) => ({ connectionDialog: { ...state.connectionDialog, visible: false } })),
   },
+  sidebar: {
+    activeGroup: 'can',
+    groupsCollapsed: { can: false, canopen: false, recording: false, eds: false },
+    setActiveGroup: (group) =>
+      set((state) => ({
+        sidebar: {
+          ...state.sidebar,
+          activeGroup: group,
+        },
+        bottomPanel: {
+          ...state.bottomPanel,
+          activeTab: DEFAULT_BOTTOM_TAB[group],
+        },
+      })),
+    toggleGroup: (group) =>
+      set((state) => ({
+        sidebar: {
+          ...state.sidebar,
+          groupsCollapsed: {
+            ...state.sidebar.groupsCollapsed,
+            [group]: !state.sidebar.groupsCollapsed[group],
+          },
+        },
+      })),
+  },
+  bottomPanel: {
+    visible: false,
+    activeTab: 'Bus Load',
+    height: 150,
+    setVisible: (visible) => set((state) => ({ bottomPanel: { ...state.bottomPanel, visible } })),
+    setActiveTab: (tab) => set((state) => ({ bottomPanel: { ...state.bottomPanel, activeTab: tab } })),
+    setHeight: (height) => set((state) => ({ bottomPanel: { ...state.bottomPanel, height } })),
+  },
   ui: {
-    currentTab: 'FrameMonitor',
-    primaryTab: 'can',
-    detailPanelVisible: true,
+    currentTab: 'Frames',
+    detailPanelVisible: false,
     paused: false,
     statusMessage: '',
     setCurrentTab: (tab) => set((state) => ({ ui: { ...state.ui, currentTab: tab } })),
-    setPrimaryTab: (tab) => set((state) => ({ ui: { ...state.ui, primaryTab: tab } })),
     toggleDetailPanel: () =>
       set((state) => ({ ui: { ...state.ui, detailPanelVisible: !state.ui.detailPanelVisible } })),
     togglePause: () => set((state) => ({ ui: { ...state.ui, paused: !state.ui.paused } })),
@@ -305,3 +410,33 @@ export const useBusStats = () => useAppStore((s) => s.frames.busStats);
 export const useSdoHistory = () => useAppStore((s) => s.sdo.history);
 export const useUi = () => useAppStore((s) => s.ui);
 export const useErrorFrames = () => useAppStore((s) => s.errors.errorFrames);
+
+// Navigation selectors
+export const useActiveGroup = () => useAppStore((s) => s.sidebar.activeGroup);
+export const useActiveTab = () => {
+  const group = useAppStore((s) => s.sidebar.activeGroup);
+  const tabs = GROUP_TABS[group];
+  return tabs ? tabs[0].key : 'Frames';
+};
+export const useGroupTabs = () => {
+  const group = useAppStore((s) => s.sidebar.activeGroup);
+  return GROUP_TABS[group];
+};
+export const useSidebarCollapsed = (group: string) =>
+  useAppStore((s) => s.sidebar.groupsCollapsed[group] ?? false);
+
+// Bottom panel selectors
+export const useBottomPanel = () => useAppStore((s) => s.bottomPanel);
+
+// Bottom panel tab definitions per group
+export const BOTTOM_PANEL_TABS: Record<NavGroup, string[]> = {
+  can: ['Signals', 'Bus Load', 'Error Log', 'Timing'],
+  canopen: ['PDO Stream', 'EMCY', 'DS402 State', 'Heartbeat'],
+  recording: ['Session Info', 'Timeline'],
+  eds: ['OD Entries', 'Parse Log'],
+};
+
+/** Convert a legacy tab key (e.g. 'FrameMonitor') to the new navigation state */
+export function migrateLegacyTab(legacyKey: string): { group: NavGroup; tab: string } | null {
+  return LEGACY_TAB_MAP[legacyKey] ?? null;
+}

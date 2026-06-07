@@ -100,6 +100,10 @@ export async function stopPlayback() {
   return invoke<void>('stop_playback');
 }
 
+export async function sendFrame(cobId: number, data: number[]) {
+  return invoke<void>('send_frame', { cob_id: cobId, data });
+}
+
 // ============ Event Listeners ============
 
 export function onFrameStream(callback: (event: CanFrameEvent) => void): Promise<UnlistenFn> {
