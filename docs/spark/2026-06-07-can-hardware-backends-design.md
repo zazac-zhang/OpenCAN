@@ -78,51 +78,41 @@ crates/can-traits/
 
 ### 头文件管理策略
 
-使用环境变量指定 SDK 路径，build.rs 用 bindgen 生成绑定：
+**推荐方式**: 使用 `libloading` 运行时动态加载，无需编译时头文件。
+
+每个后端在运行时加载动态库并缓存函数指针：
 
 ```rust
-// build.rs
-fn main() {
-    // ZLG
-    #[cfg(feature = "zlg")]
-    {
-        let zlg_dir = std::env::var("ZLG_SDK_DIR")
-            .unwrap_or_else(|_| "/usr/local/lib/controlcan".to_string());
-        println!("cargo:rustc-link-search=native={}", zlg_dir);
-        println!("cargo:rustc-link-lib=dylib=controlcan");
-        
-        let bindings = bindgen::Builder::default()
-            .header(format!("{}/ControlCAN.h", zlg_dir))
-            .generate()
-            .expect("Unable to generate ZLG bindings");
-        
-        let out_path = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap());
-        bindings.write_to_file(out_path.join("zlg_bindings.rs")).unwrap();
-    }
-    
-    // Kvaser, PCAN 类似...
-}
-```
-
-或者更简洁的方式：在每个模块内使用 `bindgen!` 宏（需要 nightly 或 bindgen 0.69+）：
-
-```rust
-// zlg.rs
-#![cfg(feature = "zlg")]
+use libloading::Library;
 
 mod ffi {
-    #![allow(non_camel_case_types, non_upper_case_globals)]
+    use libloading::Library;
     
-    // 方式1: 手动定义 FFI 类型（推荐，更可控）
-    // 方式2: include!(concat!(env!("OUT_DIR"), "/zlg_bindings.rs"));
+    pub struct ZlgFunctions {
+        pub VCI_OpenDevice: unsafe extern "C" fn(u32, u32, u32) -> i32,
+        pub VCI_CloseDevice: unsafe extern "C" fn(u32, u32) -> i32,
+        pub VCI_InitCAN: unsafe extern "C" fn(u32, u32, u32, *const VCI_INIT_CONFIG) -> i32,
+        pub VCI_StartCAN: unsafe extern "C" fn(u32, u32, u32) -> i32,
+        pub VCI_Transmit: unsafe extern "C" fn(u32, u32, u32, *const VCI_CAN_OBJ, u32) -> i32,
+        pub VCI_Receive: unsafe extern "C" fn(u32, u32, u32, *mut VCI_CAN_OBJ, i32, i32) -> i32,
+    }
+    
+    impl ZlgFunctions {
+        pub unsafe fn load(lib: &Library) -> Result<Self, libloading::Error> {
+            Ok(Self {
+                VCI_OpenDevice: *lib.get(b"VCI_OpenDevice")?,
+                VCI_CloseDevice: *lib.get(b"VCI_CloseDevice")?,
+                VCI_InitCAN: *lib.get(b"VCI_InitCAN")?,
+                VCI_StartCAN: *lib.get(b"VCI_StartCAN")?,
+                VCI_Transmit: *lib.get(b"VCI_Transmit")?,
+                VCI_Receive: *lib.get(b"VCI_Receive")?,
+            })
+        }
+    }
 }
 ```
 
-**推荐方式**: 手动定义 FFI 类型和函数声明。原因：
-1. 更可控，可以精确控制哪些类型和函数被暴露
-2. 不依赖 bindgen 的编译时行为
-3. 厂商头文件通常很简单，手动定义工作量不大
-4. 可以添加更好的文档注释
+这样用户只需安装 SDK 并确保动态库在系统路径中，无需配置头文件路径。
 
 ### 每个后端的实现模式
 
@@ -455,16 +445,13 @@ name = "opencan-can-traits"
 thiserror = { workspace = true }
 tokio = { workspace = true }
 socketcan = { version = "3.5", features = ["tokio"], optional = true }
-
-[build-dependencies]
-bindgen = { version = "0.69", optional = true }  # 如果使用 bindgen 方式
+libloading = { version = "0.8", optional = true }
 
 [features]
 socketcan = ["dep:socketcan"]
-kvaser = []
-pcan = []
-zlg = []
-# 如果使用 bindgen: kvaser = ["dep:bindgen"]
+kvaser = ["dep:libloading"]
+pcan = ["dep:libloading"]
+zlg = ["dep:libloading"]
 ```
 
 ### 平台差异处理
@@ -533,9 +520,64 @@ mod tests {
 4. **错误码**: 每家 SDK 错误码不同，需要仔细映射
 5. **CAN FD**: 当前三家 SDK 主要支持 Classic CAN，CAN FD 支持需要额外 API
 
+## 关键发现（来自调研）
+
+### 线程安全差异
+
+| 后端 | 原生安全性 | OpenCAN 策略 |
+|------|-----------|-------------|
+| ZLG | ❌ 不安全 | `std::sync::Mutex<Handle>` 全保护 |
+| Kvaser | ✅ 按 handle 安全 | `std::sync::Mutex` 保护 send+recv |
+| PCAN | ✅ 完全安全 | 最小化锁定 |
+
+### 阻塞接收模式
+
+| 后端 | 阻塞方式 | 备注 |
+|------|---------|------|
+| ZLG | `VCI_Receive(WaitTime=-1)` | 无限等待 |
+| Kvaser | `canReadWait(timeout)` | 带超时 |
+| PCAN | `CAN_Read` 始终非阻塞 | Windows: `PCAN_RECEIVE_EVENT` + `WaitForSingleObject`; Linux: 需轮询 |
+
+### 初始化复杂度
+
+| 后端 | 初始化步骤 |
+|------|----------|
+| ZLG | `OpenDevice` → `InitCAN` → `StartCAN`（3步）|
+| Kvaser | `canInitializeLibrary()` → `canOpenChannel` → `canSetBusParams` → `canBusOn` |
+| PCAN | `CAN_Initialize`（1步，最简单）|
+
+### 重要注意事项
+
+1. **ZLG**: 波特率使用私有的 Timing0/Timing1 寄存器值，需要查表
+2. **ZLG**: 错误约定是 0=失败, 1=成功（非标准错误码）
+3. **Kvaser**: 必须先调用 `canInitializeLibrary()` 才能使用其他函数
+4. **PCAN**: `CAN_Read` 始终非阻塞，Linux 下需要轮询实现阻塞
+5. **PCAN**: USB 设备自动枚举为 USBBUS1..16，无需手动枚举
+
+### 推荐：运行时动态链接（libloading）
+
+使用 `libloading` crate 在运行时加载动态库，避免编译时依赖 SDK：
+
+```rust
+use libloading::Library;
+
+struct ZlgBus {
+    lib: Library,
+    // 缓存的函数指针
+}
+```
+
+优势：
+- 编译时不需要安装 SDK
+- 用户只需在运行时提供动态库
+- 更灵活的错误处理
+
 ## 参考资料
 
 - ZLG ControlCAN SDK 文档
 - Kvaser CANlib SDK 文档  
 - PCAN-Basic API 文档
 - 现有 `socketcan.rs` 实现作为模式参考
+- `noahridge/canlib-rs` — Kvaser Rust 绑定参考
+- `timokroeger/pcan-basic-rs` — PCAN Rust 绑定参考
+- `123zmz123/ZlgCanDriver` — ZLG 头文件来源
