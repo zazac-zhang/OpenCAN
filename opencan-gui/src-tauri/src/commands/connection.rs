@@ -3,7 +3,7 @@
 use crate::state::{BackendDescriptor, BackendInfo, SharedStack, SharedState};
 use opencan_canopen_core::frame::CanOpenFrame;
 use opencan_canopen_core::testing::MockCanDriver;
-use opencan_canopen_ds301::stack::CanopenStack;
+use opencan_canopen_core::stack::CanopenStack;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -44,9 +44,7 @@ pub async fn connect_backend(
 }
 
 #[tauri::command]
-pub async fn disconnect(
-    app_state: tauri::State<'_, SharedState>,
-) -> Result<(), String> {
+pub async fn disconnect(app_state: tauri::State<'_, SharedState>) -> Result<(), String> {
     let mut guard = app_state.lock().await;
     guard.connected = false;
     guard.backend_info = None;

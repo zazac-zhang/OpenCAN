@@ -272,7 +272,9 @@ impl OdValue {
             }
             Self::Integer56(v) => {
                 let bytes = v.to_le_bytes();
-                vec![bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6]]
+                vec![
+                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
+                ]
             }
             Self::Integer64(v) => v.to_le_bytes().to_vec(),
             Self::Unsigned8(v) => vec![*v],
@@ -292,7 +294,9 @@ impl OdValue {
             }
             Self::Unsigned56(v) => {
                 let bytes = v.to_le_bytes();
-                vec![bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6]]
+                vec![
+                    bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6],
+                ]
             }
             Self::Unsigned64(v) => v.to_le_bytes().to_vec(),
             Self::Real32(v) => v.to_le_bytes().to_vec(),
@@ -336,9 +340,9 @@ impl OdValue {
             DataType::Unsigned16 => data
                 .get(..2)
                 .map(|b| Self::Unsigned16(u16::from_le_bytes([b[0], b[1]]))),
-            DataType::Unsigned24 => data.get(..3).map(|b| {
-                Self::Unsigned24(u32::from_le_bytes([b[0], b[1], b[2], 0]))
-            }),
+            DataType::Unsigned24 => data
+                .get(..3)
+                .map(|b| Self::Unsigned24(u32::from_le_bytes([b[0], b[1], b[2], 0]))),
             DataType::Unsigned32 => data
                 .get(..4)
                 .map(|b| Self::Unsigned32(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))),
@@ -346,10 +350,14 @@ impl OdValue {
                 Self::Unsigned40(u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], 0, 0, 0]))
             }),
             DataType::Unsigned48 => data.get(..6).map(|b| {
-                Self::Unsigned48(u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], 0, 0]))
+                Self::Unsigned48(u64::from_le_bytes([
+                    b[0], b[1], b[2], b[3], b[4], b[5], 0, 0,
+                ]))
             }),
             DataType::Unsigned56 => data.get(..7).map(|b| {
-                Self::Unsigned56(u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], 0]))
+                Self::Unsigned56(u64::from_le_bytes([
+                    b[0], b[1], b[2], b[3], b[4], b[5], b[6], 0,
+                ]))
             }),
             DataType::Unsigned64 => data
                 .get(..8)
@@ -366,9 +374,7 @@ impl OdValue {
             DataType::OctetString => Some(Self::OctetString(data.to_vec())),
             DataType::Domain => Some(Self::Domain(data.to_vec())),
             // Variable-length types without OdValue variant
-            DataType::UnicodeString
-            | DataType::TimeOfDay
-            | DataType::TimeDifference => None,
+            DataType::UnicodeString | DataType::TimeOfDay | DataType::TimeDifference => None,
         }
     }
 
@@ -725,6 +731,24 @@ pub trait CanDriver: Send {
     ) -> impl std::future::Future<
         Output = Result<crate::frame::CanOpenFrame, crate::error::CanOpenError>,
     > + Send;
+}
+
+/// Blanket impl: `&mut C` is a CanDriver if `C` is.
+impl<C: CanDriver> CanDriver for &mut C {
+    fn send(
+        &mut self,
+        frame: &crate::frame::CanOpenFrame,
+    ) -> Result<(), crate::error::CanOpenError> {
+        (**self).send(frame)
+    }
+
+    fn recv(
+        &mut self,
+    ) -> impl std::future::Future<
+        Output = Result<crate::frame::CanOpenFrame, crate::error::CanOpenError>,
+    > + Send {
+        (**self).recv()
+    }
 }
 
 impl std::fmt::Display for OdValue {

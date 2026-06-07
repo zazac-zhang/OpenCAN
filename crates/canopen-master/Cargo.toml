@@ -1,0 +1,15 @@
+[package]
+name = "opencan-canopen-master"
+description = "CANOpen master station enhancements — node management, monitoring, diagnostics"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+opencan-canopen-core = { path = "../canopen-core" }
+opencan-can-traits = { path = "../can-traits" }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "time"] }

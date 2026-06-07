@@ -11,7 +11,10 @@
 //!
 //! `CAN_Initialize` → send/recv（一步到位）
 
-use crate::{CanBitrate, CanBus, CanBusDyn, CanBusFactory, CanConfig, CanFrame, CanId, CanState, ClassicFrame, error::CanError};
+use crate::{
+    CanBitrate, CanBus, CanBusDyn, CanBusFactory, CanConfig, CanFrame, CanId, CanState,
+    ClassicFrame, error::CanError,
+};
 use std::future::Future;
 use std::sync::OnceLock;
 
@@ -29,6 +32,21 @@ const PCAN_ERROR_QRCVEMPTY: PcanStatus = 0x00020;
 const PCAN_ERROR_BUSOFF: PcanStatus = 0x00010;
 const PCAN_ERROR_BUSHEAVY: PcanStatus = 0x00008;
 const PCAN_ERROR_BUSLIGHT: PcanStatus = 0x00004;
+
+// PCAN 通道状态参数
+const PCAN_CHANNEL_CONDITION: u32 = 0x0004;
+const PCAN_CHANNEL_FEATURES: u32 = 0x0005;
+const PCAN_CONTROLLER_NUMBER: u32 = 0x0006;
+
+// PCAN 通道条件值
+const PCAN_CHANNEL_UNAVAILABLE: u32 = 0x0000;
+const PCAN_CHANNEL_AVAILABLE: u32 = 0x0001;
+const PCAN_CHANNEL_OCCUPIED: u32 = 0x0002;
+
+// PCAN 控制器状态
+const PCAN_CONTROLLER_ACTIVE: u32 = 0x0000;
+const PCAN_CONTROLLER_BUSWARNING: u32 = 0x0001;
+const PCAN_CONTROLLER_BUSOFF: u32 = 0x0002;
 
 /// 常用 PCAN 句柄
 const PCAN_USBBUS1: PcanHandle = PcanHandle(0x51);
@@ -93,7 +111,14 @@ unsafe impl Send for PcanFunctions {}
 unsafe impl Sync for PcanFunctions {}
 
 impl PcanFunctions {
-    unsafe fn initialize(&self, channel: PcanHandle, baudrate: u16, hw_type: u8, io_port: u32, interrupt: u16) -> PcanStatus {
+    unsafe fn initialize(
+        &self,
+        channel: PcanHandle,
+        baudrate: u16,
+        hw_type: u8,
+        io_port: u32,
+        interrupt: u16,
+    ) -> PcanStatus {
         let func: unsafe extern "C" fn(u16, u16, u8, u32, u16) -> PcanStatus =
             unsafe { std::mem::transmute(self.fn_initialize) };
         unsafe { func(channel.0, baudrate, hw_type, io_port, interrupt) }
@@ -105,7 +130,12 @@ impl PcanFunctions {
         unsafe { func(channel.0) }
     }
 
-    unsafe fn read(&self, channel: PcanHandle, msg: *mut TPCANMsg, timestamp: *mut TPCANTimestamp) -> PcanStatus {
+    unsafe fn read(
+        &self,
+        channel: PcanHandle,
+        msg: *mut TPCANMsg,
+        timestamp: *mut TPCANTimestamp,
+    ) -> PcanStatus {
         let func: unsafe extern "C" fn(u16, *mut TPCANMsg, *mut TPCANTimestamp) -> PcanStatus =
             unsafe { std::mem::transmute(self.fn_read) };
         unsafe { func(channel.0, msg, timestamp) }
@@ -118,10 +148,28 @@ impl PcanFunctions {
     }
 
     #[allow(dead_code)]
-    unsafe fn get_error_text(&self, error: PcanStatus, language: u16, buffer: *mut u8, buffer_len: u32) -> PcanStatus {
+    unsafe fn get_error_text(
+        &self,
+        error: PcanStatus,
+        language: u16,
+        buffer: *mut u8,
+        buffer_len: u32,
+    ) -> PcanStatus {
         let func: unsafe extern "C" fn(PcanStatus, u16, *mut u8, u32) -> PcanStatus =
             unsafe { std::mem::transmute(self.fn_get_error_text) };
         unsafe { func(error, language, buffer, buffer_len) }
+    }
+
+    unsafe fn get_value(
+        &self,
+        channel: PcanHandle,
+        parameter: u32,
+        buffer: *mut u32,
+        buffer_len: u32,
+    ) -> PcanStatus {
+        let func: unsafe extern "C" fn(u16, u32, *mut u32, u32) -> PcanStatus =
+            unsafe { std::mem::transmute(self.fn_get_value) };
+        unsafe { func(channel.0, parameter, buffer, buffer_len) }
     }
 }
 
@@ -166,16 +214,22 @@ unsafe fn load_sym(lib: &libloading::Library, name: &[u8]) -> Result<usize, Stri
     unsafe {
         lib.get::<unsafe extern "C" fn()>(name)
             .map(|sym| *sym as usize)
-            .map_err(|e| format!("Failed to load symbol {:?}: {}", String::from_utf8_lossy(name), e))
+            .map_err(|e| {
+                format!(
+                    "Failed to load symbol {:?}: {}",
+                    String::from_utf8_lossy(name),
+                    e
+                )
+            })
     }
 }
 
 fn get_pcan_funcs() -> Result<&'static PcanFunctions, CanError> {
-    let result = PCAN_FUNCS.get_or_init(|| {
-        unsafe { load_pcan_functions() }
-    });
+    let result = PCAN_FUNCS.get_or_init(|| unsafe { load_pcan_functions() });
 
-    result.as_ref().map_err(|e| CanError::Io(format!("PCAN-Basic not available: {}", e)))
+    result
+        .as_ref()
+        .map_err(|e| CanError::Io(format!("PCAN-Basic not available: {}", e)))
 }
 
 // ========== 错误处理 ==========
@@ -201,7 +255,7 @@ fn bitrate_to_pcan(bitrate: &CanBitrate) -> u16 {
         125_000 => PCAN_BAUD_125K,
         100_000 => PCAN_BAUD_100K,
         50_000 => PCAN_BAUD_50K,
-        _ => PCAN_BAUD_500K,  // 默认 500 kbps
+        _ => PCAN_BAUD_500K, // 默认 500 kbps
     }
 }
 
@@ -222,8 +276,9 @@ fn parse_pcan_handle(channel: &str) -> Result<PcanHandle, CanError> {
         "USBBUS8" | "usb8" => Ok(PCAN_USBBUS8),
         _ => {
             // 尝试解析为数字
-            let handle: u16 = channel.parse()
-                .map_err(|_| CanError::InvalidConfig(format!("Invalid PCAN channel: {}", channel)))?;
+            let handle: u16 = channel.parse().map_err(|_| {
+                CanError::InvalidConfig(format!("Invalid PCAN channel: {}", channel))
+            })?;
             Ok(PcanHandle(handle))
         }
     }
@@ -249,9 +304,7 @@ impl PcanBus {
 
         // 初始化 PCAN 通道
         // USB 设备: hw_type=0, io_port=0, interrupt=0
-        let status = unsafe {
-            funcs.initialize(handle, baudrate, 0, 0, 0)
-        };
+        let status = unsafe { funcs.initialize(handle, baudrate, 0, 0, 0) };
 
         if status != PCAN_ERROR_OK {
             return Err(pcan_status_to_error(status));
@@ -277,7 +330,11 @@ impl CanBus for PcanBus {
 
         let classic = match frame {
             CanFrame::Classic(f) => f,
-            CanFrame::Fd(_) => return Err(CanError::Unsupported("CAN FD not supported yet".to_string())),
+            CanFrame::Fd(_) => {
+                return Err(CanError::Unsupported(
+                    "CAN FD not supported yet".to_string(),
+                ));
+            }
         };
 
         let (id, msg_type) = match classic.id {
@@ -326,9 +383,7 @@ impl CanBus for PcanBus {
                         micros: 0,
                     };
 
-                    let status = unsafe {
-                        funcs.read(handle, &mut msg, &mut timestamp)
-                    };
+                    let status = unsafe { funcs.read(handle, &mut msg, &mut timestamp) };
 
                     if status == PCAN_ERROR_OK {
                         // 成功接收到帧
@@ -371,25 +426,59 @@ impl CanBus for PcanBus {
     }
 
     fn state(&self) -> CanState {
-        // PCAN 可以通过 CAN_GetValue 查询通道状态
-        // 但这里简化处理，通过尝试读取来检测状态
-        
-        // 如果最近的读取返回 PCAN_ERROR_BUSOFF，则总线已关闭
-        // 如果返回 PCAN_ERROR_BUSHEAVY 或 PCAN_ERROR_BUSLIGHT，则有错误
-        
-        // TODO: 实现完整的状态查询，使用:
-        // - PCAN_CHANNEL_CONDITION: 检查通道是否可用
-        // - PCAN_CHANNEL_FEATURES: 检查通道支持的功能
-        // - PCAN_CONTROLLER_NUMBER: 获取控制器编号
-        
-        CanState::Active
+        let funcs = match get_pcan_funcs() {
+            Ok(f) => f,
+            Err(_) => return CanState::NotConnected,
+        };
+
+        // 查询通道条件
+        let mut condition: u32 = 0;
+        let status = unsafe {
+            funcs.get_value(
+                self.handle,
+                PCAN_CHANNEL_CONDITION,
+                &mut condition,
+                std::mem::size_of::<u32>() as u32,
+            )
+        };
+
+        if status != PCAN_ERROR_OK {
+            return CanState::NotConnected;
+        }
+
+        // 检查通道是否可用
+        if condition & PCAN_CHANNEL_AVAILABLE == 0 {
+            return CanState::NotConnected;
+        }
+
+        // 查询控制器状态
+        let mut controller_status: u32 = 0;
+        let status = unsafe {
+            funcs.get_value(
+                self.handle,
+                PCAN_CONTROLLER_NUMBER, // 使用控制器编号参数查询状态
+                &mut controller_status,
+                std::mem::size_of::<u32>() as u32,
+            )
+        };
+
+        if status == PCAN_ERROR_OK {
+            match controller_status {
+                PCAN_CONTROLLER_BUSOFF => CanState::BusOff,
+                PCAN_CONTROLLER_BUSWARNING => CanState::Warning,
+                _ => CanState::Active,
+            }
+        } else {
+            // 无法查询控制器状态，假设活跃
+            CanState::Active
+        }
     }
 
     fn set_bitrate(&self, bitrate: CanBitrate) -> Result<(), CanError> {
         // PCAN 需要重新初始化才能改变波特率
         let _ = bitrate;
         Err(CanError::Unsupported(
-            "PCAN bitrate change requires channel reinitialization".to_string()
+            "PCAN bitrate change requires channel reinitialization".to_string(),
         ))
     }
 }
@@ -415,9 +504,9 @@ impl CanBusFactory for PcanFactory {
         if let Ok(funcs) = get_pcan_funcs() {
             // PCAN 接口类型及其句柄范围
             let interface_configs = [
-                (0x51, 0x58, "USBBUS"),      // USB: 0x51-0x58
-                (0x41, 0x48, "PCIBUS"),      // PCI: 0x41-0x48
-                (0x21, 0x28, "ISABUS"),      // ISA: 0x21-0x28
+                (0x51, 0x58, "USBBUS"), // USB: 0x51-0x58
+                (0x41, 0x48, "PCIBUS"), // PCI: 0x41-0x48
+                (0x21, 0x28, "ISABUS"), // ISA: 0x21-0x28
             ];
 
             for (start, end, prefix) in &interface_configs {

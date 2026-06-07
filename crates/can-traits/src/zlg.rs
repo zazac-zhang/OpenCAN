@@ -11,7 +11,10 @@
 //!
 //! `ZCAN_OpenDevice` → `ZCAN_InitCAN` → `ZCAN_StartCAN` → send/recv
 
-use crate::{CanBitrate, CanBus, CanBusDyn, CanBusFactory, CanConfig, CanFrame, CanId, CanState, ClassicFrame, error::CanError};
+use crate::{
+    CanBitrate, CanBus, CanBusDyn, CanBusFactory, CanConfig, CanFrame, CanId, CanState,
+    ClassicFrame, error::CanError,
+};
 use std::future::Future;
 use std::sync::Mutex;
 use std::sync::OnceLock;
@@ -41,8 +44,8 @@ const INVALID_CHANNEL_HANDLE: ChannelHandle = ChannelHandle(std::ptr::null_mut()
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 struct CanFrameFfi {
-    can_id: u32,   // CAN ID + flags
-    can_dlc: u8,   // 数据长度
+    can_id: u32, // CAN ID + flags
+    can_dlc: u8, // 数据长度
     __pad: u8,
     __res0: u8,
     __res1: u8,
@@ -66,7 +69,7 @@ struct CanFdFrameFfi {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 struct ZcanChannelInitConfig {
-    can_type: u32,  // 0=CAN, 1=CANFD
+    can_type: u32, // 0=CAN, 1=CANFD
     // union: can or canfd config
     acc_code: u32,
     acc_mask: u32,
@@ -92,7 +95,7 @@ struct ZcanTransmitData {
 #[derive(Debug, Clone, Copy)]
 struct ZcanReceiveData {
     frame: CanFrameFfi,
-    timestamp: u64,  // 微秒
+    timestamp: u64, // 微秒
 }
 
 // ========== FFI 函数指针 ==========
@@ -106,7 +109,7 @@ struct ZcanReceiveData {
 #[allow(dead_code)]
 struct ZlgFunctions {
     // 使用 usize 存储函数指针，避免 Send/Sync 问题
-    _lib: libloading::Library,  // 保持库的生命周期
+    _lib: libloading::Library, // 保持库的生命周期
     fn_open_device: usize,
     fn_close_device: usize,
     fn_init_can: usize,
@@ -123,7 +126,12 @@ unsafe impl Send for ZlgFunctions {}
 unsafe impl Sync for ZlgFunctions {}
 
 impl ZlgFunctions {
-    unsafe fn open_device(&self, device_type: u32, device_index: u32, reserved: u32) -> DeviceHandle {
+    unsafe fn open_device(
+        &self,
+        device_type: u32,
+        device_index: u32,
+        reserved: u32,
+    ) -> DeviceHandle {
         let func: unsafe extern "C" fn(u32, u32, u32) -> *mut std::ffi::c_void =
             unsafe { std::mem::transmute(self.fn_open_device) };
         DeviceHandle(unsafe { func(device_type, device_index, reserved) })
@@ -135,9 +143,17 @@ impl ZlgFunctions {
         unsafe { func(handle.0) }
     }
 
-    unsafe fn init_can(&self, device_handle: DeviceHandle, can_index: u32, config: *const ZcanChannelInitConfig) -> ChannelHandle {
-        let func: unsafe extern "C" fn(*mut std::ffi::c_void, u32, *const ZcanChannelInitConfig) -> *mut std::ffi::c_void =
-            unsafe { std::mem::transmute(self.fn_init_can) };
+    unsafe fn init_can(
+        &self,
+        device_handle: DeviceHandle,
+        can_index: u32,
+        config: *const ZcanChannelInitConfig,
+    ) -> ChannelHandle {
+        let func: unsafe extern "C" fn(
+            *mut std::ffi::c_void,
+            u32,
+            *const ZcanChannelInitConfig,
+        ) -> *mut std::ffi::c_void = unsafe { std::mem::transmute(self.fn_init_can) };
         ChannelHandle(unsafe { func(device_handle.0, can_index, config) })
     }
 
@@ -147,15 +163,30 @@ impl ZlgFunctions {
         unsafe { func(channel_handle.0) }
     }
 
-    unsafe fn transmit(&self, channel_handle: ChannelHandle, data: *const ZcanTransmitData, len: u32) -> u32 {
+    unsafe fn transmit(
+        &self,
+        channel_handle: ChannelHandle,
+        data: *const ZcanTransmitData,
+        len: u32,
+    ) -> u32 {
         let func: unsafe extern "C" fn(*mut std::ffi::c_void, *const ZcanTransmitData, u32) -> u32 =
             unsafe { std::mem::transmute(self.fn_transmit) };
         unsafe { func(channel_handle.0, data, len) }
     }
 
-    unsafe fn receive(&self, channel_handle: ChannelHandle, data: *mut ZcanReceiveData, len: u32, wait_time: i32) -> u32 {
-        let func: unsafe extern "C" fn(*mut std::ffi::c_void, *mut ZcanReceiveData, u32, i32) -> u32 =
-            unsafe { std::mem::transmute(self.fn_receive) };
+    unsafe fn receive(
+        &self,
+        channel_handle: ChannelHandle,
+        data: *mut ZcanReceiveData,
+        len: u32,
+        wait_time: i32,
+    ) -> u32 {
+        let func: unsafe extern "C" fn(
+            *mut std::ffi::c_void,
+            *mut ZcanReceiveData,
+            u32,
+            i32,
+        ) -> u32 = unsafe { std::mem::transmute(self.fn_receive) };
         unsafe { func(channel_handle.0, data, len, wait_time) }
     }
 
@@ -229,7 +260,13 @@ unsafe fn load_sym(lib: &libloading::Library, name: &[u8]) -> Result<usize, Stri
     unsafe {
         lib.get::<unsafe extern "C" fn()>(name)
             .map(|sym| *sym as usize)
-            .map_err(|e| format!("Failed to load symbol {:?}: {}", String::from_utf8_lossy(name), e))
+            .map_err(|e| {
+                format!(
+                    "Failed to load symbol {:?}: {}",
+                    String::from_utf8_lossy(name),
+                    e
+                )
+            })
     }
 }
 
@@ -239,7 +276,9 @@ fn get_zlg_funcs() -> Result<&'static ZlgFunctions, CanError> {
         unsafe { load_zlg_functions() }
     });
 
-    result.as_ref().map_err(|e| CanError::Io(format!("ZLG SDK not available: {}", e)))
+    result
+        .as_ref()
+        .map_err(|e| CanError::Io(format!("ZLG SDK not available: {}", e)))
 }
 
 // ========== 错误处理 ==========
@@ -260,16 +299,16 @@ fn bitrate_to_timing(bitrate: &CanBitrate) -> (u8, u8) {
     // 常见波特率对应的 Timing0/Timing1 值
     // 这些值是基于 16MHz 时钟频率的标准配置
     match bitrate.nominal {
-        1_000_000 => (0x00, 0x14),  // 1 Mbps
-        800_000 => (0x00, 0x16),    // 800 kbps
-        500_000 => (0x00, 0x1C),    // 500 kbps
-        250_000 => (0x01, 0x1C),    // 250 kbps
-        125_000 => (0x03, 0x1C),    // 125 kbps
-        100_000 => (0x04, 0x1C),    // 100 kbps
-        50_000 => (0x09, 0x1C),     // 50 kbps
-        20_000 => (0x18, 0x1C),     // 20 kbps
-        10_000 => (0x31, 0x1C),     // 10 kbps
-        _ => (0x00, 0x1C),          // 默认 500 kbps
+        1_000_000 => (0x00, 0x14), // 1 Mbps
+        800_000 => (0x00, 0x16),   // 800 kbps
+        500_000 => (0x00, 0x1C),   // 500 kbps
+        250_000 => (0x01, 0x1C),   // 250 kbps
+        125_000 => (0x03, 0x1C),   // 125 kbps
+        100_000 => (0x04, 0x1C),   // 100 kbps
+        50_000 => (0x09, 0x1C),    // 50 kbps
+        20_000 => (0x18, 0x1C),    // 20 kbps
+        10_000 => (0x31, 0x1C),    // 10 kbps
+        _ => (0x00, 0x1C),         // 默认 500 kbps
     }
 }
 
@@ -283,7 +322,7 @@ pub struct ZlgBus {
     device_type: u32,
     device_index: u32,
     channel: u32,
-    _mutex: Mutex<()>,  // 保护非线程安全的 C API
+    _mutex: Mutex<()>, // 保护非线程安全的 C API
 }
 
 // SAFETY: ZlgBus 内部使用 Mutex 保护所有 FFI 调用
@@ -316,14 +355,14 @@ impl ZlgBus {
         // 初始化 CAN 通道
         let (timing0, timing1) = bitrate_to_timing(&config.bitrate);
         let init_config = ZcanChannelInitConfig {
-            can_type: 0,  // CAN (not CANFD)
+            can_type: 0, // CAN (not CANFD)
             acc_code: 0,
-            acc_mask: 0xFFFFFFFF,  // 接收所有帧
+            acc_mask: 0xFFFFFFFF, // 接收所有帧
             reserved: 0,
-            filter: 1,  // 单滤波
+            filter: 1, // 单滤波
             timing0,
             timing1,
-            mode: 0,  // 正常模式
+            mode: 0, // 正常模式
             _pad: [0; 12],
         };
 
@@ -331,7 +370,9 @@ impl ZlgBus {
 
         if channel_handle == INVALID_CHANNEL_HANDLE {
             unsafe { funcs.close_device(device_handle) };
-            return Err(CanError::Io("Failed to initialize ZLG CAN channel".to_string()));
+            return Err(CanError::Io(
+                "Failed to initialize ZLG CAN channel".to_string(),
+            ));
         }
 
         // 启动 CAN 通道
@@ -372,12 +413,16 @@ impl CanBus for ZlgBus {
 
         let classic = match frame {
             CanFrame::Classic(f) => f,
-            CanFrame::Fd(_) => return Err(CanError::Unsupported("CAN FD not supported yet".to_string())),
+            CanFrame::Fd(_) => {
+                return Err(CanError::Unsupported(
+                    "CAN FD not supported yet".to_string(),
+                ));
+            }
         };
 
         let can_id = match classic.id {
             CanId::Standard(id) => id as u32,
-            CanId::Extended(id) => id | 0x80000000,  // 设置扩展帧标志
+            CanId::Extended(id) => id | 0x80000000, // 设置扩展帧标志
         };
 
         let mut data = [0u8; 8];
@@ -393,7 +438,7 @@ impl CanBus for ZlgBus {
                 __res1: 0,
                 data,
             },
-            transmit_type: 0,  // 正常发送
+            transmit_type: 0, // 正常发送
         };
 
         let status = unsafe { funcs.transmit(self.channel_handle, &transmit_data, 1) };
@@ -425,9 +470,7 @@ impl CanBus for ZlgBus {
                 };
 
                 // timeout = -1 表示无限等待
-                let status = unsafe {
-                    funcs.receive(channel_handle, &mut receive_data, 1, -1)
-                };
+                let status = unsafe { funcs.receive(channel_handle, &mut receive_data, 1, -1) };
 
                 if status == 0 {
                     return Err(CanError::Io("ZLG receive failed".to_string()));
@@ -461,29 +504,32 @@ impl CanBus for ZlgBus {
     }
 
     fn state(&self) -> CanState {
-        // 尝试通过读取通道错误信息来判断状态
-        if let Ok(funcs) = get_zlg_funcs() {
-            let _lock = self._mutex.lock().unwrap();
-            
-            // 检查是否有待接收的数据
-            let recv_num = unsafe { funcs.get_receive_num(self.channel_handle, 0) };
-            
-            // 如果有数据，说明总线是活跃的
-            if recv_num > 0 {
-                return CanState::Active;
-            }
-            
-            // 尝试读取通道错误信息
-            let err_info = ZcanChannelErrInfo {
-                error_code: 0,
-                passive_err_data: [0; 3],
-                ar_lost_err_data: 0,
-            };
-            
-            // 注意: ZCAN_ReadChannelErrInfo 函数指针在当前实现中未使用
-            // 如果需要更精确的状态检测，可以添加该函数的调用
-            
-            // 根据错误代码判断状态
+        let funcs = match get_zlg_funcs() {
+            Ok(f) => f,
+            Err(_) => return CanState::NotConnected,
+        };
+
+        let _lock = self._mutex.lock().unwrap();
+
+        // 检查是否有待接收的数据（作为总线活跃的指标）
+        let recv_num = unsafe { funcs.get_receive_num(self.channel_handle, 0) };
+
+        // 尝试读取通道错误信息
+        let mut err_info = ZcanChannelErrInfo {
+            error_code: 0,
+            passive_err_data: [0; 3],
+            ar_lost_err_data: 0,
+        };
+
+        // 调用 ZCAN_ReadChannelErrInfo 获取错误状态
+        let read_err_fn: unsafe extern "C" fn(
+            *mut std::ffi::c_void,
+            *mut ZcanChannelErrInfo,
+        ) -> u32 = unsafe { std::mem::transmute(funcs.fn_read_channel_err_info) };
+        let status = unsafe { read_err_fn(self.channel_handle.0, &mut err_info) };
+
+        if status == 1 {
+            // 成功读取错误信息
             // ZLG SDK 的错误代码定义:
             // 0x0001: CAN 控制器内部 FIFO 溢出
             // 0x0002: CAN 控制器错误报警
@@ -499,8 +545,13 @@ impl CanBus for ZlgBus {
                 return CanState::Warning;
             }
         }
-        
-        CanState::Active
+
+        // 如果有数据或没有严重错误，认为总线活跃
+        if recv_num > 0 || err_info.error_code == 0 {
+            CanState::Active
+        } else {
+            CanState::Warning
+        }
     }
 
     fn set_bitrate(&self, bitrate: CanBitrate) -> Result<(), CanError> {
@@ -508,7 +559,7 @@ impl CanBus for ZlgBus {
         // 这是一个破坏性操作，暂时不支持
         let _ = bitrate;
         Err(CanError::Unsupported(
-            "ZLG bitrate change requires channel reinitialization".to_string()
+            "ZLG bitrate change requires channel reinitialization".to_string(),
         ))
     }
 }
@@ -525,15 +576,18 @@ impl CanBusFactory for ZlgFactory {
         let parts: Vec<&str> = channel.split(':').collect();
         if parts.len() != 3 {
             return Err(CanError::InvalidConfig(
-                "ZLG channel format: <device_type>:<device_index>:<channel>".to_string()
+                "ZLG channel format: <device_type>:<device_index>:<channel>".to_string(),
             ));
         }
 
-        let device_type: u32 = parts[0].parse()
+        let device_type: u32 = parts[0]
+            .parse()
             .map_err(|_| CanError::InvalidConfig("Invalid device type".to_string()))?;
-        let device_index: u32 = parts[1].parse()
+        let device_index: u32 = parts[1]
+            .parse()
             .map_err(|_| CanError::InvalidConfig("Invalid device index".to_string()))?;
-        let channel_idx: u32 = parts[2].parse()
+        let channel_idx: u32 = parts[2]
+            .parse()
             .map_err(|_| CanError::InvalidConfig("Invalid channel".to_string()))?;
 
         let bus = ZlgBus::open(device_type, device_index, channel_idx, config)?;
@@ -565,7 +619,10 @@ impl CanBusFactory for ZlgFactory {
                     if handle != INVALID_DEVICE_HANDLE {
                         // 设备存在，添加所有通道
                         for ch in 0..*max_channels {
-                            channels.push(format!("{}:{}:{} ({} #{})", dev_type, dev_idx, ch, name, dev_idx));
+                            channels.push(format!(
+                                "{}:{}:{} ({} #{})",
+                                dev_type, dev_idx, ch, name, dev_idx
+                            ));
                         }
                         unsafe { funcs.close_device(handle) };
                     }

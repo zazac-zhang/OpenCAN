@@ -54,9 +54,7 @@ pub async fn read_pdo_mapping(
     // Read the number of mapped objects (subindex 0)
     let num_entries = {
         let mut guard = stack_state.lock().await;
-        guard
-            .sdo_upload_u32(node_id, tpdo_map_index, 0)
-            .await
+        guard.sdo_upload_u32(node_id, tpdo_map_index, 0).await
     };
 
     let num_entries = match num_entries {
@@ -70,9 +68,7 @@ pub async fn read_pdo_mapping(
     for i in 1..=num_entries {
         let entry = {
             let mut guard = stack_state.lock().await;
-            guard
-                .sdo_upload_u32(node_id, tpdo_map_index, i)
-                .await
+            guard.sdo_upload_u32(node_id, tpdo_map_index, i).await
         };
 
         if let Ok(OdValue::Unsigned32(v)) = entry {

@@ -25,7 +25,8 @@ tracing-subscriber = "0.3"
 thiserror = "2"
 opencan-can-traits = { path = "../../crates/can-traits" }
 opencan-canopen-core = { path = "../../crates/canopen-core", features = ["testing"] }
-opencan-canopen-ds301 = { path = "../../crates/canopen-ds301", features = ["ds402"] }
+opencan-canopen-master = { path = "../../crates/canopen-master" }
+opencan-canopen-ds402 = { path = "../../crates/canopen-ds402" }
 
 [features]
 default = ["custom-protocol"]

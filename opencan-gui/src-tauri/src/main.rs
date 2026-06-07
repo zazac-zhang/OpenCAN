@@ -8,8 +8,8 @@ mod commands;
 mod state;
 
 use opencan_canopen_core::testing::MockCanDriver;
-use opencan_canopen_ds301::stack::CanopenStack;
-use state::{start_backend_loop, AppState, SharedStack, SharedState};
+use opencan_canopen_core::stack::CanopenStack;
+use state::{AppState, SharedStack, SharedState, start_backend_loop};
 use std::sync::Arc;
 use tauri::Manager;
 use tokio::sync::Mutex;
@@ -22,10 +22,7 @@ fn main() {
 
     // Shared state
     let app_state: SharedState = Arc::new(Mutex::new(AppState::new()));
-    let stack: SharedStack = Arc::new(Mutex::new(CanopenStack::new(
-        MockCanDriver::new(),
-        0,
-    )));
+    let stack: SharedStack = Arc::new(Mutex::new(CanopenStack::new(MockCanDriver::new(), 0)));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())

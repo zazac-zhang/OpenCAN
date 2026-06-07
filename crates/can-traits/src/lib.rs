@@ -19,6 +19,10 @@
 
 pub mod error;
 
+pub mod monitor;
+
+pub mod recovery;
+
 #[cfg(feature = "socketcan")]
 pub mod socketcan;
 
@@ -150,6 +154,26 @@ impl CanFrame {
             Self::Fd(f) => f.timestamp_us,
         }
     }
+
+    /// Check if this is a CAN FD frame.
+    pub fn is_fd(&self) -> bool {
+        matches!(self, Self::Fd(_))
+    }
+
+    /// Create a new classic CAN frame.
+    pub fn new_classic(id: CanId, data: &[u8]) -> Self {
+        Self::Classic(ClassicFrame::new(id, data))
+    }
+
+    /// Create a new CAN FD frame.
+    pub fn new_fd(id: CanId, data: &[u8]) -> Self {
+        Self::Fd(FdFrame::new(id, data))
+    }
+
+    /// Create a new CAN FD frame with flags.
+    pub fn new_fd_with_flags(id: CanId, data: &[u8], flags: FdFlags) -> Self {
+        Self::Fd(FdFrame::with_flags(id, data, flags))
+    }
 }
 
 /// CAN 2.0 classic frame.
@@ -191,6 +215,34 @@ pub struct FdFrame {
     pub data: Vec<u8>,
     pub flags: FdFlags,
     pub timestamp_us: Option<u64>,
+}
+
+impl FdFrame {
+    /// Create a new CAN FD frame.
+    pub fn new(id: CanId, data: &[u8]) -> Self {
+        Self {
+            id,
+            data: data.to_vec(),
+            flags: FdFlags::default(),
+            timestamp_us: None,
+        }
+    }
+
+    /// Create a new CAN FD frame with flags.
+    pub fn with_flags(id: CanId, data: &[u8], flags: FdFlags) -> Self {
+        Self {
+            id,
+            data: data.to_vec(),
+            flags,
+            timestamp_us: None,
+        }
+    }
+
+    /// Set timestamp.
+    pub fn with_timestamp(mut self, ts_us: u64) -> Self {
+        self.timestamp_us = Some(ts_us);
+        self
+    }
 }
 
 /// CAN FD flags.
@@ -272,4 +324,54 @@ impl Default for CanConfig {
             fd: false,
         }
     }
+}
+
+/// 设备热插拔事件
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeviceEvent {
+    /// 设备已连接
+    Connected {
+        /// 后端名称 (如 "SocketCAN", "Kvaser")
+        backend: String,
+        /// 通道名称
+        channel: String,
+    },
+    /// 设备已断开
+    Disconnected {
+        /// 后端名称
+        backend: String,
+        /// 通道名称
+        channel: String,
+    },
+}
+
+/// 设备监控器 trait
+///
+/// 用于监听 CAN 设备的连接和断开事件。
+/// GUI 可以使用此 trait 来动态更新可用设备列表。
+pub trait DeviceMonitor: Send + Sync + 'static {
+    /// 启动设备监控
+    fn start(&mut self) -> Result<(), error::CanError>;
+
+    /// 停止设备监控
+    fn stop(&mut self) -> Result<(), error::CanError>;
+
+    /// 检查是否有新的设备事件
+    fn poll_event(&mut self) -> Option<DeviceEvent>;
+
+    /// 获取当前所有可用设备
+    fn available_devices(&self) -> Vec<DeviceInfo>;
+}
+
+/// 设备信息
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeviceInfo {
+    /// 后端名称
+    pub backend: String,
+    /// 通道名称
+    pub channel: String,
+    /// 设备描述
+    pub description: String,
+    /// 是否在线
+    pub online: bool,
 }

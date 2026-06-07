@@ -7,11 +7,11 @@ license.workspace = true
 
 [dependencies]
 thiserror = { workspace = true }
-tokio = { workspace = true, optional = true }
+tokio = { workspace = true }
 
 [features]
-testing = ["tokio"]
 eds = []
+testing = []
 
 [dev-dependencies]
 tokio = { workspace = true }

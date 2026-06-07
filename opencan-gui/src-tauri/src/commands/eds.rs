@@ -25,8 +25,8 @@ pub async fn load_eds_file(
 ) -> Result<EdsInfo, String> {
     #[cfg(feature = "eds")]
     {
-        use opencan_canopen_core::eds::parser::parse_eds;
         use opencan_canopen_core::eds::builder::build_od;
+        use opencan_canopen_core::eds::parser::parse_eds;
         use std::sync::Arc;
 
         let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;

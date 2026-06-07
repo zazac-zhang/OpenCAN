@@ -12,7 +12,10 @@
 //!
 //! `canInitializeLibrary()` → `canOpenChannel()` → `canSetBusParams()` → `canBusOn()` → send/recv
 
-use crate::{CanBitrate, CanBus, CanBusDyn, CanBusFactory, CanConfig, CanFrame, CanId, CanState, ClassicFrame, error::CanError};
+use crate::{
+    CanBitrate, CanBus, CanBusDyn, CanBusFactory, CanConfig, CanFrame, CanId, CanState,
+    ClassicFrame, error::CanError,
+};
 use std::future::Future;
 use std::sync::Mutex;
 use std::sync::OnceLock;
@@ -49,9 +52,15 @@ const CAN_BITRATE_125K: i32 = -4;
 const CAN_BITRATE_100K: i32 = -5;
 const CAN_BITRATE_50K: i32 = -7;
 
-// ========== FFI 函数指针 ==========
+// Kvaser 状态标志 (canReadStatus 返回值)
+const CANSTAT_ERROR_PASSIVE: u32 = 0x00000020;
+const CANSTAT_BUS_OFF: u32 = 0x00000040;
+const CANSTAT_ERROR_WARNING: u32 = 0x00000010;
+const CANSTAT_ERROR_ACTIVE: u32 = 0x00000008;
+const CANSTAT_TX_PENDING: u32 = 0x00000001;
+const CANSTAT_RX_PENDING: u32 = 0x00000002;
 
-/// Kvaser CANlib SDK 函数指针集合
+// Kvaser canRead 函数指针
 #[allow(dead_code)]
 struct KvaserFunctions {
     _lib: libloading::Library,
@@ -68,6 +77,7 @@ struct KvaserFunctions {
     fn_write_wait: usize,
     fn_read: usize,
     fn_read_wait: usize,
+    fn_read_status: usize,
     fn_get_error_text: usize,
 }
 
@@ -89,33 +99,68 @@ impl KvaserFunctions {
     }
 
     unsafe fn close(&self, handle: CanHandle) -> CanStatus {
-        let func: unsafe extern "C" fn(i32) -> i32 =
-            unsafe { std::mem::transmute(self.fn_close) };
+        let func: unsafe extern "C" fn(i32) -> i32 = unsafe { std::mem::transmute(self.fn_close) };
         unsafe { func(handle.0) }
     }
 
     unsafe fn bus_on(&self, handle: CanHandle) -> CanStatus {
-        let func: unsafe extern "C" fn(i32) -> i32 =
-            unsafe { std::mem::transmute(self.fn_bus_on) };
+        let func: unsafe extern "C" fn(i32) -> i32 = unsafe { std::mem::transmute(self.fn_bus_on) };
         unsafe { func(handle.0) }
     }
 
-    unsafe fn set_bus_params(&self, handle: CanHandle, freq: i32, tseg1: u32, tseg2: u32, sjw: u32, no_samp: u32) -> CanStatus {
+    unsafe fn set_bus_params(
+        &self,
+        handle: CanHandle,
+        freq: i32,
+        tseg1: u32,
+        tseg2: u32,
+        sjw: u32,
+        no_samp: u32,
+    ) -> CanStatus {
         let func: unsafe extern "C" fn(i32, i32, u32, u32, u32, u32, u32) -> i32 =
             unsafe { std::mem::transmute(self.fn_set_bus_params) };
         unsafe { func(handle.0, freq, tseg1, tseg2, sjw, no_samp, 0) }
     }
 
-    unsafe fn write(&self, handle: CanHandle, id: i32, msg: *const u8, dlc: u32, flags: u32) -> CanStatus {
+    unsafe fn write(
+        &self,
+        handle: CanHandle,
+        id: i32,
+        msg: *const u8,
+        dlc: u32,
+        flags: u32,
+    ) -> CanStatus {
         let func: unsafe extern "C" fn(i32, i32, *const u8, u32, u32) -> i32 =
             unsafe { std::mem::transmute(self.fn_write) };
         unsafe { func(handle.0, id, msg, dlc, flags) }
     }
 
-    unsafe fn read_wait(&self, handle: CanHandle, id: *mut i32, msg: *mut u8, dlc: *mut u32, flags: *mut u32, time: *mut u32, timeout: u32) -> CanStatus {
-        let func: unsafe extern "C" fn(i32, *mut i32, *mut u8, *mut u32, *mut u32, *mut u32, u32) -> i32 =
-            unsafe { std::mem::transmute(self.fn_read_wait) };
+    unsafe fn read_wait(
+        &self,
+        handle: CanHandle,
+        id: *mut i32,
+        msg: *mut u8,
+        dlc: *mut u32,
+        flags: *mut u32,
+        time: *mut u32,
+        timeout: u32,
+    ) -> CanStatus {
+        let func: unsafe extern "C" fn(
+            i32,
+            *mut i32,
+            *mut u8,
+            *mut u32,
+            *mut u32,
+            *mut u32,
+            u32,
+        ) -> i32 = unsafe { std::mem::transmute(self.fn_read_wait) };
         unsafe { func(handle.0, id, msg, dlc, flags, time, timeout) }
+    }
+
+    unsafe fn read_status(&self, handle: CanHandle, flags: *mut u32) -> CanStatus {
+        let func: unsafe extern "C" fn(i32, *mut u32) -> i32 =
+            unsafe { std::mem::transmute(self.fn_read_status) };
+        unsafe { func(handle.0, flags) }
     }
 }
 
@@ -149,6 +194,7 @@ unsafe fn load_kvaser_functions() -> Result<KvaserFunctions, String> {
     let fn_write_wait = unsafe { load_sym(&lib, b"canWriteWait")? };
     let fn_read = unsafe { load_sym(&lib, b"canRead")? };
     let fn_read_wait = unsafe { load_sym(&lib, b"canReadWait")? };
+    let fn_read_status = unsafe { load_sym(&lib, b"canReadStatus")? };
     let fn_get_error_text = unsafe { load_sym(&lib, b"canGetErrorText")? };
 
     Ok(KvaserFunctions {
@@ -166,6 +212,7 @@ unsafe fn load_kvaser_functions() -> Result<KvaserFunctions, String> {
         fn_write_wait,
         fn_read,
         fn_read_wait,
+        fn_read_status,
         fn_get_error_text,
     })
 }
@@ -174,16 +221,22 @@ unsafe fn load_sym(lib: &libloading::Library, name: &[u8]) -> Result<usize, Stri
     unsafe {
         lib.get::<unsafe extern "C" fn()>(name)
             .map(|sym| *sym as usize)
-            .map_err(|e| format!("Failed to load symbol {:?}: {}", String::from_utf8_lossy(name), e))
+            .map_err(|e| {
+                format!(
+                    "Failed to load symbol {:?}: {}",
+                    String::from_utf8_lossy(name),
+                    e
+                )
+            })
     }
 }
 
 fn get_kvaser_funcs() -> Result<&'static KvaserFunctions, CanError> {
-    let result = KVASER_FUNCS.get_or_init(|| {
-        unsafe { load_kvaser_functions() }
-    });
+    let result = KVASER_FUNCS.get_or_init(|| unsafe { load_kvaser_functions() });
 
-    result.as_ref().map_err(|e| CanError::Io(format!("Kvaser CANlib not available: {}", e)))
+    result
+        .as_ref()
+        .map_err(|e| CanError::Io(format!("Kvaser CANlib not available: {}", e)))
 }
 
 // ========== 错误处理 ==========
@@ -210,7 +263,7 @@ fn bitrate_to_kvaser(bitrate: &CanBitrate) -> i32 {
         125_000 => CAN_BITRATE_125K,
         100_000 => CAN_BITRATE_100K,
         50_000 => CAN_BITRATE_50K,
-        _ => CAN_BITRATE_500K,  // 默认 500 kbps
+        _ => CAN_BITRATE_500K, // 默认 500 kbps
     }
 }
 
@@ -231,7 +284,9 @@ fn ensure_initialized() -> Result<(), CanError> {
     if *KVASER_INITIALIZED.get().unwrap_or(&false) {
         Ok(())
     } else {
-        Err(CanError::Io("Kvaser CANlib initialization failed".to_string()))
+        Err(CanError::Io(
+            "Kvaser CANlib initialization failed".to_string(),
+        ))
     }
 }
 
@@ -240,7 +295,7 @@ fn ensure_initialized() -> Result<(), CanError> {
 /// Kvaser CAN 总线实例
 pub struct KvaserBus {
     handle: CanHandle,
-    _mutex: Mutex<()>,  // 保护同一个 handle 的并发调用
+    _mutex: Mutex<()>, // 保护同一个 handle 的并发调用
 }
 
 // SAFETY: Kvaser CANlib 是按 handle 线程安全的，我们使用 Mutex 保护
@@ -254,7 +309,8 @@ impl KvaserBus {
         let funcs = get_kvaser_funcs()?;
 
         // 解析通道号
-        let channel_idx: i32 = channel.parse()
+        let channel_idx: i32 = channel
+            .parse()
             .map_err(|_| CanError::InvalidConfig(format!("Invalid Kvaser channel: {}", channel)))?;
 
         // 打开通道（独占模式 + 接受虚拟通道用于测试）
@@ -267,9 +323,7 @@ impl KvaserBus {
 
         // 设置波特率
         let bitrate = bitrate_to_kvaser(&config.bitrate);
-        let status = unsafe {
-            funcs.set_bus_params(handle, bitrate, 0, 0, 0, 1)
-        };
+        let status = unsafe { funcs.set_bus_params(handle, bitrate, 0, 0, 0, 1) };
 
         if status != CAN_OK {
             unsafe { funcs.close(handle) };
@@ -308,7 +362,11 @@ impl CanBus for KvaserBus {
 
         let classic = match frame {
             CanFrame::Classic(f) => f,
-            CanFrame::Fd(_) => return Err(CanError::Unsupported("CAN FD not supported yet".to_string())),
+            CanFrame::Fd(_) => {
+                return Err(CanError::Unsupported(
+                    "CAN FD not supported yet".to_string(),
+                ));
+            }
         };
 
         let (id, flags) = match classic.id {
@@ -320,9 +378,8 @@ impl CanBus for KvaserBus {
         let len = classic.len.min(8) as usize;
         data[..len].copy_from_slice(&classic.data[..len]);
 
-        let status = unsafe {
-            funcs.write(self.handle, id, data.as_ptr(), classic.len as u32, flags)
-        };
+        let status =
+            unsafe { funcs.write(self.handle, id, data.as_ptr(), classic.len as u32, flags) };
 
         if status != CAN_OK {
             return Err(kvaser_status_to_error(status));
@@ -346,7 +403,15 @@ impl CanBus for KvaserBus {
 
                 // 使用 canReadWait 实现阻塞接收，超时 100ms
                 let status = unsafe {
-                    funcs.read_wait(handle, &mut id, data.as_mut_ptr(), &mut dlc, &mut flags, &mut time, 100)
+                    funcs.read_wait(
+                        handle,
+                        &mut id,
+                        data.as_mut_ptr(),
+                        &mut dlc,
+                        &mut flags,
+                        &mut time,
+                        100,
+                    )
                 };
 
                 if status != CAN_OK {
@@ -370,7 +435,7 @@ impl CanBus for KvaserBus {
                     id: can_id,
                     data: frame_data,
                     len: dlc as u8,
-                    timestamp_us: Some(time as u64 * 1000),  // 转换为微秒
+                    timestamp_us: Some(time as u64 * 1000), // 转换为微秒
                 }))
             })
             .await
@@ -381,26 +446,37 @@ impl CanBus for KvaserBus {
     }
 
     fn state(&self) -> CanState {
-        // Kvaser 可以通过多种方式查询状态:
-        // 1. canRead: 如果返回 canERR_BUSOFF，则总线已关闭
-        // 2. canReadStatus: 获取详细的状态标志
-        // 3. canGetBusParams: 获取当前总线参数
-        
-        // TODO: 实现完整的状态查询，使用 canReadStatus
-        // canReadStatus 返回以下标志:
-        // - canSTAT_ERROR_PASSIVE: 控制器处于错误被动状态
-        // - canSTAT_BUS_OFF: 控制器处于总线关闭状态
-        // - canSTAT_ERROR_WARNING: 错误计数器达到警告级别
-        // - canSTAT_ERROR_ACTIVE: 控制器处于错误主动状态
-        
-        CanState::Active
+        let funcs = match get_kvaser_funcs() {
+            Ok(f) => f,
+            Err(_) => return CanState::NotConnected,
+        };
+
+        let mut flags: u32 = 0;
+        let status = unsafe { funcs.read_status(self.handle, &mut flags) };
+
+        if status != CAN_OK {
+            return CanState::NotConnected;
+        }
+
+        // 根据状态标志判断总线状态
+        if flags & CANSTAT_BUS_OFF != 0 {
+            CanState::BusOff
+        } else if flags & CANSTAT_ERROR_PASSIVE != 0 {
+            CanState::ErrorPassive
+        } else if flags & CANSTAT_ERROR_WARNING != 0 {
+            CanState::Warning
+        } else if flags & CANSTAT_ERROR_ACTIVE != 0 {
+            CanState::Active
+        } else {
+            CanState::Active
+        }
     }
 
     fn set_bitrate(&self, bitrate: CanBitrate) -> Result<(), CanError> {
         // Kvaser 需要下线、重新设置参数、再上线
         let _ = bitrate;
         Err(CanError::Unsupported(
-            "Kvaser bitrate change requires channel reinitialization".to_string()
+            "Kvaser bitrate change requires channel reinitialization".to_string(),
         ))
     }
 }
@@ -431,13 +507,12 @@ impl CanBusFactory for KvaserFactory {
             // Kvaser 支持最多 64 个通道
             // 使用 accept_virtual 标志来包含虚拟通道（用于测试）
             let max_channels = 64;
-            
+
             for i in 0..max_channels {
                 // 尝试打开通道（独占模式 + 接受虚拟通道）
-                let handle = unsafe {
-                    funcs.open_channel(i, CAN_OPEN_EXCLUSIVE | CAN_OPEN_ACCEPT_VIRTUAL)
-                };
-                
+                let handle =
+                    unsafe { funcs.open_channel(i, CAN_OPEN_EXCLUSIVE | CAN_OPEN_ACCEPT_VIRTUAL) };
+
                 if handle.0 >= 0 {
                     // 获取通道信息
                     // canGetChannelData 可以获取更多详细信息，这里简化处理

@@ -2,7 +2,8 @@
 members = [
     "crates/can-traits",
     "crates/canopen-core",
-    "crates/canopen-ds301",
+    "crates/canopen-ds402",
+    "crates/canopen-master",
     "opencan-gui/src-tauri",
 ]
 exclude = []

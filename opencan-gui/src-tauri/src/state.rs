@@ -1,18 +1,18 @@
 //! Global application state shared across Tauri commands and event loops.
 
 use crate::channels::Channels;
-use opencan_canopen_ds301::stack::{CanEvent, CanopenStack};
-use opencan_canopen_core::frame::CanOpenFrame;
-use opencan_canopen_core::testing::MockCanDriver;
 use opencan_canopen_core::CanDriver;
-use opencan_canopen_core::od::ObjectDictionary;
 #[cfg(feature = "eds")]
 use opencan_canopen_core::eds::model::{EdsEntry, EdsSubEntry};
+use opencan_canopen_core::frame::CanOpenFrame;
+use opencan_canopen_core::od::ObjectDictionary;
+use opencan_canopen_core::testing::MockCanDriver;
+use opencan_canopen_core::stack::{CanEvent, CanopenStack};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufWriter, Write};
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use tokio::sync::Mutex;
 
 /// Node information discovered on the CANOpen network.
@@ -58,7 +58,7 @@ pub struct AppState {
     /// Playback cancellation flag
     pub playback_running: Arc<AtomicBool>,
     /// Built Object Dictionary from loaded EDS
-#[allow(dead_code)]
+    #[allow(dead_code)]
     pub object_dictionary: Option<Arc<dyn ObjectDictionary + Send + Sync>>,
     /// EDS objects for frontend display
     pub eds_objects: Vec<EdsObjectInfo>,
@@ -256,12 +256,7 @@ fn emit_event(channels: &Channels, event: CanEvent) {
             };
             channels.emit_pdo(crate::channels::PdoEvent {
                 node_id,
-                pdo_type: if cob_id < 0x200 {
-                    "tpdo"
-                } else {
-                    "rpdo"
-                }
-                .to_string(),
+                pdo_type: if cob_id < 0x200 { "tpdo" } else { "rpdo" }.to_string(),
                 cob_id,
                 data: pdo.data.to_vec(),
                 timestamp_ms: now,

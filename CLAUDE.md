@@ -8,12 +8,22 @@ OpenCAN 是一个 CAN/CANOpen 调试工具，提供跨平台桌面 GUI（Tauri 2
 
 ## Architecture
 
+### Crate Structure
+
+```
+crates/
+├── can-traits/          # CAN 硬件抽象层
+├── canopen-core/        # DS301 标准协议实现
+├── canopen-ds402/       # DS402 运动控制配置文件
+└── canopen-master/      # 主站增强功能
+```
+
 ### Two-Layer Trait System
 
 ```
 ┌─ canopen-core: CanDriver ──────────────────────┐
 │  协议栈内部使用。操作 CanOpenFrame (COB-ID + 8B) │
-├─ canopen-ds301: CanDriverAdapter<B: CanBus> ───┤
+├─ canopen-master: CanDriverAdapter<B: CanBus> ──┤
 │  桥接层。CanOpenFrame ↔ CanFrame 编解码          │
 ├─ can-traits: CanBus + CanBusFactory ────────────┤
 │  硬件后端实现。操作 CanFrame (Classic/FD)         │
@@ -27,7 +37,7 @@ OpenCAN 是一个 CAN/CANOpen 调试工具，提供跨平台桌面 GUI（Tauri 2
 ### Crate Dependency Chain
 
 ```
-opencan (Tauri binary) → canopen-ds301 → canopen-core
+opencan (Tauri binary) → canopen-ds402 → canopen-core
   ├── can-traits ──────────┘
   │   ├── socketcan (opt, feature)
   │   ├── kvaser   (opt, feature)
@@ -40,7 +50,16 @@ frontend (React + Vite + TypeScript) → @tauri-apps/api + plugins
 opencan (Tauri IPC via commands.rs)
 ```
 
-DS402 代码位于 `canopen-ds301/src/ds402/` 下，通过 `canopen-ds301` 的 `ds402` feature 启用。
+### Crate Responsibilities
+
+| Crate | 职责 | 可独立发布 |
+|-------|------|----------|
+| `can-traits` | CAN 硬件抽象层 (CanBus trait) | ✅ |
+| `canopen-core` | DS301 标准协议 (NMT/SDO/PDO/Heartbeat/EMCY) | ✅ |
+| `canopen-master` | 主站增强功能 (CanDriverAdapter, 节点管理) | ❌ (依赖 core) |
+| `canopen-ds402` | DS402 运动控制配置文件 | ❌ (依赖 core) |
+
+DS402 代码位于 `canopen-ds402/src/ds402/` 下。
 EDS 解析器位于 `canopen-core/src/eds/` 下，通过 `canopen-core` 的 `eds` feature 启用。
 
 ### GUI Architecture
@@ -50,35 +69,65 @@ Frontend (React + Vite, localhost:5173 in dev)
   ↕ Tauri IPC commands (invoke/handle)
   ↕ Zustand stores + React Query
 Tauri Backend (tokio runtime)
-  ↕ CanopenStack (canopen-ds301)
-  ↕ CanDriverAdapter (bridge)
-  ↕ CanBus (硬件后端)
+  ↕ CanopenStack (canopen-core)
+  ↕ CanDriverAdapter (canopen-master)
+  ↕ CanBus (can-traits 硬件后端)
 ```
 
 Tauri 配置在 `opencan-gui/src-tauri/tauri.conf.json` 中。`beforeDevCommand` 启动 Vite dev server，`frontendDist` 指向 `../../frontend/dist`。
 
 ### Key Modules
 
-- **CANOpen 帧编解码** — `canopen-core/src/frame.rs`：`CanOpenFrame`、`CobId`、`FunctionCode`（`SyncOrEmergency` 合并变体，通过 node_id 区分）、`SdoRequest`/`SdoResponse`、`TimestampFrame`
-- **对象字典** — `canopen-core/src/od.rs`：`ObjectDictionary` trait、`ConcreteOd`（`concrete_od.rs`，BTreeMap 实现）、`OdValue`（25 种 CANOpen 数据类型的序列化，含 40/48/56 位类型 roundtrip 测试）
-- **SDO 错误码** — `canopen-core/src/sdo_abort.rs`：SDO abort codes 定义
-- **节点 ID** — `canopen-core/src/node_id.rs`：`NodeId` 类型（1-127 有效值验证）
-- **PDO 类型** — `canopen-core/src/pdo.rs`：PDO 相关类型定义
-- **EDS 解析器** — `canopen-core/src/eds/`：`parser.rs`（INI 格式解析）、`model.rs`（EDS 数据结构）、`builder.rs`（从 EDS 构建 OD）
-- **协议栈** — `canopen-ds301/src/stack.rs`：`CanopenStack` 主协议循环（SDO/NMT/Heartbeat/SYNC/TIME_STAMP/节点扫描/原始帧发送）
-- **SDO 客户端** — `canopen-ds301/src/sdo.rs`：独立 `SdoClient`，支持 expedited + segmented + block transfer
-- **SDO 服务端** — `canopen-ds301/src/sdo_server.rs`：SDO server 实现
-- **适配器** — `canopen-ds301/src/adapter.rs`：`CanDriverAdapter` 桥接 `CanBus` → `CanDriver`
-- **DS402 状态机** — `canopen-ds301/src/ds402/state_machine.rs`：`Ds402State`、StatusWord/ControlWord 位级解析
-- **DS402 设备** — `canopen-ds301/src/ds402/control.rs`：`Ds402Device` 运动控制 API
-- **DS402 模式** — `canopen-ds301/src/ds402/modes/`：CSP、CST、CSV、PP、PV、PT、Homing
-- **NMT** — `canopen-ds301/src/nmt.rs`：NMT 状态管理
-- **Heartbeat** — `canopen-ds301/src/heartbeat.rs`：Heartbeat 生产者/消费者
-- **EMCY** — `canopen-ds301/src/emcy.rs`：Emergency 消息处理
-- **PDO** — `canopen-ds301/src/pdo.rs` + `pdo_config.rs`：PDO 处理与配置（write_comm_params、disable_pdo、enable_pdo、动态配置）
-- **TIME_STAMP** — `canopen-ds301/src/stack.rs`：TIME_STAMP 帧收发（`send_timestamp()`、TimestampFrame 处理）
-- **Tauri 后端** — `opencan-gui/src-tauri/src/`：`main.rs`（app entry）、`state.rs`（application state）、`commands/`（IPC commands 模块化：connection/sdo/nmt/pdo/ds402/sync/eds/recording）、`channels/`（backend event channels）
-- **前端** — `frontend/src/`：React 组件（`components/` 下按功能分子目录）、自定义 hooks（`hooks/`）、Zustand store（`lib/store.ts`）、Tauri IPC 封装（`lib/tauri.ts`）、页面视图（`pages/` 下按 CAN/CANOpen/Recording/Settings 分组）、类型定义（`types/`）
+#### canopen-core (DS301 标准协议)
+
+`canopen-core` 按照协议层次组织：基础类型扁平放置，DS301 通信协议按通信对象类型分组在 `protocol/` 下。
+
+```
+canopen-core/src/
+├── frame.rs              # 帧编解码（CanOpenFrame, CobId, FunctionCode, 各类帧类型）
+├── od.rs                 # ObjectDictionary trait + OdValue（25 种 CANOpen 数据类型）
+├── concrete_od.rs        # BTreeMap 实现的 ConcreteOd + OdBuilder
+├── error.rs              # 全局错误类型
+├── node_id.rs            # NodeId 类型（1-127 验证）
+├── stack.rs              # CanopenStack 主协议循环
+├── testing.rs            # MockCanDriver 测试工具
+├── eds/                  # EDS 解析器（feature-gated）
+│   ├── parser.rs / model.rs / builder.rs
+├── protocol/             # DS301 通信协议（按通信对象分组）
+│   ├── sdo/              # SDO：client.rs + server.rs + abort.rs
+│   ├── pdo/              # PDO：types.rs + config.rs
+│   ├── nmt/              # NMT 主站命令
+│   ├── heartbeat/        # Heartbeat 生产者/消费者 + SYNC 生产者/消费者
+│   └── emcy/             # Emergency 消息处理
+```
+
+- **CANOpen 帧编解码** — `frame.rs`：`CanOpenFrame`、`CobId`、`FunctionCode`、`SdoRequest`/`SdoResponse`、`TimestampFrame`
+- **对象字典** — `od.rs` + `concrete_od.rs`：`ObjectDictionary` trait、`ConcreteOd`、`OdBuilder`、`OdValue`
+- **SDO** — `protocol/sdo/`：`SdoClient`（client.rs，支持 expedited + segmented + block transfer）、`SdoServer`（server.rs）、abort codes（abort.rs）
+- **PDO** — `protocol/pdo/`：PDO 类型与 pack/unpack（types.rs）、`PdoConfigManager` 配置管理（config.rs）
+- **NMT** — `protocol/nmt/`：NMT 主站命令（启动/停止/复位节点）
+- **Heartbeat + SYNC** — `protocol/heartbeat/`：Heartbeat 生产者/消费者、SYNC 生产者/消费者
+- **EMCY** — `protocol/emcy/`：Emergency 消息处理
+- **协议栈** — `stack.rs`：`CanopenStack` 主协议循环
+- **节点 ID** — `node_id.rs`：`NodeId` 类型（1-127 有效值验证）
+- **EDS 解析器** — `eds/`：`parser.rs`、`model.rs`、`builder.rs`
+
+#### canopen-master (主站增强功能)
+
+- **适配器** — `canopen-master/src/adapter.rs`：`CanDriverAdapter` 桥接 `CanBus` → `CanDriver`
+- **节点管理** — (规划中) 自动节点发现、状态跟踪
+- **网络诊断** — (规划中) 总线统计、错误跟踪
+
+#### canopen-ds402 (DS402 运动控制)
+
+- **DS402 状态机** — `canopen-ds402/src/ds402/state_machine.rs`：`Ds402State`、StatusWord/ControlWord 位级解析
+- **DS402 设备** — `canopen-ds402/src/ds402/control.rs`：`Ds402Device` 运动控制 API
+- **DS402 模式** — `canopen-ds402/src/ds402/modes/`：CSP、CST、CSV、PP、PV、PT、Homing
+
+#### Tauri GUI
+
+- **Tauri 后端** — `opencan-gui/src-tauri/src/`：`main.rs`、`state.rs`、`commands/`、`channels/`
+- **前端** — `frontend/src/`：React 组件、hooks、Zustand store、页面视图、类型定义
 
 ## Development Commands
 
@@ -134,18 +183,26 @@ Feature 是非排他的，可同时启用多个后端。GUI 通过 `CanBusFactor
 4. 在 Tauri 后端代码中注册新后端到 `CanBusFactory` 注册表
 5. 在 CI `build-features` job 的 matrix 中添加 feature
 
-### 添加协议功能
+### 添加协议功能 (canopen-core)
 
-- 新 SDO 功能 → `canopen-ds301/src/sdo.rs`
-- 新 NMT/Heartbeat/TIME_STAMP 功能 → `canopen-ds301/src/stack.rs` 或对应模块（`nmt.rs`、`heartbeat.rs`）
-- 新 PDO 功能 → `canopen-ds301/src/pdo.rs` 或 `pdo_config.rs`
+- 新 SDO 功能 → `canopen-core/src/protocol/sdo/` 下的 `client.rs`、`server.rs` 或 `abort.rs`
+- 新 NMT/Heartbeat/SYNC 功能 → `canopen-core/src/protocol/nmt/` 或 `protocol/heartbeat/`
+- 新 PDO 功能 → `canopen-core/src/protocol/pdo/types.rs` 或 `config.rs`
+- 新 EMCY 功能 → `canopen-core/src/protocol/emcy/`
+- 新通信对象 → 在 `canopen-core/src/protocol/` 下新建子目录，在 `protocol/mod.rs` 中注册，在 `lib.rs` 中添加 `pub use`
 - 新功能必须通过 `MockCanDriver`（`canopen-core/src/testing.rs`）单元测试
 
-### 添加 DS402 功能
+### 添加主站增强功能 (canopen-master)
 
-- 新状态转换 → `canopen-ds301/src/ds402/state_machine.rs`
-- 新操作模式 → `canopen-ds301/src/ds402/modes/` 下新建文件
-- 新设备 API → `canopen-ds301/src/ds402/control.rs`
+- 节点管理 → `canopen-master/src/node_manager.rs`（新建）
+- 网络诊断 → `canopen-master/src/diagnostics.rs`（新建）
+- 硬件桥接 → `canopen-master/src/adapter.rs`
+
+### 添加 DS402 功能 (canopen-ds402)
+
+- 新状态转换 → `canopen-ds402/src/ds402/state_machine.rs`
+- 新操作模式 → `canopen-ds402/src/ds402/modes/` 下新建文件
+- 新设备 API → `canopen-ds402/src/ds402/control.rs`
 
 ### 修改 GUI
 

@@ -215,6 +215,78 @@ let lib = libloading::Library::new("libzlgcan.so")?;
 
 所有后端的 `recv()` 方法返回 `impl Future`，内部使用 `tokio::task::spawn_blocking` 包装阻塞的 C API 调用。
 
+### CAN FD 支持
+
+SocketCAN 后端已支持 CAN FD 帧：
+
+```rust
+use opencan_can_traits::{CanFrame, CanId, FdFrame, FdFlags};
+
+// 创建 CAN FD 帧
+let fd_frame = CanFrame::new_fd(
+    CanId::Standard(0x123),
+    &[0x01; 64],  // 最多 64 字节
+);
+
+// 创建带 BRS 标志的 CAN FD 帧
+let fd_frame_with_brs = CanFrame::new_fd_with_flags(
+    CanId::Standard(0x123),
+    &[0x01; 32],
+    FdFlags { brs: true, esi: false },
+);
+
+// 使用 FD 模式打开 SocketCAN
+let config = CanConfig {
+    fd: true,  // 启用 CAN FD
+    ..Default::default()
+};
+let bus = SocketCanBus::open("can0", &config)?;
+```
+
+### 设备热插拔监控
+
+使用 `DeviceMonitor` trait 监听设备连接/断开事件：
+
+```rust
+use opencan_can_traits::monitor::SocketCanMonitor;
+use opencan_can_traits::DeviceMonitor;
+
+let mut monitor = SocketCanMonitor::new();
+monitor.start()?;
+
+// 轮询设备事件
+if let Some(event) = monitor.poll_event() {
+    match event {
+        DeviceEvent::Connected { backend, channel } => {
+            println!("Device connected: {}:{}", backend, channel);
+        }
+        DeviceEvent::Disconnected { backend, channel } => {
+            println!("Device disconnected: {}:{}", backend, channel);
+        }
+    }
+}
+```
+
+### 错误恢复机制
+
+使用 `RecoverableBus` 包装器添加自动恢复功能：
+
+```rust
+use opencan_can_traits::recovery::{RecoverableBus, RecoveryConfig};
+
+let config = RecoveryConfig {
+    auto_bus_off_recovery: true,  // 自动 BusOff 恢复
+    auto_reconnect: true,         // 自动重连
+    max_retries: 3,               // 最大重试次数
+    ..Default::default()
+};
+
+let recoverable_bus = RecoverableBus::new(bus, config);
+
+// 正常使用，错误时自动恢复
+recoverable_bus.send(&frame)?;
+```
+
 ### 波特率映射
 
 | 标称波特率 | ZLG Timing0/1 | PCAN 常量 | Kvaser 常量 |
@@ -228,10 +300,11 @@ let lib = libloading::Library::new("libzlgcan.so")?;
 
 ## 已知限制
 
-1. **CAN FD** — 当前仅支持 Classic CAN (8 字节)，CAN FD 支持待实现
+1. **CAN FD** — SocketCAN 后端已支持 CAN FD，其他后端待实现
 2. **平台支持** — macOS 不支持（厂商未提供驱动）
-3. **热插拔** — 不支持设备热插拔检测
+3. **热插拔** — 已实现基于轮询的设备监控，详见 `monitor` 模块
 4. **波特率修改** — 运行时修改波特率需要重新初始化通道
+5. **错误恢复** — 已实现自动 BusOff 恢复和重连机制，详见 `recovery` 模块
 
 ## 参考实现
 

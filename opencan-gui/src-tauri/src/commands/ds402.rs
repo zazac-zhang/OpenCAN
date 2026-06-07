@@ -80,36 +80,21 @@ pub async fn ds402_set_target(
         1 => {
             // Profile Position: write to 0x607A (Target Position)
             guard
-                .sdo_download(
-                    node_id,
-                    0x607A,
-                    0,
-                    &OdValue::Integer32(target as i32),
-                )
+                .sdo_download(node_id, 0x607A, 0, &OdValue::Integer32(target as i32))
                 .await
                 .map_err(|e| format!("{:?}", e))?;
         }
         3 => {
             // Profile Velocity: write to 0x60FF (Target Velocity)
             guard
-                .sdo_download(
-                    node_id,
-                    0x60FF,
-                    0,
-                    &OdValue::Integer32(target as i32),
-                )
+                .sdo_download(node_id, 0x60FF, 0, &OdValue::Integer32(target as i32))
                 .await
                 .map_err(|e| format!("{:?}", e))?;
         }
         6 => {
             // Homing: write to 0x607C (Home Offset)
             guard
-                .sdo_download(
-                    node_id,
-                    0x607C,
-                    0,
-                    &OdValue::Integer32(target as i32),
-                )
+                .sdo_download(node_id, 0x607C, 0, &OdValue::Integer32(target as i32))
                 .await
                 .map_err(|e| format!("{:?}", e))?;
         }

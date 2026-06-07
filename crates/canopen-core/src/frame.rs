@@ -194,7 +194,7 @@ impl NmtCommand {
 // === NMT State ===
 
 /// NMT states (DS301 Figure 6).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum NmtState {
     BootUp = 0x00,

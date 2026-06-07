@@ -2354,7 +2354,8 @@ version = "0.1.0"
 dependencies = [
  "opencan-can-traits",
  "opencan-canopen-core",
- "opencan-canopen-ds301",
+ "opencan-canopen-ds402",
+ "opencan-canopen-master",
  "serde",
  "serde_json",
  "tauri",
@@ -2389,7 +2390,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "opencan-canopen-ds301"
+name = "opencan-canopen-ds402"
+version = "0.1.0"
+dependencies = [
+ "opencan-canopen-core",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "opencan-canopen-master"
 version = "0.1.0"
 dependencies = [
  "opencan-can-traits",
