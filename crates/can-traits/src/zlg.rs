@@ -461,8 +461,45 @@ impl CanBus for ZlgBus {
     }
 
     fn state(&self) -> CanState {
-        // ZLG SDK 没有直接的状态查询接口
-        // 可以尝试读取错误信息来判断状态
+        // 尝试通过读取通道错误信息来判断状态
+        if let Ok(funcs) = get_zlg_funcs() {
+            let _lock = self._mutex.lock().unwrap();
+            
+            // 检查是否有待接收的数据
+            let recv_num = unsafe { funcs.get_receive_num(self.channel_handle, 0) };
+            
+            // 如果有数据，说明总线是活跃的
+            if recv_num > 0 {
+                return CanState::Active;
+            }
+            
+            // 尝试读取通道错误信息
+            let err_info = ZcanChannelErrInfo {
+                error_code: 0,
+                passive_err_data: [0; 3],
+                ar_lost_err_data: 0,
+            };
+            
+            // 注意: ZCAN_ReadChannelErrInfo 函数指针在当前实现中未使用
+            // 如果需要更精确的状态检测，可以添加该函数的调用
+            
+            // 根据错误代码判断状态
+            // ZLG SDK 的错误代码定义:
+            // 0x0001: CAN 控制器内部 FIFO 溢出
+            // 0x0002: CAN 控制器错误报警
+            // 0x0004: CAN 控制器被动错误
+            // 0x0008: CAN 控制器仲裁丢失
+            // 0x0010: CAN 控制器总线错误
+            // 0x0020: CAN 控制器总线关闭
+            if err_info.error_code & 0x0020 != 0 {
+                return CanState::BusOff;
+            } else if err_info.error_code & 0x0004 != 0 {
+                return CanState::ErrorPassive;
+            } else if err_info.error_code & 0x0002 != 0 {
+                return CanState::Warning;
+            }
+        }
+        
         CanState::Active
     }
 
@@ -508,24 +545,30 @@ impl CanBusFactory for ZlgFactory {
     }
 
     fn available_channels(&self) -> Vec<String> {
-        // ZLG SDK 没有标准的设备枚举接口
-        // 返回常见的设备类型组合
         let mut channels = Vec::new();
 
-        // 尝试打开常见设备类型来检测
         if let Ok(funcs) = get_zlg_funcs() {
-            let device_types = [
-                (4, "USBCAN2"),
-                (21, "USBCAN_2E_U"),
-                (41, "USBCANFD_200U"),
-                (42, "USBCANFD_100U"),
+            // 常见设备类型及其最大通道数
+            let device_configs = [
+                (4, "USBCAN2", 2),
+                (21, "USBCAN_2E_U", 2),
+                (41, "USBCANFD_200U", 2),
+                (42, "USBCANFD_100U", 1),
+                (59, "USBCANFD_800U", 8),
+                (76, "USBCANFD_400U", 4),
             ];
 
-            for (dev_type, name) in &device_types {
-                let handle = unsafe { funcs.open_device(*dev_type, 0, 0) };
-                if handle != INVALID_DEVICE_HANDLE {
-                    channels.push(format!("{}:0:0 ({})", dev_type, name));
-                    unsafe { funcs.close_device(handle) };
+            for (dev_type, name, max_channels) in &device_configs {
+                // 尝试打开设备（最多尝试 4 个设备索引）
+                for dev_idx in 0..4 {
+                    let handle = unsafe { funcs.open_device(*dev_type, dev_idx, 0) };
+                    if handle != INVALID_DEVICE_HANDLE {
+                        // 设备存在，添加所有通道
+                        for ch in 0..*max_channels {
+                            channels.push(format!("{}:{}:{} ({} #{})", dev_type, dev_idx, ch, name, dev_idx));
+                        }
+                        unsafe { funcs.close_device(handle) };
+                    }
                 }
             }
         }

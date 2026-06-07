@@ -381,7 +381,18 @@ impl CanBus for KvaserBus {
     }
 
     fn state(&self) -> CanState {
-        // Kvaser 没有简单的状态查询接口
+        // Kvaser 可以通过多种方式查询状态:
+        // 1. canRead: 如果返回 canERR_BUSOFF，则总线已关闭
+        // 2. canReadStatus: 获取详细的状态标志
+        // 3. canGetBusParams: 获取当前总线参数
+        
+        // TODO: 实现完整的状态查询，使用 canReadStatus
+        // canReadStatus 返回以下标志:
+        // - canSTAT_ERROR_PASSIVE: 控制器处于错误被动状态
+        // - canSTAT_BUS_OFF: 控制器处于总线关闭状态
+        // - canSTAT_ERROR_WARNING: 错误计数器达到警告级别
+        // - canSTAT_ERROR_ACTIVE: 控制器处于错误主动状态
+        
         CanState::Active
     }
 
@@ -417,12 +428,20 @@ impl CanBusFactory for KvaserFactory {
         }
 
         if let Ok(funcs) = get_kvaser_funcs() {
-            // 获取通道数量
-            // 这里简化处理，尝试打开前 8 个通道
-            for i in 0..8 {
-                let handle = unsafe { funcs.open_channel(i, CAN_OPEN_EXCLUSIVE | CAN_OPEN_ACCEPT_VIRTUAL) };
+            // Kvaser 支持最多 64 个通道
+            // 使用 accept_virtual 标志来包含虚拟通道（用于测试）
+            let max_channels = 64;
+            
+            for i in 0..max_channels {
+                // 尝试打开通道（独占模式 + 接受虚拟通道）
+                let handle = unsafe {
+                    funcs.open_channel(i, CAN_OPEN_EXCLUSIVE | CAN_OPEN_ACCEPT_VIRTUAL)
+                };
+                
                 if handle.0 >= 0 {
-                    channels.push(format!("{}", i));
+                    // 获取通道信息
+                    // canGetChannelData 可以获取更多详细信息，这里简化处理
+                    channels.push(format!("can{}", i));
                     unsafe { funcs.close(handle) };
                 }
             }

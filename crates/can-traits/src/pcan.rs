@@ -371,8 +371,17 @@ impl CanBus for PcanBus {
     }
 
     fn state(&self) -> CanState {
-        // PCAN 没有简单的状态查询接口
-        // 可以通过 CAN_GetValue 查询，但这里简化处理
+        // PCAN 可以通过 CAN_GetValue 查询通道状态
+        // 但这里简化处理，通过尝试读取来检测状态
+        
+        // 如果最近的读取返回 PCAN_ERROR_BUSOFF，则总线已关闭
+        // 如果返回 PCAN_ERROR_BUSHEAVY 或 PCAN_ERROR_BUSLIGHT，则有错误
+        
+        // TODO: 实现完整的状态查询，使用:
+        // - PCAN_CHANNEL_CONDITION: 检查通道是否可用
+        // - PCAN_CHANNEL_FEATURES: 检查通道支持的功能
+        // - PCAN_CONTROLLER_NUMBER: 获取控制器编号
+        
         CanState::Active
     }
 
@@ -401,18 +410,25 @@ impl CanBusFactory for PcanFactory {
     }
 
     fn available_channels(&self) -> Vec<String> {
-        // PCAN USB 设备自动枚举为 USBBUS1..16
-        // 返回可能的通道列表
         let mut channels = Vec::new();
 
-        // 尝试初始化每个通道来检测是否存在
         if let Ok(funcs) = get_pcan_funcs() {
-            for i in 1..=8 {
-                let handle = PcanHandle(0x50 + i);
-                let status = unsafe { funcs.initialize(handle, PCAN_BAUD_500K, 0, 0, 0) };
-                if status == PCAN_ERROR_OK {
-                    channels.push(format!("USBBUS{}", i));
-                    unsafe { funcs.uninitialize(handle) };
+            // PCAN 接口类型及其句柄范围
+            let interface_configs = [
+                (0x51, 0x58, "USBBUS"),      // USB: 0x51-0x58
+                (0x41, 0x48, "PCIBUS"),      // PCI: 0x41-0x48
+                (0x21, 0x28, "ISABUS"),      // ISA: 0x21-0x28
+            ];
+
+            for (start, end, prefix) in &interface_configs {
+                for handle_val in *start..=*end {
+                    let handle = PcanHandle(handle_val);
+                    let status = unsafe { funcs.initialize(handle, PCAN_BAUD_500K, 0, 0, 0) };
+                    if status == PCAN_ERROR_OK {
+                        let idx = handle_val - start + 1;
+                        channels.push(format!("{}{}", prefix, idx));
+                        unsafe { funcs.uninitialize(handle) };
+                    }
                 }
             }
         }
