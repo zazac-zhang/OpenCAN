@@ -305,4 +305,94 @@ mod ds402_tests {
         );
         assert_eq!(Ds402State::from_status_word(0x0008), Ds402State::Fault);
     }
+
+    #[tokio::test]
+    async fn test_ds402_fault_reset() {
+        let mut mock = MockCanDriver::new();
+        // fault_reset just writes control word, doesn't read state
+        mock.enqueue(sdo_download_confirm(3, 0x6040, 0));
+
+        let sdo = SdoClient::new(mock, Duration::from_secs(1));
+        let mut device = Ds402Device::new(sdo, 3);
+
+        device.fault_reset().await.unwrap();
+
+        let tx = device.sdo().can().tx_log();
+        assert_eq!(tx.len(), 1);
+        assert_eq!(tx[0].data[4], 0x80); // fault reset
+    }
+
+    #[tokio::test]
+    async fn test_ds402_set_mode_and_read() {
+        let mut mock = MockCanDriver::new();
+        // Confirm mode write (0x6060)
+        mock.enqueue(sdo_download_confirm(3, 0x6060, 0));
+        // Mode read response: CyclicSyncPosition (8) as i8
+        // cmd = 0x4F (cs=2, expedited, size indicated, 1 byte)
+        let mut d = [0u8; 8];
+        d[0] = 0x4F;
+        d[1..3].copy_from_slice(&0x6061u16.to_le_bytes());
+        d[4] = 8;
+        mock.enqueue(CanOpenFrame::new(0x583, d));
+
+        let sdo = SdoClient::new(mock, Duration::from_secs(1));
+        let mut device = Ds402Device::new(sdo, 3);
+
+        device.set_mode(OperationMode::CyclicSyncPosition).await.unwrap();
+        let mode = device.mode().await.unwrap();
+        assert_eq!(mode, OperationMode::CyclicSyncPosition);
+    }
+
+    #[tokio::test]
+    async fn test_ds402_velocity() {
+        let mut mock = MockCanDriver::new();
+        // Confirm velocity write (0x60FF)
+        mock.enqueue(sdo_download_confirm(3, 0x60FF, 0));
+        // Actual velocity response (0x606C)
+        mock.enqueue(sdo_upload_response(3, 0x606C, 0, 1000u32.to_le_bytes()));
+
+        let sdo = SdoClient::new(mock, Duration::from_secs(1));
+        let mut device = Ds402Device::new(sdo, 3);
+
+        device.set_target_velocity(1000).await.unwrap();
+        let vel = device.actual_velocity().await.unwrap();
+        assert_eq!(vel, 1000);
+    }
+
+    #[tokio::test]
+    async fn test_ds402_torque() {
+        let mut mock = MockCanDriver::new();
+        // Confirm torque write (0x6071)
+        mock.enqueue(sdo_download_confirm(3, 0x6071, 0));
+        // Actual torque response (0x6077) — i16 as expedited 2-byte response
+        // cmd = 0x4B (cs=2, expedited, size indicated, 2 bytes)
+        let mut d = [0u8; 8];
+        d[0] = 0x4B;
+        d[1..3].copy_from_slice(&0x6077u16.to_le_bytes());
+        d[4..6].copy_from_slice(&500i16.to_le_bytes());
+        mock.enqueue(CanOpenFrame::new(0x583, d));
+
+        let sdo = SdoClient::new(mock, Duration::from_secs(1));
+        let mut device = Ds402Device::new(sdo, 3);
+
+        device.set_target_torque(500).await.unwrap();
+        let tq = device.actual_torque().await.unwrap();
+        assert_eq!(tq, 500);
+    }
+
+    #[tokio::test]
+    async fn test_ds402_quick_stop() {
+        let mut mock = MockCanDriver::new();
+        // quick_stop just writes control word, doesn't read state
+        mock.enqueue(sdo_download_confirm(3, 0x6040, 0));
+
+        let sdo = SdoClient::new(mock, Duration::from_secs(1));
+        let mut device = Ds402Device::new(sdo, 3);
+
+        device.quick_stop().await.unwrap();
+
+        let tx = device.sdo().can().tx_log();
+        assert_eq!(tx.len(), 1);
+        assert_eq!(tx[0].data[4], 0x02); // quick stop
+    }
 }

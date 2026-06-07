@@ -1003,4 +1003,58 @@ mod tests {
         assert_eq!(decoded.ms_of_day, 43_200_000);
         assert_eq!(decoded.days, 365);
     }
+
+    #[test]
+    fn test_stack_process_pdo() {
+        let mock = MockCanDriver::new();
+        let mut stack = CanopenStack::new(mock, 0);
+
+        // TPDO1 from node 3: COB-ID = 0x180 + 3 = 0x183
+        let pdo_frame = CanOpenFrame::new(0x183, [0x01, 0x02, 0x03, 0x04, 0, 0, 0, 0]);
+        let events = stack.process(&pdo_frame);
+
+        let pdo_events: Vec<_> = events
+            .iter()
+            .filter(|e| matches!(e, CanEvent::PdoReceived { .. }))
+            .collect();
+        assert_eq!(pdo_events.len(), 1);
+    }
+
+    #[test]
+    fn test_stack_process_unknown_frame() {
+        let mock = MockCanDriver::new();
+        let mut stack = CanopenStack::new(mock, 0);
+
+        // Unknown COB-ID
+        let frame = CanOpenFrame::new(0x780, [0; 8]);
+        let events = stack.process(&frame);
+        // Should not crash, may produce no events
+        let _ = events;
+    }
+
+    #[test]
+    fn test_stack_nmt_stop() {
+        let mock = MockCanDriver::new();
+        let mut stack = CanopenStack::new(mock, 0);
+
+        stack.nmt_stop(5).unwrap();
+
+        let tx = stack.can().tx_log();
+        assert_eq!(tx.len(), 1);
+        assert_eq!(tx[0].data[0], 0x02); // EnterStopped
+        assert_eq!(tx[0].data[1], 5);
+    }
+
+    #[test]
+    fn test_stack_nmt_reset() {
+        let mock = MockCanDriver::new();
+        let mut stack = CanopenStack::new(mock, 0);
+
+        stack.nmt_reset(5).unwrap();
+
+        let tx = stack.can().tx_log();
+        assert_eq!(tx.len(), 1);
+        assert_eq!(tx[0].data[0], 0x81); // ResetNode
+        assert_eq!(tx[0].data[1], 5);
+    }
 }

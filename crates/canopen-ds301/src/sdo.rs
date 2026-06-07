@@ -804,4 +804,96 @@ mod tests {
             other => panic!("Expected Domain data, got: {:?}", other),
         }
     }
+
+    // === Error path tests ===
+
+    #[tokio::test]
+    async fn test_sdo_upload_timeout() {
+        let mock = MockCanDriver::new();
+        // No frames enqueued → recv will timeout
+        let mut client = SdoClient::new(mock, Duration::from_millis(50));
+        let result = client.upload(3, 0x1000, 0).await;
+        assert!(result.is_err());
+        // Timeout can be either SdoTimeout or Timeout depending on recv impl
+        match result.unwrap_err() {
+            CanOpenError::SdoTimeout(_) | CanOpenError::Timeout => {}
+            other => panic!("Expected timeout error, got: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sdo_upload_abort_response() {
+        let mut mock = MockCanDriver::new();
+        // Abort response: object does not exist
+        mock.enqueue(opencan_canopen_core::frame::CanOpenFrame::new(
+            0x583,
+            [0x80, 0x00, 0x10, 0x00, 0x00, 0x00, 0x02, 0x06],
+        ));
+
+        let mut client = SdoClient::new(mock, Duration::from_secs(1));
+        let result = client.upload(3, 0x1000, 0).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CanOpenError::SdoAbort { code, .. } => {
+                assert_eq!(code, 0x0602_0000); // Object does not exist
+            }
+            other => panic!("Expected SdoAbort, got: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sdo_upload_index_mismatch() {
+        let mut mock = MockCanDriver::new();
+        // Response with wrong index (0x2000 instead of 0x1000)
+        mock.enqueue(opencan_canopen_core::frame::CanOpenFrame::new(
+            0x583,
+            [0x43, 0x00, 0x20, 0x00, 0x92, 0x01, 0x02, 0x00],
+        ));
+
+        let mut client = SdoClient::new(mock, Duration::from_secs(1));
+        let result = client.upload(3, 0x1000, 0).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CanOpenError::Protocol(msg) => {
+                assert!(msg.contains("mismatch"));
+            }
+            other => panic!("Expected Protocol error, got: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sdo_download_timeout() {
+        let mock = MockCanDriver::new();
+        let mut client = SdoClient::new(mock, Duration::from_millis(50));
+        let result = client
+            .download(3, 0x6040, 0, &OdValue::Unsigned16(0x0006))
+            .await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CanOpenError::SdoTimeout(_) | CanOpenError::Timeout => {}
+            other => panic!("Expected timeout error, got: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sdo_download_abort_response() {
+        let mut mock = MockCanDriver::new();
+        // Abort: read-only object
+        mock.enqueue(opencan_canopen_core::frame::CanOpenFrame::new(
+            0x583,
+            [0x80, 0x40, 0x60, 0x00, 0x02, 0x00, 0x04, 0x06],
+        ));
+
+        let mut client = SdoClient::new(mock, Duration::from_secs(1));
+        let result = client
+            .download(3, 0x6040, 0, &OdValue::Unsigned16(0x0006))
+            .await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            CanOpenError::SdoAbort { code, .. } => {
+                assert_eq!(code, 0x0604_0002); // Read-only object
+            }
+            other => panic!("Expected SdoAbort, got: {:?}", other),
+        }
+    }
 }

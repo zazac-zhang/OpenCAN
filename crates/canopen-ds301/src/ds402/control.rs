@@ -5,6 +5,7 @@
 use super::state_machine::{ControlWord, Ds402State, OperationMode};
 use crate::SdoClient;
 use opencan_canopen_core::{CanDriver, CanOpenError, OdValue};
+use opencan_canopen_core::od::DataType;
 
 /// DS402 motion control device.
 ///
@@ -102,7 +103,7 @@ impl<C: CanDriver> Ds402Device<C> {
 
     /// Read operation mode (0x6061).
     pub async fn mode(&mut self) -> Result<OperationMode, CanOpenError> {
-        let value = self.sdo.upload(self.node_id, 0x6061, 0).await?;
+        let value = self.sdo.upload_with_type(self.node_id, 0x6061, 0, DataType::Integer8).await?;
         let mode_val: i8 = match value {
             OdValue::Integer8(v) => v,
             other => {
@@ -169,7 +170,7 @@ impl<C: CanDriver> Ds402Device<C> {
 
     /// Read actual torque (0x6077).
     pub async fn actual_torque(&mut self) -> Result<i16, CanOpenError> {
-        match self.sdo.upload(self.node_id, 0x6077, 0).await? {
+        match self.sdo.upload_with_type(self.node_id, 0x6077, 0, DataType::Integer16).await? {
             OdValue::Integer16(v) => Ok(v),
             other => Err(CanOpenError::Protocol(format!(
                 "Invalid torque: {:?}",
