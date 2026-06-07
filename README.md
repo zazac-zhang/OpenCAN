@@ -1,6 +1,6 @@
 # OpenCAN
 
-A CAN/CANOpen debugging tool with GUI, written in pure Rust.
+A CAN/CANOpen debugging tool with a cross-platform desktop GUI (Tauri 2 + React), powered by publishable Rust crates for the CANOpen protocol stack.
 
 [![CI](https://github.com/pony/OpenCAN/actions/workflows/ci.yml/badge.svg)](https://github.com/pony/OpenCAN/actions/workflows/ci.yml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE)
@@ -10,7 +10,7 @@ A CAN/CANOpen debugging tool with GUI, written in pure Rust.
 - **CAN Hardware Abstraction** — Unified trait for SocketCAN, Kvaser, PCAN, ZLG
 - **CANOpen Protocol Stack** — DS301 (NMT/SDO/PDO/EMCY/Heartbeat/SYNC) + DS402 motion control
 - **EDS Parser** — Electronic Data Sheet file parsing + Object Dictionary builder
-- **GUI Application** — iced-based cross-platform desktop app (Windows + Linux)
+- **Desktop GUI** — Tauri 2 + React application (Windows + macOS + Linux)
 - **Pure Rust** — Zero FFI in protocol stack, publishable crates
 
 ## Architecture
@@ -31,28 +31,36 @@ OpenCAN (Cargo Workspace)
 │   │       ├── frame.rs        ← CANOpen frame types
 │   │       ├── od.rs           ← Object Dictionary trait + ConcreteOd
 │   │       └── testing.rs      ← MockCanDriver for unit tests
-│   ├── canopen-ds301/          ← DS301 protocol stack + DS402
-│   │   └── src/
-│   │       ├── ds402/          ← DS402 state machine + motion control modes
-│   │       │   ├── state_machine.rs
-│   │       │   ├── control.rs
-│   │       │   └── modes/      ← CSP, CST, CSV, PP, PV, PT, Homing
-│   │       ├── stack.rs        ← Main protocol loop
-│   │       ├── sdo.rs          ← SDO client (expedited + segmented)
-│   │       ├── sdo_server.rs   ← SDO server
-│   │       ├── adapter.rs      ← CanDriverAdapter bridge
-│   │       ├── nmt.rs          ← NMT management
-│   │       ├── heartbeat.rs    ← Heartbeat producer/consumer
-│   │       ├── emcy.rs         ← Emergency messages
-│   │       ├── pdo.rs          ← PDO processing
-│   │       └── pdo_config.rs   ← PDO configuration
-│   └── gui/                    ← iced GUI application (binary: opencan)
+│   └── canopen-ds301/          ← DS301 protocol stack + DS402
 │       └── src/
-│           ├── backend/        ← Backend communication (mpsc channels)
-│           ├── state/          ← Application state modules
-│           └── views/          ← UI views (CAN + CANOpen pages)
-└── docs/
-    └── spark/                  ← Design specifications
+│           ├── ds402/          ← DS402 state machine + motion control modes
+│           │   ├── state_machine.rs
+│           │   ├── control.rs
+│           │   └── modes/      ← CSP, CST, CSV, PP, PV, PT, Homing
+│           ├── stack.rs        ← Main protocol loop
+│           ├── sdo.rs          ← SDO client (expedited + segmented)
+│           ├── sdo_server.rs   ← SDO server
+│           ├── adapter.rs      ← CanDriverAdapter bridge
+│           ├── nmt.rs          ← NMT management
+│           ├── heartbeat.rs    ← Heartbeat producer/consumer
+│           ├── emcy.rs         ← Emergency messages
+│           ├── pdo.rs          ← PDO processing
+│           └── pdo_config.rs   ← PDO configuration
+│
+├── frontend/                   ← React + Vite + TypeScript frontend
+│   └── src/
+│       ├── components/         ← Reusable UI components
+│       ├── hooks/              ← Custom React hooks
+│       ├── stores/             ← Zustand state stores
+│       └── views/              ← Page-level view components
+│
+└── opencan-gui/
+    └── src-tauri/              ← Tauri 2 desktop app (binary: opencan)
+        └── src/
+            ├── main.rs         ← App entry + Tauri setup
+            ├── commands.rs     ← Tauri IPC commands
+            ├── state.rs        ← Shared application state
+            └── channels.rs     ← Backend event channels
 ```
 
 ## Quick Start
@@ -60,6 +68,7 @@ OpenCAN (Cargo Workspace)
 ### Prerequisites
 
 - Rust 1.75+ (2024 edition)
+- Node.js 18+ / pnpm
 - For SocketCAN: Linux with `vcan` module (for testing) or real CAN hardware
 
 ### Build
@@ -69,14 +78,14 @@ OpenCAN (Cargo Workspace)
 git clone https://github.com/pony/OpenCAN.git
 cd OpenCAN
 
-# Build workspace
+# Build workspace (Rust crates)
 cargo build --workspace
 
 # Run tests
 cargo test --workspace
 
-# Run GUI (mock backend for testing)
-cargo run -p opencan-gui
+# Run GUI (Tauri dev mode — starts frontend dev server + Rust backend)
+just tauri-dev
 ```
 
 ### Linux vcan Setup (for testing)
@@ -91,21 +100,19 @@ sudo ip link set up vcan0
 
 ```bash
 # SocketCAN (Linux only)
-cargo build -p opencan-gui --features socketcan
+cargo build -p opencan --features socketcan
 
 # Kvaser
-cargo build -p opencan-gui --features kvaser
+cargo build -p opencan --features kvaser
 
 # PCAN
-cargo build -p opencan-gui --features pcan
+cargo build -p opencan --features pcan
 
 # ZLG
-cargo build -p opencan-gui --features zlg
+cargo build -p opencan --features zlg
 ```
 
 ## Development Commands
-
-We provide multiple ways to run common development tasks:
 
 ### Using just (Recommended)
 
@@ -133,20 +140,54 @@ just fmt
 # Check formatting (CI gate)
 just fmt-check
 
-# Run GUI
-just gui
+# Run all CI checks
+just ci
 
-# Run GUI with socketcan
-just gui-socketcan
+# === Tauri GUI ===
 
-# Setup vcan0 (Linux, requires sudo)
+# Run Tauri dev (frontend + backend, hot reload)
+just tauri-dev
+
+# Build Tauri app (production bundle)
+just tauri-build
+
+# Build Tauri app (debug, faster)
+just tauri-build-debug
+
+# Run Tauri with socketcan feature
+just tauri-socketcan
+
+# === Frontend ===
+
+# Install frontend dependencies
+just frontend-install
+
+# Build frontend for production
+just frontend-build
+
+# Run frontend type check
+just frontend-typecheck
+
+# Run frontend lint
+just frontend-lint
+
+# Run frontend tests
+just frontend-test
+
+# === vcan (Linux only) ===
+
+# Setup vcan0 interface
 just vcan-setup
 
 # Run vcan integration tests
 just vcan-test
 
-# Run all CI checks
-just ci
+# === Full-stack ===
+
+# Full CI: Rust + frontend checks
+just ci-full
+
+# === Misc ===
 
 # Clean build artifacts
 just clean
@@ -167,86 +208,14 @@ just test-crate canopen-core
 just build-feature socketcan
 ```
 
-### Using Make
-
-Alternatively, use `make`:
-
-```bash
-# Show all targets
-make help
-
-# Type check
-make check
-
-# Build
-make build
-
-# Run tests
-make test
-
-# Run clippy
-make clippy
-
-# Format code
-make fmt
-
-# Check formatting
-make fmt-check
-
-# Run GUI
-make gui
-
-# Run GUI with socketcan
-make gui-socketcan
-
-# Setup vcan0
-make vcan-setup
-
-# Run vcan integration tests
-make vcan-test
-
-# Run all CI checks
-make ci
-
-# Clean build artifacts
-make clean
-
-# Show dependency tree
-make deps
-
-# Generate documentation
-make doc
-
-# Watch for changes
-make watch
-
-# Run tests for a specific crate
-make test-crate crate=canopen-core
-
-# Build with specific feature
-make build-feature feature=socketcan
-```
-
-### Using Scripts
-
-Helper scripts are available in the `scripts/` directory:
-
-```bash
-# Setup vcan0 interface (Linux, requires sudo)
-sudo ./scripts/vcan-setup.sh
-
-# Run all CI checks locally
-./scripts/ci-check.sh
-```
-
 ## Crate Overview
 
 | Crate | Description | Tests |
 |-------|-------------|-------|
+| `can-traits` | CAN bus trait abstraction (CanBus, CanBusFactory) + hardware backends | — |
 | `canopen-core` | Core traits, frames, Object Dictionary, EDS parser, MockCanDriver | 15 |
 | `canopen-ds301` | DS301 protocol stack + DS402 (SDO, NMT, Heartbeat, EMCY, PDO, SYNC) | 17+8 |
-| `can-traits` | CAN bus trait abstraction (CanBus, CanBusFactory) + hardware backends | — |
-| `opencan-gui` | iced GUI application | — |
+| `opencan` (opencan-gui/src-tauri) | Tauri 2 desktop application | — |
 
 ## Protocol Stack Usage
 
