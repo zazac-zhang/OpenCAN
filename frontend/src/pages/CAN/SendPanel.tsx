@@ -7,7 +7,7 @@
  * - Cyclic send list
  * - SDO Quick Access (node selector, index/sub, read/write)
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAppStore, useNodes, useConnected } from '@/lib/store';
 import { useSendFrame, useSdoUpload, useSdoDownload } from '@/hooks/useCommands';
 import { Send, RotateCcw, Plus, Trash2, Play, Square } from 'lucide-react';
@@ -50,6 +50,9 @@ export function SendPanel() {
   const sendFrameMutation = useSendFrame();
   const sdoUploadMutation = useSdoUpload();
   const sdoDownloadMutation = useSdoDownload();
+
+  // Cyclic send intervals
+  const cyclicIntervals = useRef<Map<number, ReturnType<typeof setInterval>>>(new Map());
 
   // Parse data from hex string
   const parseData = useCallback((hex: string): number[] => {
@@ -109,8 +112,38 @@ export function SendPanel() {
   }, []);
 
   const handleRemoveCyclic = useCallback((index: number) => {
+    // Clear interval if running
+    const interval = cyclicIntervals.current.get(index);
+    if (interval) {
+      clearInterval(interval);
+      cyclicIntervals.current.delete(index);
+    }
     setCyclicSends((prev) => prev.filter((_, i) => i !== index));
   }, []);
+
+  // Start/stop cyclic send intervals
+  useEffect(() => {
+    cyclicSends.forEach((entry, index) => {
+      const existing = cyclicIntervals.current.get(index);
+      if (entry.running && !existing) {
+        // Start sending
+        const interval = setInterval(() => {
+          sendFrameMutation.mutate({ cobId: entry.cobId, data: entry.data });
+        }, entry.intervalMs);
+        cyclicIntervals.current.set(index, interval);
+      } else if (!entry.running && existing) {
+        // Stop sending
+        clearInterval(existing);
+        cyclicIntervals.current.delete(index);
+      }
+    });
+
+    // Cleanup on unmount
+    return () => {
+      cyclicIntervals.current.forEach((interval) => clearInterval(interval));
+      cyclicIntervals.current.clear();
+    };
+  }, [cyclicSends, sendFrameMutation]);
 
   const handleSdoRead = useCallback(() => {
     const idx = parseInt(sdoIndex.replace('0x', ''), 16) || 0;

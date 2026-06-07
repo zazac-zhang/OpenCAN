@@ -59,11 +59,14 @@ Tauri 配置在 `opencan-gui/src-tauri/tauri.conf.json` 中。`beforeDevCommand`
 
 ### Key Modules
 
-- **CANOpen 帧编解码** — `canopen-core/src/frame.rs`：`CanOpenFrame`、`CobId`、`FunctionCode`（`SyncOrEmergency` 合并变体，通过 node_id 区分）、`SdoRequest`/`SdoResponse`
-- **对象字典** — `canopen-core/src/od.rs`：`ObjectDictionary` trait、`ConcreteOd`（BTreeMap 实现）、`OdValue`（25 种 CANOpen 数据类型的序列化）
+- **CANOpen 帧编解码** — `canopen-core/src/frame.rs`：`CanOpenFrame`、`CobId`、`FunctionCode`（`SyncOrEmergency` 合并变体，通过 node_id 区分）、`SdoRequest`/`SdoResponse`、`TimestampFrame`
+- **对象字典** — `canopen-core/src/od.rs`：`ObjectDictionary` trait、`ConcreteOd`（`concrete_od.rs`，BTreeMap 实现）、`OdValue`（25 种 CANOpen 数据类型的序列化，含 40/48/56 位类型 roundtrip 测试）
+- **SDO 错误码** — `canopen-core/src/sdo_abort.rs`：SDO abort codes 定义
+- **节点 ID** — `canopen-core/src/node_id.rs`：`NodeId` 类型（1-127 有效值验证）
+- **PDO 类型** — `canopen-core/src/pdo.rs`：PDO 相关类型定义
 - **EDS 解析器** — `canopen-core/src/eds/`：`parser.rs`（INI 格式解析）、`model.rs`（EDS 数据结构）、`builder.rs`（从 EDS 构建 OD）
-- **协议栈** — `canopen-ds301/src/stack.rs`：`CanopenStack` 主协议循环（SDO/NMT/Heartbeat/SYNC/节点扫描）
-- **SDO 客户端** — `canopen-ds301/src/sdo.rs`：独立 `SdoClient`，支持 expedited + segmented transfer
+- **协议栈** — `canopen-ds301/src/stack.rs`：`CanopenStack` 主协议循环（SDO/NMT/Heartbeat/SYNC/TIME_STAMP/节点扫描/原始帧发送）
+- **SDO 客户端** — `canopen-ds301/src/sdo.rs`：独立 `SdoClient`，支持 expedited + segmented + block transfer
 - **SDO 服务端** — `canopen-ds301/src/sdo_server.rs`：SDO server 实现
 - **适配器** — `canopen-ds301/src/adapter.rs`：`CanDriverAdapter` 桥接 `CanBus` → `CanDriver`
 - **DS402 状态机** — `canopen-ds301/src/ds402/state_machine.rs`：`Ds402State`、StatusWord/ControlWord 位级解析
@@ -72,9 +75,10 @@ Tauri 配置在 `opencan-gui/src-tauri/tauri.conf.json` 中。`beforeDevCommand`
 - **NMT** — `canopen-ds301/src/nmt.rs`：NMT 状态管理
 - **Heartbeat** — `canopen-ds301/src/heartbeat.rs`：Heartbeat 生产者/消费者
 - **EMCY** — `canopen-ds301/src/emcy.rs`：Emergency 消息处理
-- **PDO** — `canopen-ds301/src/pdo.rs` + `pdo_config.rs`：PDO 处理与配置
-- **Tauri 后端** — `opencan-gui/src-tauri/src/`：`main.rs`（app entry）、`commands.rs`（IPC commands）、`state.rs`（application state）、`channels.rs`（backend event channels）
-- **前端** — `frontend/src/`：React 组件、Zustand stores、views
+- **PDO** — `canopen-ds301/src/pdo.rs` + `pdo_config.rs`：PDO 处理与配置（write_comm_params、disable_pdo、enable_pdo、动态配置）
+- **TIME_STAMP** — `canopen-ds301/src/stack.rs`：TIME_STAMP 帧收发（`send_timestamp()`、TimestampFrame 处理）
+- **Tauri 后端** — `opencan-gui/src-tauri/src/`：`main.rs`（app entry）、`state.rs`（application state）、`commands/`（IPC commands 模块化：connection/sdo/nmt/pdo/ds402/sync/eds/recording）、`channels/`（backend event channels）
+- **前端** — `frontend/src/`：React 组件（`components/` 下按功能分子目录）、自定义 hooks（`hooks/`）、Zustand store（`lib/store.ts`）、Tauri IPC 封装（`lib/tauri.ts`）、页面视图（`pages/` 下按 CAN/CANOpen/Recording/Settings 分组）、类型定义（`types/`）
 
 ## Development Commands
 
@@ -133,7 +137,7 @@ Feature 是非排他的，可同时启用多个后端。GUI 通过 `CanBusFactor
 ### 添加协议功能
 
 - 新 SDO 功能 → `canopen-ds301/src/sdo.rs`
-- 新 NMT/Heartbeat 功能 → `canopen-ds301/src/stack.rs` 或对应模块（`nmt.rs`、`heartbeat.rs`）
+- 新 NMT/Heartbeat/TIME_STAMP 功能 → `canopen-ds301/src/stack.rs` 或对应模块（`nmt.rs`、`heartbeat.rs`）
 - 新 PDO 功能 → `canopen-ds301/src/pdo.rs` 或 `pdo_config.rs`
 - 新功能必须通过 `MockCanDriver`（`canopen-core/src/testing.rs`）单元测试
 
@@ -145,12 +149,13 @@ Feature 是非排他的，可同时启用多个后端。GUI 通过 `CanBusFactor
 
 ### 修改 GUI
 
-- 新 Tauri 命令 → `opencan-gui/src-tauri/src/commands.rs` 添加函数，用 `#[tauri::command]` 标记
-- 新状态管理 → `opencan-gui/src-tauri/src/state.rs` 或前端 `frontend/src/stores/` 创建 Zustand store
-- 新前端页面 → `frontend/src/views/` 下创建模块，在路由中注册
-- 新前端组件 → `frontend/src/components/` 下创建
-- 新后端命令/事件 → 在 `commands.rs` / `channels.rs` 添加变体，在 Tauri IPC handler 中处理
+- 新 Tauri 命令 → `opencan-gui/src-tauri/src/commands/` 下新建模块文件，在 `mod.rs` 中导出，用 `#[tauri::command]` 标记
+- 新状态管理 → `opencan-gui/src-tauri/src/state.rs` 或前端 `frontend/src/lib/store.ts` 更新 Zustand store
+- 新前端页面 → `frontend/src/pages/` 下对应分组目录（CAN/CANOpen/Recording/Settings）创建模块，在 `App.tsx` 的 `TAB_COMPONENTS` 和 `LEGACY_MAP` 中注册
+- 新前端组件 → `frontend/src/components/` 下对应功能子目录创建
+- 新后端命令/事件 → 在 `commands/` 对应模块和 `channels/mod.rs` 添加变体，在 Tauri IPC handler 中处理
 - 前端每 50ms 轮询 backend event，高频数据需节流
+- GUI 采用 3 列布局：Sidebar（可折叠导航组）+ Main Content（组内 Tab）+ DetailPanel（右侧节点驱动面板）+ BottomPanel（上下文感知底部面板）
 
 ## Tech Stack
 

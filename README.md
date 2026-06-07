@@ -21,46 +21,74 @@ OpenCAN (Cargo Workspace)
 ├── crates/
 │   ├── can-traits/             ← Unified CAN trait abstraction + hardware backends
 │   │   └── src/
-│   │       ├── socketcan.rs    ← Linux SocketCAN backend (feature-gated)
+│   │       ├── lib.rs          ← CanBus, CanBusFactory, CanBusDyn traits
+│   │       ├── error.rs        ← CAN error types
+│   │       ├── socketcan.rs    ← Linux SocketCAN backend (implemented, feature-gated)
 │   │       ├── kvaser.rs       ← Kvaser CANlib backend (stub)
 │   │       ├── pcan.rs         ← Peak PCAN backend (stub)
 │   │       └── zlg.rs          ← ZLG backend (stub)
 │   ├── canopen-core/           ← Core traits, frames, Object Dictionary, EDS parser
 │   │   └── src/
 │   │       ├── eds/            ← EDS file parser + OD builder (feature: eds)
-│   │       ├── frame.rs        ← CANOpen frame types
+│   │       ├── frame.rs        ← CANOpen frame types (CanOpenFrame, CobId, TimestampFrame)
 │   │       ├── od.rs           ← Object Dictionary trait + ConcreteOd
-│   │       └── testing.rs      ← MockCanDriver for unit tests
+│   │       ├── sdo_abort.rs    ← SDO abort code definitions
+│   │       ├── node_id.rs      ← NodeId type (1-127 validation)
+│   │       ├── pdo.rs          ← PDO type definitions
+│   │       ├── concrete_od.rs  ← BTreeMap-based OD implementation
+│   │       ├── testing.rs      ← MockCanDriver for unit tests
+│   │       └── error.rs        ← Core error types
 │   └── canopen-ds301/          ← DS301 protocol stack + DS402
 │       └── src/
 │           ├── ds402/          ← DS402 state machine + motion control modes
 │           │   ├── state_machine.rs
 │           │   ├── control.rs
 │           │   └── modes/      ← CSP, CST, CSV, PP, PV, PT, Homing
-│           ├── stack.rs        ← Main protocol loop
-│           ├── sdo.rs          ← SDO client (expedited + segmented)
+│           ├── stack.rs        ← Main protocol loop (SDO/NMT/HB/SYNC/TIME_STAMP/scan)
+│           ├── sdo.rs          ← SDO client (expedited + segmented + block transfer)
 │           ├── sdo_server.rs   ← SDO server
 │           ├── adapter.rs      ← CanDriverAdapter bridge
 │           ├── nmt.rs          ← NMT management
 │           ├── heartbeat.rs    ← Heartbeat producer/consumer
 │           ├── emcy.rs         ← Emergency messages
 │           ├── pdo.rs          ← PDO processing
-│           └── pdo_config.rs   ← PDO configuration
+│           └── pdo_config.rs   ← PDO configuration (write_comm_params, enable/disable)
 │
 ├── frontend/                   ← React + Vite + TypeScript frontend
 │   └── src/
 │       ├── components/         ← Reusable UI components
-│       ├── hooks/              ← Custom React hooks
-│       ├── stores/             ← Zustand state stores
-│       └── views/              ← Page-level view components
+│       │   ├── can/            ← CAN-specific components
+│       │   ├── common/         ← Shared UI primitives
+│       │   ├── ds402/          ← DS402 motion control components
+│       │   ├── layout/         ← App shell (Sidebar, TopBar, BottomPanel, DetailPanel)
+│       │   └── sdo/            ← SDO editor components
+│       ├── hooks/              ← Custom React hooks (useFrameStream, useCommands, etc.)
+│       ├── lib/                ← Core utilities
+│       │   ├── store.ts        ← Zustand application state (navigation, UI, connection)
+│       │   ├── tauri.ts        ← Tauri IPC command wrappers
+│       │   └── utils.ts        ← Shared helpers
+│       ├── pages/              ← Page-level view components
+│       │   ├── CAN/            ← FrameMonitor, SendPanel, BusStatistics, ErrorFrames
+│       │   ├── CANOpen/        ← NetworkOverview, NodeDetail, PdoMonitor, Ds402Control, etc.
+│       │   ├── Recording/      ← SessionRecorder, SessionPlayer
+│       │   └── Settings/       ← ConnectionSettings, EdsManagement
+│       └── types/              ← TypeScript type definitions
 │
 └── opencan-gui/
     └── src-tauri/              ← Tauri 2 desktop app (binary: opencan)
         └── src/
             ├── main.rs         ← App entry + Tauri setup
-            ├── commands.rs     ← Tauri IPC commands
             ├── state.rs        ← Shared application state
-            └── channels.rs     ← Backend event channels
+            ├── commands/       ← Tauri IPC commands (mod.rs-based modules)
+            │   ├── connection.rs  ← Connect/disconnect, status
+            │   ├── sdo.rs         ← SDO upload/download
+            │   ├── nmt.rs         ← NMT start/stop/reset
+            │   ├── pdo.rs         ← PDO configuration and monitoring
+            │   ├── ds402.rs       ← DS402 motion control
+            │   ├── sync.rs        ← SYNC producer control
+            │   ├── eds.rs         ← EDS file loading
+            │   └── recording.rs   ← CAN session recording
+            └── channels/       ← Backend event channels (mod.rs)
 ```
 
 ## Quick Start
@@ -213,8 +241,8 @@ just build-feature socketcan
 | Crate | Description | Tests |
 |-------|-------------|-------|
 | `can-traits` | CAN bus trait abstraction (CanBus, CanBusFactory) + hardware backends | — |
-| `canopen-core` | Core traits, frames, Object Dictionary, EDS parser, MockCanDriver | 15 |
-| `canopen-ds301` | DS301 protocol stack + DS402 (SDO, NMT, Heartbeat, EMCY, PDO, SYNC) | 17+8 |
+| `canopen-core` | Core traits, frames, Object Dictionary, EDS parser, MockCanDriver, SDO abort codes, NodeId | 84 |
+| `canopen-ds301` | DS301 protocol stack + DS402 (SDO, NMT, Heartbeat, EMCY, PDO, SYNC, TIME_STAMP) | 181 total |
 | `opencan` (opencan-gui/src-tauri) | Tauri 2 desktop application | — |
 
 ## Protocol Stack Usage
@@ -240,6 +268,12 @@ async fn main() {
 
     // Enable heartbeat production (1000ms period)
     stack.enable_heartbeat_production(std::time::Duration::from_secs(1));
+
+    // Send TIME_STAMP frame
+    stack.send_timestamp();
+
+    // Send raw CAN frame
+    stack.send_frame(can_id, data).await?;
 }
 ```
 
@@ -257,29 +291,56 @@ let od = build_od(&eds);
 let device_type = od.read(0x1000, 0).unwrap();
 ```
 
-## GUI Pages
+## GUI
 
-### CAN Layer
+The GUI uses a 3-column layout with a collapsible sidebar, context-aware bottom panel, and node-driven detail panel.
 
-| Page | Description |
-|------|-------------|
-| **Frame Monitor** | Real-time CAN frame capture with Classic/FD support |
-| **Bus Statistics** | Bus load, error counters, throughput metrics |
-| **Error Frames** | CAN error frame analysis and logging |
+### Navigation Groups
 
-### CANOpen Layer
+Navigation is organized into four sidebar groups, each with its own set of tabs:
 
-| Page | Description |
-|------|-------------|
-| **Network Overview** | Node list, NMT control, status cards |
-| **Node Detail** | SDO read/write, OD browser, quick reads |
-| **DS402 Panel** | State machine, enable sequence, motion control |
-| **PDO Monitor** | Real-time PDO table with type, node, data |
-| **SDO Editor** | SDO read/write with object dictionary navigation |
-| **EMCY Monitor** | Emergency message capture and decoding |
+#### CAN Bus
+
+| Tab | Description |
+|-----|-------------|
+| **Frames** | Real-time CAN frame capture with Classic/FD support and frame type auto-decoding (SYNC/HB/TPDO/SDO/NMT/EMCY) |
+| **Send** | Raw CAN frame send, SDO quick access, send history, and cyclic send |
+| **Statistics** | Bus load, error counters, throughput metrics |
+| **Errors** | CAN error frame analysis and logging |
+
+#### CANOpen
+
+| Tab | Description |
+|-----|-------------|
+| **Network** | Node list, NMT control, status cards |
+| **Nodes** | Node-driven detail with accordion sections (Overview/SDO/DS402) |
+| **PDO** | Real-time PDO table with type, node, data |
+| **DS402** | State machine visualization, enable sequence, motion control |
+| **EMCY** | Emergency message capture and decoding |
 | **Heartbeat** | Node heartbeat status monitoring |
 | **SYNC** | SYNC producer configuration and status |
-| **Trend Chart** | Real-time data visualization with Canvas |
+
+#### Recording
+
+| Tab | Description |
+|-----|-------------|
+| **Record** | CAN session recording with frame capture and export |
+| **Playback** | Session replay with speed control and frame inspection |
+
+#### EDS
+
+| Tab | Description |
+|-----|-------------|
+| **EDS Files** | Electronic Data Sheet file loading and management |
+| **OD Browser** | Object Dictionary browser from loaded EDS files |
+
+### Layout Components
+
+- **TopBar** — Minimal top bar showing connection status
+- **Sidebar** — Collapsible nav groups with node list
+- **DetailPanel** — Node-driven accordion (Overview/SDO/DS402), right-side panel
+- **BottomPanel** — Context-aware tabs that switch with the active nav group
+- **StatusBar** — Application status bar at the bottom
 
 ## Hardware Backends
 
@@ -296,7 +357,7 @@ All backends require the vendor's driver/SDK installed on the system. The Rust c
 
 GitHub Actions workflow (`.github/workflows/ci.yml`):
 - **Lint**: `cargo clippy -- -D warnings` + `cargo fmt --check`
-- **Test**: Matrix across Linux + macOS
+- **Test**: Matrix across Linux + macOS (181 tests total)
 - **Build**: Per-feature compilation check
 - **vcan E2E**: Linux-only integration test with virtual CAN
 

@@ -206,6 +206,12 @@ export function useLoadEdsFile() {
   });
 }
 
+export function useGetOdEntries() {
+  return useMutation({
+    mutationFn: () => tauri.getOdEntries(),
+  });
+}
+
 // Recording hooks
 export function useStartRecording() {
   return useMutation({
@@ -236,7 +242,7 @@ export function useLoadRecording() {
 
 export function useStartPlayback() {
   return useMutation({
-    mutationFn: (speed: number) => tauri.startPlayback(speed),
+    mutationFn: ({ path, speed }: { path: string; speed: number }) => tauri.startPlayback(path, speed),
     onSuccess: () => {
       useAppStore.getState().recording.setRecording({ isPlaying: true });
     },

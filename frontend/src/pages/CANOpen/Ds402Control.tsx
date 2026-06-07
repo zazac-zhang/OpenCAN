@@ -10,9 +10,9 @@
  * - ControlWord action buttons
  * - Telemetry waveform display with auto-refresh
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAppStore, useSelectedNode } from '@/lib/store';
-import { useDs402Enable, useDs402FaultReset, useDs402SetMode, useDs402SetTarget } from '@/hooks/useCommands';
+import { useDs402Enable, useDs402FaultReset, useDs402SetMode, useDs402SetTarget, useSdoUpload } from '@/hooks/useCommands';
 import { StateMachine } from '@/components/ds402/StateMachine';
 import { ModeSelector } from '@/components/ds402/ModeSelector';
 import { ControlPanel } from '@/components/ds402/ControlPanel';
@@ -80,6 +80,8 @@ export function Ds402Control() {
   const faultResetMutation = useDs402FaultReset();
   const modeMutation = useDs402SetMode();
   const targetMutation = useDs402SetTarget();
+  const sdoUpload = useSdoUpload();
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const nodeState = useAppStore((s) => s.ds402.nodeStates[nodeId]);
   const posHistory = nodeState?.position_history ?? [];
@@ -98,13 +100,29 @@ export function Ds402Control() {
 
   // Periodically request status update when auto-refresh is enabled
   useEffect(() => {
-    if (!autoRefresh) return;
-    const timer = setInterval(() => {
-      // Request fresh status via SDO read of StatusWord (0x6041:0)
-      useAppStore.getState().ui.setStatusMessage(`Auto-refresh: polling node ${nodeId}...`);
-    }, 500);
-    return () => clearInterval(timer);
-  }, [autoRefresh, nodeId]);
+    if (!autoRefresh) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      return;
+    }
+
+    const pollStatusWord = () => {
+      sdoUpload.mutate({
+        node_id: nodeId,
+        index: 0x6041, // StatusWord
+        subindex: 0,
+        data_type: 'UNS16',
+      });
+    };
+
+    pollStatusWord();
+    intervalRef.current = setInterval(pollStatusWord, 500);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [autoRefresh, nodeId, sdoUpload]);
 
   // Decode StatusWord
   const statusWordBits = nodeState?.status_word !== undefined

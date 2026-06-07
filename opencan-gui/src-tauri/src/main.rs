@@ -39,8 +39,9 @@ fn main() {
             let handle = app.handle().clone();
             let channels = crate::channels::Channels::new(handle.clone());
             let stack = app.state::<SharedStack>().inner().clone();
+            let app_state = app.state::<SharedState>().inner().clone();
 
-            let backend = start_backend_loop(stack, channels);
+            let backend = start_backend_loop(stack, channels, app_state);
             handle.manage(BackendKeepAlive(backend));
 
             Ok(())
@@ -69,6 +70,7 @@ fn main() {
             commands::sync::stop_sync,
             // eds
             commands::eds::load_eds_file,
+            commands::eds::get_od_entries,
             // recording
             commands::recording::start_recording,
             commands::recording::stop_recording,

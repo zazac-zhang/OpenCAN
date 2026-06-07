@@ -114,7 +114,9 @@ export function SessionPlayer() {
     if (isPlaying) {
       stopPlayback.mutate();
     } else {
-      startPlayback.mutate(speed);
+      if (loadedMeta) {
+        startPlayback.mutate({ path: loadedMeta.path, speed });
+      }
     }
   };
 

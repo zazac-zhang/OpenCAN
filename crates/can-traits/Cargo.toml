@@ -9,9 +9,10 @@ license.workspace = true
 thiserror = { workspace = true }
 tokio = { workspace = true }
 socketcan = { version = "3.5", features = ["tokio"], optional = true }
+libloading = { version = "0.8", optional = true }
 
 [features]
 socketcan = ["dep:socketcan"]
-kvaser = []
-pcan = []
-zlg = []
+kvaser = ["dep:libloading"]
+pcan = ["dep:libloading"]
+zlg = ["dep:libloading"]

@@ -92,12 +92,16 @@ export async function loadRecording(path: string) {
   return invoke<RecordingMeta>('load_recording', { path });
 }
 
-export async function startPlayback(speed: number) {
-  return invoke<void>('start_playback', { speed });
+export async function startPlayback(path: string, speed: number) {
+  return invoke<void>('start_playback', { path, speed });
 }
 
 export async function stopPlayback() {
   return invoke<void>('stop_playback');
+}
+
+export async function getOdEntries() {
+  return invoke<EdsObjectEntry[]>('get_od_entries');
 }
 
 export async function sendFrame(cobId: number, data: number[]) {
@@ -246,4 +250,14 @@ export interface ErrorFrameEvent {
   error_type: string;
   tec: number;
   rec: number;
+}
+
+export interface EdsObjectEntry {
+  index: number;
+  subindex: number;
+  name: string;
+  object_type: string;
+  data_type: number | null;
+  access_type: string | null;
+  default_value: string | null;
 }

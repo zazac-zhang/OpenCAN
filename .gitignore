@@ -7,3 +7,4 @@ Cargo.lock
 frontend/node_modules/
 frontend/dist/
 opencan-gui/src-tauri/target/
+crates/can-traits/deps

@@ -8,7 +8,7 @@
 import { useState, useMemo } from 'react';
 import { HardDrive, FolderOpen, Plus, Trash2, ChevronRight, ChevronDown, Search } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { useLoadEdsFile } from '@/hooks/useCommands';
+import { useLoadEdsFile, useGetOdEntries } from '@/hooks/useCommands';
 
 const EDS_LIBRARY_KEY = 'eds-library';
 
@@ -65,12 +65,52 @@ export function EdsManagement() {
   const [areaFilter, setAreaFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  const loadEdsFile = useLoadEdsFile();
+  const loadEdsMutation = useLoadEdsFile();
+  const getOdEntriesMutation = useGetOdEntries();
+  const [odEntries, setOdEntries] = useState<OdEntry[]>([]);
 
-  // Generate OD entries from loaded EDS data
-  const odEntries = useMemo<OdEntry[]>(() => {
+  function dataTypeCodeToString(code: number): string {
+    const map: Record<number, string> = {
+      1: 'BOOLEAN', 2: 'INTEGER8', 3: 'INTEGER16', 4: 'INTEGER32',
+      5: 'UNSIGNED8', 6: 'UNSIGNED16', 7: 'UNSIGNED32', 8: 'REAL32',
+      9: 'VISIBLE_STRING', 10: 'OCTET_STRING', 11: 'UNICODE_STRING',
+      15: 'REAL64', 16: 'INTEGER64', 17: 'UNSIGNED64',
+    };
+    return map[code] || `TYPE_${code}`;
+  }
+
+  // Fetch OD entries from backend after EDS load
+  const loadEdsFile = loadEdsMutation;
+
+  const handleLoadEds = async () => {
+    const path = await open({
+      filters: [{ name: 'EDS Files', extensions: ['eds'] }],
+    });
+    if (!path || typeof path !== 'string') return;
+    setSelectedFilePath(path);
+    loadEdsFile.mutate(path, {
+      onSuccess: () => {
+        // Fetch parsed OD entries from backend
+        getOdEntriesMutation.mutate(undefined, {
+          onSuccess: (entries) => {
+            const mapped: OdEntry[] = entries.map((e) => ({
+              index: e.index,
+              subindex: e.subindex,
+              name: e.name,
+              objectType: e.object_type,
+              dataType: e.data_type != null ? dataTypeCodeToString(e.data_type) : undefined,
+              value: e.default_value ?? undefined,
+            }));
+            setOdEntries(mapped);
+          },
+        });
+      },
+    });
+  };
+
+  // Generate OD entries from loaded EDS data (fallback if get_od_entries not available)
+  const fallbackOdEntries = useMemo<OdEntry[]>(() => {
     if (!loadEdsFile.data) return [];
-    // Generate standard CANopen OD entries based on the EDS metadata
     const entries: OdEntry[] = [
       // Communication area (1000-1FFF)
       { index: 0x1000, subindex: 0, name: 'Device Type', objectType: 'VAR', dataType: 'UNSIGNED32', value: `0x${loadEdsFile.data.product_code.toString(16)}` },
@@ -110,14 +150,8 @@ export function EdsManagement() {
     return entries;
   }, [loadEdsFile.data]);
 
-  const handleLoadEds = async () => {
-    const path = await open({
-      filters: [{ name: 'EDS Files', extensions: ['eds'] }],
-    });
-    if (!path || typeof path !== 'string') return;
-    setSelectedFilePath(path);
-    loadEdsFile.mutate(path);
-  };
+  // Use backend-parsed entries if available, otherwise fall back to hardcoded
+  const effectiveOdEntries = odEntries.length > 0 ? odEntries : fallbackOdEntries;
 
   const handleAddToLibrary = () => {
     if (!loadEdsFile.data || !selectedFilePath) return;
@@ -163,7 +197,7 @@ export function EdsManagement() {
 
   // Group OD entries by index
   const groupedByIndex = new Map<number, OdEntry[]>();
-  for (const entry of odEntries) {
+  for (const entry of effectiveOdEntries) {
     const existing = groupedByIndex.get(entry.index);
     if (existing) {
       existing.push(entry);
@@ -334,7 +368,7 @@ export function EdsManagement() {
             <div className="bg-card border border-border rounded-md divide-y divide-border max-h-96 overflow-auto">
               {filteredIndexes.length === 0 && (
                 <div className="px-3 py-4 text-center text-sm text-muted-foreground italic">
-                  {odEntries.length === 0
+                  {effectiveOdEntries.length === 0
                     ? 'Object dictionary entries will appear here after parsing the EDS file'
                     : 'No entries match the current filter'}
                 </div>

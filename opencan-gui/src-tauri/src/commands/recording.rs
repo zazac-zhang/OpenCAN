@@ -1,12 +1,15 @@
 //! Recording commands: start/stop recording, load/playback sessions.
 
-use crate::state::SharedStack;
+use crate::state::{SharedStack, SharedState};
 use opencan_canopen_core::CanDriver;
 use opencan_canopen_core::frame::CanOpenFrame;
 use serde::Serialize;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 #[derive(Debug, Serialize)]
 pub struct RecordingMeta {
@@ -26,11 +29,14 @@ struct FrameRecord {
 
 #[tauri::command]
 pub async fn start_recording(
+    app_state: tauri::State<'_, SharedState>,
     stack_state: tauri::State<'_, SharedStack>,
     path: String,
 ) -> Result<(), String> {
     // Create the recording file
-    let mut file = File::create(&path).map_err(|e| e.to_string())?;
+    let file = File::create(&path).map_err(|e| e.to_string())?;
+    let mut writer = BufWriter::new(file);
+
     // Write initial metadata
     let meta = serde_json::json!({
         "type": "recording_meta",
@@ -39,20 +45,26 @@ pub async fn start_recording(
             .unwrap_or_default()
             .as_millis() as u64,
     });
-    writeln!(file, "{}", meta).map_err(|e| e.to_string())?;
+    writeln!(writer, "{}", meta).map_err(|e| e.to_string())?;
+    writer.flush().map_err(|e| e.to_string())?;
 
-    // Store the file handle somewhere accessible...
-    // For simplicity, we'll just confirm the path is writable.
-    // A proper implementation would store the writer in AppState.
-    let _ = (stack_state, file);
+    // Store the file handle in AppState for the event loop to write frames
+    let mut guard = app_state.lock().await;
+    guard.recording_file = Some(Arc::new(Mutex::new(writer)));
+
+    let _ = stack_state;
 
     Ok(())
 }
 
 #[tauri::command]
-pub async fn stop_recording(stack_state: tauri::State<'_, SharedStack>) -> Result<(), String> {
-    let _ = stack_state;
-    // In a proper implementation, this would close the recording file handle
+pub async fn stop_recording(app_state: tauri::State<'_, SharedState>) -> Result<(), String> {
+    let mut guard = app_state.lock().await;
+    if let Some(writer) = guard.recording_file.take() {
+        // Flush and drop the writer
+        let w = writer.lock().await;
+        drop(w);
+    }
     Ok(())
 }
 
@@ -103,6 +115,7 @@ pub async fn load_recording(path: String) -> Result<RecordingMeta, String> {
 
 #[tauri::command]
 pub async fn start_playback(
+    app_state: tauri::State<'_, SharedState>,
     stack_state: tauri::State<'_, SharedStack>,
     path: String,
     speed: f64,
@@ -132,8 +145,22 @@ pub async fn start_playback(
     records.sort_by_key(|r| r.timestamp_ms);
     let base_time = records[0].timestamp_ms;
 
+    // Set playback running flag for cancellation
+    {
+        let guard = app_state.lock().await;
+        guard.playback_running.store(true, Ordering::SeqCst);
+    }
+
     // Play back frames
     for record in records {
+        // Check for cancellation
+        {
+            let guard = app_state.lock().await;
+            if !guard.playback_running.load(Ordering::SeqCst) {
+                break;
+            }
+        }
+
         let frame = CanOpenFrame::new(record.cob_id, {
             let mut data = [0u8; 8];
             let len = record.data.len().min(8);
@@ -152,12 +179,19 @@ pub async fn start_playback(
         tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
     }
 
+    // Clear playback flag
+    {
+        let guard = app_state.lock().await;
+        guard.playback_running.store(false, Ordering::SeqCst);
+    }
+
     Ok(())
 }
 
 #[tauri::command]
-pub async fn stop_playback() -> Result<(), String> {
-    // In a proper implementation, this would signal the playback task to stop
+pub async fn stop_playback(app_state: tauri::State<'_, SharedState>) -> Result<(), String> {
+    let guard = app_state.lock().await;
+    guard.playback_running.store(false, Ordering::SeqCst);
     Ok(())
 }
 

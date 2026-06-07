@@ -8,15 +8,23 @@
  * - Node health indicators based on heartbeat freshness
  */
 import { useNodes, useAppStore } from '@/lib/store';
-import { useScanNodes } from '@/hooks/useCommands';
+import { useScanNodes, useNmtCommand } from '@/hooks/useCommands';
 import { NodeCard } from '@/components/common/NodeCard';
-import { Network, Activity } from 'lucide-react';
+import { Network, Activity, Power, Square, RotateCw, Zap } from 'lucide-react';
+
+const NMT_COMMANDS = [
+  { command: 'StartNode', label: 'Start', icon: Power, color: 'bg-green-600 hover:bg-green-700' },
+  { command: 'StopNode', label: 'Stop', icon: Square, color: 'bg-red-600 hover:bg-red-700' },
+  { command: 'EnterPreOperational', label: 'Pre-Op', icon: Zap, color: 'bg-yellow-600 hover:bg-yellow-700' },
+  { command: 'ResetNode', label: 'Reset', icon: RotateCw, color: 'bg-orange-600 hover:bg-orange-700' },
+] as const;
 
 export function NetworkOverview() {
   const nodes = useNodes();
   const selectedNode = useAppStore((s) => s.can.selectedNode);
   const heartbeatEntries = useAppStore((s) => s.heartbeat.entries);
   const scanMutation = useScanNodes();
+  const nmtMutation = useNmtCommand();
 
   // Build a map of node_id -> heartbeat state for live NMT updates
   const heartbeatMap = new Map<number, { alive: boolean; lastSeen: number }>();
@@ -53,13 +61,32 @@ export function NetworkOverview() {
           <Network className="h-5 w-5 text-muted-foreground" />
           <h2 className="text-lg font-semibold">Network Overview</h2>
         </div>
-        <button
-          className="px-3 py-1 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50"
-          onClick={() => scanMutation.mutate()}
-          disabled={scanMutation.isPending}
-        >
-          {scanMutation.isPending ? 'Scanning...' : 'Scan Nodes'}
-        </button>
+        <div className="flex items-center gap-2">
+          {selectedNode !== null && (
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-muted-foreground mr-1">NMT → Node {selectedNode}:</span>
+              {NMT_COMMANDS.map(({ command, label, icon: Icon, color }) => (
+                <button
+                  key={command}
+                  className={`px-2 py-1 text-xs rounded text-white flex items-center gap-1 ${color}`}
+                  onClick={() => nmtMutation.mutate({ nodeId: selectedNode, command })}
+                  disabled={nmtMutation.isPending}
+                  title={`Send NMT ${command} to node ${selectedNode}`}
+                >
+                  <Icon className="h-3 w-3" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+          <button
+            className="px-3 py-1 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50"
+            onClick={() => scanMutation.mutate()}
+            disabled={scanMutation.isPending}
+          >
+            {scanMutation.isPending ? 'Scanning...' : 'Scan Nodes'}
+          </button>
+        </div>
       </div>
 
       {/* Summary stats */}

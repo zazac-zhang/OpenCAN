@@ -320,7 +320,7 @@ export const useAppStore = create<AppState>()((set) => ({
       }),
   },
   sync: {
-    status: { is_producer: false, producer_period_us: 1000 },
+    status: { is_producer: false, producer_period_us: 1000, sync_count: 0, first_sync_ts: undefined, last_sync_ts: undefined, history: [] },
     updateStatus: (partial) =>
       set((state) => ({ sync: { ...state.sync, status: { ...state.sync.status, ...partial } } })),
   },

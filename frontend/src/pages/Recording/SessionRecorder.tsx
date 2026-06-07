@@ -59,7 +59,8 @@ export function SessionRecorder() {
   };
 
   const handleStartPlayback = () => {
-    startPlayback.mutate(localSpeed);
+    if (!loadedMeta) return;
+    startPlayback.mutate({ path: loadedMeta.path, speed: localSpeed });
   };
 
   const handleStopPlayback = () => {

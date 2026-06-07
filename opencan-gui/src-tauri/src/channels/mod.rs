@@ -70,6 +70,15 @@ pub struct BusStatsEvent {
     pub rx_errors: u64,
 }
 
+/// Error frame event emitted to frontend.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ErrorFrameEvent {
+    pub timestamp_ms: u64,
+    pub error_type: String, // "Bus Off" | "Error Passive" | "Warning"
+    pub tec: u32,           // Transmit Error Counter
+    pub rec: u32,           // Receive Error Counter
+}
+
 /// Channel manager for emitting events to the frontend.
 #[derive(Clone)]
 pub struct Channels {
@@ -115,5 +124,9 @@ impl Channels {
 
     pub fn emit_bus_stats(&self, event: BusStatsEvent) {
         let _ = self.app_handle.emit("bus_stats_stream", event);
+    }
+
+    pub fn emit_error_frame(&self, event: ErrorFrameEvent) {
+        let _ = self.app_handle.emit("error_frame_stream", event);
     }
 }

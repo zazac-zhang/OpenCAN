@@ -8,8 +8,9 @@
  * - PDO mapping display toggle (shows decoded fields when mapping info available)
  * - Virtualized list for high-frequency PDO traffic
  */
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { useAppStore } from '@/lib/store';
+import { useReadPdoMapping } from '@/hooks/useCommands';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
 const PDO_TYPES = ['all', 'tpdo', 'rpdo'] as const;
@@ -58,6 +59,38 @@ export function PdoMonitor() {
   const [typeFilter, setTypeFilter] = useState<'all' | 'tpdo' | 'rpdo'>('all');
   const [cobFilter, setCobFilter] = useState('');
   const [showMapping, setShowMapping] = useState(false);
+  const [pdoMappings, setPdoMappings] = useState<Record<string, { cob_id: number; entries: { index: number; subindex: number; bit_length: number }[] }>>({});
+  const readPdoMapping = useReadPdoMapping();
+
+  // Unique node IDs for filter dropdown
+  const uniqueNodes = useMemo(() => {
+    const ids = new Set<number>();
+    for (const e of entries) ids.add(e.node_id);
+    return Array.from(ids).sort((a, b) => a - b);
+  }, [entries]);
+
+  // Fetch PDO mappings when showMapping is enabled
+  useEffect(() => {
+    if (!showMapping) return;
+    const nodes = uniqueNodes;
+    for (const node of nodes) {
+      for (let pdoIdx = 1; pdoIdx <= 4; pdoIdx++) {
+        const key = `${node}-${pdoIdx}`;
+        if (!pdoMappings[key]) {
+          readPdoMapping.mutate(
+            { nodeId: node, pdoIndex: pdoIdx },
+            {
+              onSuccess: (data) => {
+                if (data) {
+                  setPdoMappings((prev) => ({ ...prev, [key]: data }));
+                }
+              },
+            }
+          );
+        }
+      }
+    }
+  }, [showMapping, uniqueNodes]);
 
   // Calculate PDO rates per node
   const pdoStats = useMemo(() => {
@@ -78,13 +111,6 @@ export function PdoMonitor() {
       rates[Number(nid)] = durationSec > 0 ? Math.round((s.count / durationSec) * 10) / 10 : 0;
     }
     return { stats, rates };
-  }, [entries]);
-
-  // Unique node IDs for filter dropdown
-  const uniqueNodes = useMemo(() => {
-    const ids = new Set<number>();
-    for (const e of entries) ids.add(e.node_id);
-    return Array.from(ids).sort((a, b) => a - b);
   }, [entries]);
 
   // Apply filters
@@ -253,9 +279,17 @@ export function PdoMonitor() {
                         {formatTimestamp(entry.timestamp_ms)}
                       </span>
                     </div>
-                    {showMapping && pdoLabel && (
+                    {showMapping && (
                       <div className="px-3 pb-1 text-[10px] text-muted-foreground font-sans">
-                        {pdoLabel}
+                        {(() => {
+                          // Try to find mapping for this COB-ID
+                          for (const [key, mapping] of Object.entries(pdoMappings)) {
+                            if (mapping.cob_id === entry.cob_id) {
+                              return `PDO${key.split('-')[1]}: ${mapping.entries.map((e) => `0x${e.index.toString(16).toUpperCase()}:${e.subindex.toString(16)} (${e.bit_length}b)`).join(', ')}`;
+                            }
+                          }
+                          return pdoLabel || '';
+                        })()}
                       </div>
                     )}
                   </div>
