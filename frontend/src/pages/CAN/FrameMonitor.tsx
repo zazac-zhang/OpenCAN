@@ -14,7 +14,7 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { useFrames, useAppStore } from '@/lib/store';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Pause, Play, ArrowDown } from 'lucide-react';
+import { Pause, Play, ArrowDown, Download } from 'lucide-react';
 
 function decodeFrameType(cobId: number) {
   if (cobId === 0x080) return { label: 'SYNC', color: 'text-purple-400', bgColor: 'bg-purple-500/10' };
@@ -87,6 +87,42 @@ export function FrameMonitor() {
 
     return result;
   }, [framesWithCycle, cobFilter, dirFilter, dataFilter]);
+
+  // Export filtered frames as CSV
+  const handleExportCsv = () => {
+    const header = 'Timestamp_ms,COB-ID,Direction,DLC,Data,Type\n';
+    const rows = filteredFrames.map((f) => {
+      const type = decodeFrameType(f.cob_id).label;
+      const dataHex = f.data.slice(0, f.dlc).map((b) => b.toString(16).padStart(2, '0')).join(' ');
+      return `${f.timestamp_ms.toFixed(3)},0x${f.cob_id.toString(16).toUpperCase().padStart(3, '0')},${f.direction},${f.dlc},"${dataHex}",${type}`;
+    }).join('\n');
+    downloadFile(header + rows, 'can_frames.csv', 'text/csv');
+  };
+
+  // Export filtered frames as ASC (Vector format)
+  const handleExportAsc = () => {
+    const baseTime = filteredFrames.length > 0 ? filteredFrames[0].timestamp_ms / 1000 : 0;
+    const lines = filteredFrames.map((f) => {
+      const time = (f.timestamp_ms / 1000 - baseTime).toFixed(6);
+      const id = f.cob_id.toString(16).toUpperCase().padStart(3, '0');
+      const dir = f.direction === 'rx' ? 'Rx' : 'Tx';
+      const dlc = f.dlc;
+      const data = f.data.slice(0, dlc).map((b) => b.toString(16).padStart(2, '0')).join(' ');
+      return `${time} ${id} ${dir} d ${dlc} ${data}`;
+    });
+    const header = `date ${new Date().toISOString().split('T')[0]}\ntimebase absolute\n`;
+    downloadFile(header + lines.join('\n') + '\n', 'can_frames.asc', 'text/plain');
+  };
+
+  function downloadFile(content: string, filename: string, mimeType: string) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   const rowVirtualizer = useVirtualizer({
     count: filteredFrames.length,
@@ -165,6 +201,26 @@ export function FrameMonitor() {
         >
           Clear
         </button>
+        <div className="flex items-center gap-1 ml-1">
+          <button
+            onClick={handleExportCsv}
+            disabled={filteredFrames.length === 0}
+            className="flex items-center gap-1 px-2 py-0.5 text-xs rounded border border-border hover:bg-muted disabled:opacity-50"
+            title="Export filtered frames as CSV"
+          >
+            <Download className="h-3 w-3" />
+            CSV
+          </button>
+          <button
+            onClick={handleExportAsc}
+            disabled={filteredFrames.length === 0}
+            className="flex items-center gap-1 px-2 py-0.5 text-xs rounded border border-border hover:bg-muted disabled:opacity-50"
+            title="Export filtered frames as ASC (Vector format)"
+          >
+            <Download className="h-3 w-3" />
+            ASC
+          </button>
+        </div>
       </div>
 
       {/* Controls bar */}
