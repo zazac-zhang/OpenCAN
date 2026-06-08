@@ -135,13 +135,13 @@ impl<C: CanDriver> SdoMultiClient<C> {
         index: u16,
         subindex: u8,
     ) -> Result<opencan_canopen_core::od::OdValue, SdoMultiClientError> {
-        let client = self.clients.get_mut(&node_id).ok_or_else(|| {
+        let client = self.clients.get_mut(&node_id).ok_or({
             SdoMultiClientError::SessionNotFound(node_id)
         })?;
 
         let result = client.upload(node_id, index, subindex).await;
         self.update_activity(node_id);
-        result.map_err(|e| SdoMultiClientError::SdoError(e))
+        result.map_err(SdoMultiClientError::SdoError)
     }
 
     /// Perform an SDO download (write to remote node).
@@ -152,13 +152,13 @@ impl<C: CanDriver> SdoMultiClient<C> {
         subindex: u8,
         value: &opencan_canopen_core::od::OdValue,
     ) -> Result<(), SdoMultiClientError> {
-        let client = self.clients.get_mut(&node_id).ok_or_else(|| {
+        let client = self.clients.get_mut(&node_id).ok_or({
             SdoMultiClientError::SessionNotFound(node_id)
         })?;
 
         let result = client.download(node_id, index, subindex, value).await;
         self.update_activity(node_id);
-        result.map_err(|e| SdoMultiClientError::SdoError(e))
+        result.map_err(SdoMultiClientError::SdoError)
     }
 
     /// Reset a client session.

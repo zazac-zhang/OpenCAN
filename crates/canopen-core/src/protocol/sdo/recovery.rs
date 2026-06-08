@@ -346,7 +346,7 @@ mod tests {
     #[test]
     fn test_retry_state_should_retry() {
         let config = SdoRetryConfig::default();
-        let mut state = SdoRetryState::new(&config);
+        let state = SdoRetryState::new(&config);
 
         // Temporary error should be retried
         let err = CanOpenError::SdoAbort {

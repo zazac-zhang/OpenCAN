@@ -224,7 +224,7 @@ impl HeartbeatMonitor {
 
     /// Check if a node is alive.
     pub fn is_alive(&self, node_id: u8) -> bool {
-        self.nodes.get(&node_id).map_or(false, |n| n.is_alive())
+        self.nodes.get(&node_id).is_some_and(|n| n.is_alive())
     }
 
     /// Get all alive node IDs.

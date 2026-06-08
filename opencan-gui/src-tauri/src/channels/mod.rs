@@ -94,6 +94,7 @@ impl Channels {
         let _ = self.app_handle.emit("frame_stream", event);
     }
 
+    #[allow(dead_code)]
     pub fn emit_frame_batch(&self, events: Vec<CanFrameEvent>) {
         let _ = self.app_handle.emit("frame_stream_batch", events);
     }
@@ -102,6 +103,7 @@ impl Channels {
         let _ = self.app_handle.emit("pdo_stream", event);
     }
 
+    #[allow(dead_code)]
     pub fn emit_pdo_batch(&self, events: Vec<PdoEvent>) {
         let _ = self.app_handle.emit("pdo_stream_batch", events);
     }

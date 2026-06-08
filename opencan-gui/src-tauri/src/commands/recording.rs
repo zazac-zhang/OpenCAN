@@ -130,11 +130,10 @@ pub async fn start_playback(
         let line = line.map_err(|e| e.to_string())?;
         let record: serde_json::Value = serde_json::from_str(&line).map_err(|e| e.to_string())?;
 
-        if record.get("type").and_then(|t| t.as_str()) == Some("frame") {
-            if let Ok(fr) = serde_json::from_value::<FrameRecord>(record) {
+        if record.get("type").and_then(|t| t.as_str()) == Some("frame")
+            && let Ok(fr) = serde_json::from_value::<FrameRecord>(record) {
                 records.push(fr);
             }
-        }
     }
 
     if records.is_empty() {

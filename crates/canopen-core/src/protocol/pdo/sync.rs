@@ -5,7 +5,7 @@
 
 use super::types::{PdoDirection, PdoMapping, TransmissionType};
 use crate::frame::CanOpenFrame;
-use crate::od::{DataType, OdValue};
+use crate::od::DataType;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -212,8 +212,8 @@ impl SyncPdoProcessor {
             }
 
             let key = (*node_id, *pdo_number, *direction);
-            if let Some(buffer) = self.buffers.get(&key) {
-                if buffer.dirty {
+            if let Some(buffer) = self.buffers.get(&key)
+                && buffer.dirty {
                     match direction {
                         PdoDirection::Tpdo => {
                             // Calculate COB-ID for TPDO
@@ -227,7 +227,6 @@ impl SyncPdoProcessor {
                         }
                     }
                 }
-            }
         }
 
         // Clear dirty flags for processed PDOs

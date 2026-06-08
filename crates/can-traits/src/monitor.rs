@@ -54,6 +54,7 @@ impl PollingDeviceMonitor {
     }
 
     /// 比较新旧设备列表，生成事件
+    #[allow(dead_code)]
     fn compare_devices(
         old_devices: &HashMap<String, DeviceInfo>,
         new_devices: &[DeviceInfo],

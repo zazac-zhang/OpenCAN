@@ -197,7 +197,7 @@ pub fn start_backend_loop(
 
             // Periodic DS402 state emission (every 500ms) — synthetic for MockCanDriver
             ds402_poll_counter += 1;
-            if ds402_poll_counter % 50 == 0 {
+            if ds402_poll_counter.is_multiple_of(50) {
                 emit_synthetic_ds402_state(&channels, &app_state).await;
             }
 
@@ -249,7 +249,7 @@ fn emit_event(channels: &Channels, event: CanEvent) {
         }
         CanEvent::PdoReceived { pdo } => {
             let cob_id = pdo.cob_id;
-            let node_id = if cob_id >= 0x180 && cob_id <= 0x57F {
+            let node_id = if (0x180..=0x57F).contains(&cob_id) {
                 ((cob_id - 0x180) / 0x100 + 1) as u8
             } else {
                 0

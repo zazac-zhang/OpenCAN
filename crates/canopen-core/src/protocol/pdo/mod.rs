@@ -10,7 +10,7 @@ pub mod types;
 
 // Re-export primary types at the module root.
 pub use config::PdoCommParams;
-pub use dynamic::{DynamicPdoMapper, PdoMappingError, PdoTemplate};
+pub use dynamic::{DynamicPdoMapper, MappingHistoryEntry, PdoMappingError, PdoTemplate};
 pub use event::{PdoEvent, PdoEventHandler, PdoEventHandlerConfig, PdoSubscription};
 pub use sync::{Ds402SyncConfigs, PdoBuffer, PdoSyncConfig, SyncEvent, SyncPdoProcessor, SyncPdoResult};
 pub use types::*;

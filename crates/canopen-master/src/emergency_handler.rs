@@ -8,7 +8,7 @@
 
 use opencan_canopen_core::frame::EmergencyFrame;
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// CANOpen error codes (DS301 Table 61).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -123,7 +123,7 @@ impl ErrorCode {
             0xF000 => Self::AdditionalFunctions,
             0xFF00 => Self::DeviceProfileSpecific,
             _ => {
-                if code >= 0xFF01 && code <= 0xFFFF {
+                if (0xFF01..=0xFFFF).contains(&code) {
                     Self::ManufacturerSpecific(code)
                 } else {
                     Self::Unknown(code)
@@ -514,7 +514,7 @@ impl EmergencyHandler {
         self.stats
             .iter()
             .filter(|(_, stats)| {
-                stats.current_error.as_ref().map_or(false, |e| e.is_critical())
+                stats.current_error.as_ref().is_some_and(|e| e.is_critical())
             })
             .map(|(&id, _)| id)
             .collect()
@@ -531,7 +531,7 @@ impl EmergencyHandler {
     pub fn has_error(&self, node_id: u8) -> bool {
         self.stats
             .get(&node_id)
-            .map_or(false, |stats| stats.current_error.is_some())
+            .is_some_and(|stats| stats.current_error.is_some())
     }
 
     /// Drain all pending handler events.

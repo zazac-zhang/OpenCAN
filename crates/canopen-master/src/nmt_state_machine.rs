@@ -212,7 +212,7 @@ impl NmtStateMachine {
 
     /// Check if a node is responsive (heartbeat received recently).
     pub fn is_responsive(&self, node_id: u8) -> bool {
-        self.nodes.get(&node_id).map_or(false, |n| n.responsive)
+        self.nodes.get(&node_id).is_some_and(|n| n.responsive)
     }
 
     /// Get all nodes in a specific state.

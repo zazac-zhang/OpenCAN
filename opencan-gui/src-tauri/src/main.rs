@@ -15,6 +15,7 @@ use tauri::Manager;
 use tokio::sync::Mutex;
 
 /// Wrapper to keep the backend task alive.
+#[allow(dead_code)]
 struct BackendKeepAlive(state::BackendHandle);
 
 fn main() {

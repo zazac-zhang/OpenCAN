@@ -77,7 +77,7 @@ pub struct DynamicPdoMapper {
 
 /// Mapping history entry for rollback support.
 #[derive(Debug, Clone)]
-struct MappingHistoryEntry {
+pub struct MappingHistoryEntry {
     /// PDO number.
     pdo_number: u8,
     /// Direction.
@@ -87,7 +87,7 @@ struct MappingHistoryEntry {
     /// Previous data types.
     previous_types: Vec<DataType>,
     /// Timestamp.
-    timestamp: std::time::Instant,
+    _timestamp: std::time::Instant,
 }
 
 impl DynamicPdoMapper {
@@ -131,7 +131,7 @@ impl DynamicPdoMapper {
         })?;
 
         // Validate the template
-        template.validate().map_err(|e| PdoMappingError::ValidationError(e))?;
+        template.validate().map_err(PdoMappingError::ValidationError)?;
 
         // Save current mapping for rollback
         let key = (pdo_number, direction);
@@ -141,7 +141,7 @@ impl DynamicPdoMapper {
                 direction,
                 previous_mappings: current.clone(),
                 previous_types: self.active_types.get(&key).cloned().unwrap_or_default(),
-                timestamp: std::time::Instant::now(),
+                _timestamp: std::time::Instant::now(),
             };
             if self.history.len() >= self.max_history {
                 self.history.remove(0);
@@ -166,7 +166,7 @@ impl DynamicPdoMapper {
         data_types: Vec<DataType>,
     ) -> Result<(), PdoMappingError> {
         // Validate mappings
-        validate_mapping(&mappings).map_err(|e| PdoMappingError::ValidationError(e))?;
+        validate_mapping(&mappings).map_err(PdoMappingError::ValidationError)?;
 
         // Check data types length matches mappings
         if mappings.len() != data_types.len() {
@@ -183,7 +183,7 @@ impl DynamicPdoMapper {
                 direction,
                 previous_mappings: current.clone(),
                 previous_types: self.active_types.get(&key).cloned().unwrap_or_default(),
-                timestamp: std::time::Instant::now(),
+                _timestamp: std::time::Instant::now(),
             };
             if self.history.len() >= self.max_history {
                 self.history.remove(0);

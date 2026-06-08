@@ -5,7 +5,6 @@
 
 use crate::error::CanError;
 use crate::{CanBitrate, CanBus, CanBusDyn, CanFrame, CanState};
-use std::future::Future;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -205,18 +204,15 @@ impl CanBus for RecoverableBus {
         }
     }
 
-    fn recv(&self) -> impl Future<Output = Result<CanFrame, CanError>> + Send {
+    async fn recv(&self) -> Result<CanFrame, CanError> {
         // 注意: 这里需要处理 async 错误恢复
         // 由于 trait 的限制，我们不能在 async 块中调用 self.handle_error
         // 因此这里简化处理，直接返回结果
-        async move {
-            // 实际实现中，这里应该调用 inner.recv() 并处理错误
-            // 但为了简化，我们直接返回一个错误
-            // 完整实现需要使用 async trait 或其他方式
-            Err(CanError::Unsupported(
-                "Async recv with recovery not yet implemented".to_string(),
-            ))
-        }
+        // 实际实现中，这里应该调用 inner.recv() 并处理错误
+        // 完整实现需要使用 async trait 或其他方式
+        Err(CanError::Unsupported(
+            "Async recv with recovery not yet implemented".to_string(),
+        ))
     }
 
     fn state(&self) -> CanState {

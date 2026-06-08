@@ -9,9 +9,9 @@
 use crate::frame::{
     CanOpenFrame, SdoData, SdoRequest, SdoResponse, SdoResponseData,
 };
-use crate::od::{ObjectDictionary, OdValue};
+use crate::od::ObjectDictionary;
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// SDO server event types.
 #[derive(Debug, Clone)]
@@ -70,6 +70,7 @@ pub struct SdoServerStats {
 
 /// Access control policy.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct AccessPolicy {
     /// Allowed node IDs (empty = allow all).
     pub allowed_nodes: Vec<u8>,
@@ -81,16 +82,6 @@ pub struct AccessPolicy {
     pub restricted_indices: HashMap<u16, Vec<u8>>,
 }
 
-impl Default for AccessPolicy {
-    fn default() -> Self {
-        Self {
-            allowed_nodes: Vec::new(),
-            denied_nodes: Vec::new(),
-            read_only_indices: Vec::new(),
-            restricted_indices: HashMap::new(),
-        }
-    }
-}
 
 impl AccessPolicy {
     /// Check if a node is allowed to access the server.
@@ -289,9 +280,9 @@ impl EnhancedSdoServer {
         let response = self.inner.process(frame, od);
 
         // Check if response is an abort
-        if let Some(resp) = &response {
-            if let Some(resp_data) = SdoResponse::decode(resp) {
-                if matches!(resp_data.data, SdoResponseData::Abort { .. }) {
+        if let Some(resp) = &response
+            && let Some(resp_data) = SdoResponse::decode(resp)
+                && matches!(resp_data.data, SdoResponseData::Abort { .. }) {
                     self.stats.abort_count += 1;
                     if let Some(req) = request {
                         self.events.push(SdoServerEvent::Abort {
@@ -306,8 +297,6 @@ impl EnhancedSdoServer {
                         });
                     }
                 }
-            }
-        }
 
         // Trim event queue if needed
         while self.events.len() > self.max_events {
@@ -343,7 +332,7 @@ impl EnhancedSdoServer {
 mod tests {
     use super::*;
     use crate::concrete_od::{ConcreteOd, OdEntry};
-    use crate::od::{AccessType, DataType, ObjectType};
+    use crate::od::{AccessType, DataType, ObjectType, OdValue};
 
     fn make_od() -> ConcreteOd {
         let mut od = ConcreteOd::new();

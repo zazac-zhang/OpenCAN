@@ -33,14 +33,13 @@ impl ModeSwitchValidator {
         }
 
         // Check if mode transition is allowed
-        if let Some(current) = current_mode {
-            if !Self::is_transition_allowed(current, target_mode) {
+        if let Some(current) = current_mode
+            && !Self::is_transition_allowed(current, target_mode) {
                 return Err(Ds402Error::InvalidTransition {
                     from: current.name(),
                     to: target_mode.name(),
                 });
             }
-        }
 
         Ok(())
     }
@@ -76,7 +75,7 @@ impl ModeSwitchValidator {
     /// Returns the control word values to send for the mode switch sequence.
     pub fn mode_switch_sequence(
         current_state: Ds402State,
-        target_mode: OperationMode,
+        _target_mode: OperationMode,
     ) -> Vec<u16> {
         let mut sequence = Vec::new();
 
@@ -98,7 +97,7 @@ impl ModeSwitchValidator {
     /// Returns true if the device can accept the specified mode.
     pub fn is_ready_for_mode(
         state: Ds402State,
-        mode: OperationMode,
+        _mode: OperationMode,
     ) -> bool {
         match state {
             Ds402State::OperationEnabled => true,

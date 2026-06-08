@@ -3,9 +3,8 @@
 //! This module provides event-driven PDO processing capabilities,
 //! allowing reactive handling of PDO messages.
 
-use super::types::{PdoData, PdoDirection, PdoMapping, TransmissionType};
+use super::types::{PdoData, PdoDirection, PdoMapping};
 use crate::frame::CanOpenFrame;
-use crate::od::{DataType, OdValue};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -125,21 +124,18 @@ impl PdoSubscription {
 
     /// Check if a PDO event matches this subscription.
     pub fn matches(&self, node_id: u8, pdo_number: u8, direction: PdoDirection) -> bool {
-        if let Some(nid) = self.node_id {
-            if nid != node_id {
+        if let Some(nid) = self.node_id
+            && nid != node_id {
                 return false;
             }
-        }
-        if let Some(pnum) = self.pdo_number {
-            if pnum != pdo_number {
+        if let Some(pnum) = self.pdo_number
+            && pnum != pdo_number {
                 return false;
             }
-        }
-        if let Some(dir) = self.direction {
-            if dir != direction {
+        if let Some(dir) = self.direction
+            && dir != direction {
                 return false;
             }
-        }
         true
     }
 }
