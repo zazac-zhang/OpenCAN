@@ -261,3 +261,17 @@ Feature 是非排他的，可同时启用多个后端。GUI 通过 `CanBusFactor
 - **lightweight-charts 4** — 图表
 - **Vitest 2** — 测试
 - **Playwright 1** — E2E 测试
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues（通过 `gh` CLI 操作）。See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+needs-triage / needs-info / ready-for-agent / ready-for-human / wontfix。See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context（根目录 CONTEXT.md + docs/adr/）。See `docs/agents/domain.md`.
