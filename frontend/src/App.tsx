@@ -1,5 +1,6 @@
 // Root App component — new 3-column layout with context-aware bottom panel
 
+import { lazy, Suspense } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TopBar } from '@/components/layout/TopBar';
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -7,26 +8,28 @@ import { StatusBar } from '@/components/layout/StatusBar';
 import { TabBar } from '@/components/layout/TabBar';
 import { DetailPanel } from '@/components/layout/DetailPanel';
 import { BottomPanel } from '@/components/layout/BottomPanel';
-import { FrameMonitor } from '@/pages/CAN/FrameMonitor';
-import { SendPanel } from '@/pages/CAN/SendPanel';
-import { BusStatistics } from '@/pages/CAN/BusStatistics';
-import { ErrorFrames } from '@/pages/CAN/ErrorFrames';
-import { NetworkOverview } from '@/pages/CANOpen/NetworkOverview';
-import { NodeDetail } from '@/pages/CANOpen/NodeDetail';
-import { PdoMonitor } from '@/pages/CANOpen/PdoMonitor';
-import { Ds402Control } from '@/pages/CANOpen/Ds402Control';
-import { EmcyMonitor } from '@/pages/CANOpen/EmcyMonitor';
-import { HeartbeatMonitor } from '@/pages/CANOpen/HeartbeatMonitor';
-import { SyncManagement } from '@/pages/CANOpen/SyncManagement';
-import { SessionRecorder } from '@/pages/Recording/SessionRecorder';
-import { SessionPlayer } from '@/pages/Recording/SessionPlayer';
-import { ConnectionSettings } from '@/pages/Settings/ConnectionSettings';
-import { EdsManagement } from '@/pages/Settings/EdsManagement';
 import { useAppStore, useConnected, useActiveGroup, useGroupTabs } from '@/lib/store';
 import { useFrameStream } from '@/hooks/useFrameStream';
 import { useEmcyStream, useHeartbeatStream, useDs402StateStream, useBusStatsStream } from '@/hooks/useStreams';
 import { ConnectionDialog } from '@/components/common/ConnectionDialog';
 import { useEffect } from 'react';
+
+// Lazy-loaded page components — split by navigation group
+const FrameMonitor = lazy(() => import('@/pages/CAN/FrameMonitor').then(m => ({ default: m.FrameMonitor })));
+const SendPanel = lazy(() => import('@/pages/CAN/SendPanel').then(m => ({ default: m.SendPanel })));
+const BusStatistics = lazy(() => import('@/pages/CAN/BusStatistics').then(m => ({ default: m.BusStatistics })));
+const ErrorFrames = lazy(() => import('@/pages/CAN/ErrorFrames').then(m => ({ default: m.ErrorFrames })));
+const NetworkOverview = lazy(() => import('@/pages/CANOpen/NetworkOverview').then(m => ({ default: m.NetworkOverview })));
+const NodeDetail = lazy(() => import('@/pages/CANOpen/NodeDetail').then(m => ({ default: m.NodeDetail })));
+const PdoMonitor = lazy(() => import('@/pages/CANOpen/PdoMonitor').then(m => ({ default: m.PdoMonitor })));
+const Ds402Control = lazy(() => import('@/pages/CANOpen/Ds402Control').then(m => ({ default: m.Ds402Control })));
+const EmcyMonitor = lazy(() => import('@/pages/CANOpen/EmcyMonitor').then(m => ({ default: m.EmcyMonitor })));
+const HeartbeatMonitor = lazy(() => import('@/pages/CANOpen/HeartbeatMonitor').then(m => ({ default: m.HeartbeatMonitor })));
+const SyncManagement = lazy(() => import('@/pages/CANOpen/SyncManagement').then(m => ({ default: m.SyncManagement })));
+const SessionRecorder = lazy(() => import('@/pages/Recording/SessionRecorder').then(m => ({ default: m.SessionRecorder })));
+const SessionPlayer = lazy(() => import('@/pages/Recording/SessionPlayer').then(m => ({ default: m.SessionPlayer })));
+const ConnectionSettings = lazy(() => import('@/pages/Settings/ConnectionSettings').then(m => ({ default: m.ConnectionSettings })));
+const EdsManagement = lazy(() => import('@/pages/Settings/EdsManagement').then(m => ({ default: m.EdsManagement })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -128,7 +131,9 @@ function AppContent() {
         <div className="flex flex-col flex-1 overflow-hidden">
           <TabBar />
           <div className="flex-1 overflow-hidden">
-            <ContentComponent />
+            <Suspense fallback={<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>}>
+              <ContentComponent />
+            </Suspense>
           </div>
         </div>
         {detailVisible && <DetailPanel />}
