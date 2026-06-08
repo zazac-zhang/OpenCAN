@@ -22,6 +22,7 @@ export const GROUP_TABS: Record<NavGroup, { key: string; label: string }[]> = {
     { key: 'Nodes', label: 'Nodes' },
     { key: 'PDO', label: 'PDO' },
     { key: 'DS402', label: 'DS402' },
+    { key: 'SDO', label: 'SDO' },
     { key: 'EMCY', label: 'EMCY' },
     { key: 'Heartbeat', label: 'Heartbeat' },
     { key: 'SYNC', label: 'SYNC' },
