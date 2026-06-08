@@ -28,6 +28,7 @@ const EmcyMonitor = lazy(() => import('@/pages/CANOpen/EmcyMonitor').then(m => (
 const HeartbeatMonitor = lazy(() => import('@/pages/CANOpen/HeartbeatMonitor').then(m => ({ default: m.HeartbeatMonitor })));
 const SyncManagement = lazy(() => import('@/pages/CANOpen/SyncManagement').then(m => ({ default: m.SyncManagement })));
 const SdoExplorer = lazy(() => import('@/pages/CANOpen/SdoExplorer').then(m => ({ default: m.SdoExplorer })));
+const ScriptEditor = lazy(() => import('@/pages/CANOpen/ScriptEditor').then(m => ({ default: m.ScriptEditor })));
 const SessionRecorder = lazy(() => import('@/pages/Recording/SessionRecorder').then(m => ({ default: m.SessionRecorder })));
 const SessionPlayer = lazy(() => import('@/pages/Recording/SessionPlayer').then(m => ({ default: m.SessionPlayer })));
 const ConnectionSettings = lazy(() => import('@/pages/Settings/ConnectionSettings').then(m => ({ default: m.ConnectionSettings })));
@@ -55,6 +56,7 @@ const TAB_COMPONENTS: Record<string, Record<string, React.ComponentType>> = {
     PDO: PdoMonitor,
     DS402: Ds402Control,
     SDO: SdoExplorer,
+    Script: ScriptEditor,
     EMCY: EmcyMonitor,
     Heartbeat: HeartbeatMonitor,
     SYNC: SyncManagement,
