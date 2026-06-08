@@ -11,6 +11,7 @@ import { BottomPanel } from '@/components/layout/BottomPanel';
 import { useAppStore, useConnected, useActiveGroup, useGroupTabs } from '@/lib/store';
 import { useFrameStream } from '@/hooks/useFrameStream';
 import { useEmcyStream, useHeartbeatStream, useDs402StateStream, useBusStatsStream } from '@/hooks/useStreams';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { ConnectionDialog } from '@/components/common/ConnectionDialog';
 import { useEffect } from 'react';
 
@@ -98,6 +99,9 @@ function AppContent() {
   useHeartbeatStream();
   useDs402StateStream();
   useBusStatsStream();
+
+  // Global keyboard shortcuts
+  useKeyboardShortcuts();
 
   // Start listening to frame stream when connected
   useEffect(() => {
