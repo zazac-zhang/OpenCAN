@@ -9,24 +9,15 @@ describe('useAppStore', () => {
     state.sdo.clearHistory();
     state.pdo.clearEntries();
     state.emcy.clearEntries();
-    useAppStore.setState({
+    useAppStore.setState((s) => ({
       can: {
+        ...s.can,
         connected: false,
         backendInfo: null,
         nodes: [],
         selectedNode: null,
       },
-      ui: {
-        currentTab: 'Frames',
-        detailPanelVisible: true,
-        bottomPanelVisible: true,
-        bottomPanelHeight: 200,
-      },
-      sidebar: {
-        activeGroup: 'can',
-        collapsed: false,
-      },
-    });
+    }));
   });
 
   describe('CAN connection state', () => {
@@ -68,6 +59,7 @@ describe('useAppStore', () => {
         {
           cob_id: 0x185,
           data: [0x01, 0x02, 0x03, 0x04, 0, 0, 0, 0],
+          dlc: 4,
           direction: 'rx',
           timestamp_ms: Date.now(),
         },
@@ -81,7 +73,7 @@ describe('useAppStore', () => {
     it('can clear frames', () => {
       const state = useAppStore.getState();
       state.frames.addFrames([
-        { cob_id: 0x185, data: [0, 0, 0, 0, 0, 0, 0, 0], direction: 'rx', timestamp_ms: Date.now() },
+        { cob_id: 0x185, data: [0, 0, 0, 0, 0, 0, 0, 0], dlc: 0, direction: 'rx', timestamp_ms: Date.now() },
       ]);
       state.frames.clearFrames();
 

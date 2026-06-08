@@ -30,6 +30,7 @@ export function ConnectionDialog() {
   const [localChannel, setLocalChannel] = useState(dialog.channel);
   const [localBitrate, setLocalBitrate] = useState(dialog.bitrate);
   const [localNodeId, setLocalNodeId] = useState(dialog.nodeId);
+  const [error, setError] = useState<string | null>(null);
 
   const getBackends = useGetBackends();
   const connectMutation = useConnectBackend();
@@ -41,6 +42,7 @@ export function ConnectionDialog() {
       setLocalChannel(dialog.channel);
       setLocalBitrate(dialog.bitrate);
       setLocalNodeId(dialog.nodeId);
+      setError(null);
       getBackends.mutate();
     }
   }, [dialog.visible]);
@@ -65,13 +67,20 @@ export function ConnectionDialog() {
   };
 
   const handleConnect = () => {
-    connectMutation.mutate({
-      backend_type: localBackend,
-      channel: localChannel,
-      bitrate: localBitrate,
-      node_id: parseInt(localNodeId, 10) || 0,
-    });
-    dialog.hide();
+    setError(null);
+    connectMutation.mutate(
+      {
+        backend_type: localBackend,
+        channel: localChannel,
+        bitrate: localBitrate,
+        node_id: parseInt(localNodeId, 10) || 0,
+      },
+      {
+        onError: (err) => {
+          setError(err instanceof Error ? err.message : String(err));
+        },
+      },
+    );
   };
 
   const isConnecting = connectMutation.isPending;
@@ -136,7 +145,13 @@ export function ConnectionDialog() {
             <input
               className="w-full px-3 py-2 text-sm rounded-md border bg-background"
               type="text"
-              placeholder="e.g. can0"
+              placeholder={
+                localBackend === 'socketcan' ? 'e.g. can0, vcan0' :
+                localBackend === 'zlg' ? 'e.g. 4:0:0 (type:index:channel)' :
+                localBackend === 'kvaser' ? 'e.g. 0 (channel number)' :
+                localBackend === 'pcan' ? 'e.g. USBBUS1' :
+                'e.g. can0'
+              }
               value={localChannel}
               onChange={(e) => setLocalChannel(e.target.value)}
               disabled={isConnecting}
@@ -176,31 +191,38 @@ export function ConnectionDialog() {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t">
-          <button
-            className="px-4 py-2 text-sm rounded-md border hover:bg-muted transition-colors"
-            onClick={() => dialog.hide()}
-            disabled={isConnecting}
-          >
-            Cancel
-          </button>
-          <button
-            className={cn(
-              'px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground transition-colors',
-              'hover:bg-primary/90 disabled:opacity-50',
-            )}
-            onClick={handleConnect}
-            disabled={isConnecting || !localChannel}
-          >
-            {isConnecting ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 mr-1.5 inline animate-spin" />
-                Connecting...
-              </>
-            ) : (
-              'Connect'
-            )}
-          </button>
+        <div className="px-6 py-4 border-t space-y-3">
+          {error && (
+            <div className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
+              {error}
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-2">
+            <button
+              className="px-4 py-2 text-sm rounded-md border hover:bg-muted transition-colors"
+              onClick={() => dialog.hide()}
+              disabled={isConnecting}
+            >
+              Cancel
+            </button>
+            <button
+              className={cn(
+                'px-4 py-2 text-sm rounded-md bg-primary text-primary-foreground transition-colors',
+                'hover:bg-primary/90 disabled:opacity-50',
+              )}
+              onClick={handleConnect}
+              disabled={isConnecting || !localChannel}
+            >
+              {isConnecting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 inline animate-spin" />
+                  Connecting...
+                </>
+              ) : (
+                'Connect'
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>
