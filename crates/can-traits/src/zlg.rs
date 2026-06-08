@@ -196,6 +196,7 @@ impl ZlgFunctions {
         unsafe { func(channel_handle.0, can_type) }
     }
 
+    #[allow(dead_code)]
     unsafe fn clear_buffer(&self, channel_handle: ChannelHandle) -> u32 {
         let func: unsafe extern "C" fn(*mut std::ffi::c_void) -> u32 =
             unsafe { std::mem::transmute(self.fn_clear_buffer) };
@@ -396,13 +397,12 @@ impl ZlgBus {
 
 impl Drop for ZlgBus {
     fn drop(&mut self) {
-        if let Ok(funcs) = get_zlg_funcs() {
-            if self.device_handle != INVALID_DEVICE_HANDLE {
+        if let Ok(funcs) = get_zlg_funcs()
+            && self.device_handle != INVALID_DEVICE_HANDLE {
                 unsafe {
                     funcs.close_device(self.device_handle);
                 }
             }
-        }
     }
 }
 
@@ -454,7 +454,9 @@ impl CanBus for ZlgBus {
         let channel_handle = self.channel_handle;
 
         async move {
-            let frame = tokio::task::spawn_blocking(move || {
+            
+
+            tokio::task::spawn_blocking(move || {
                 let funcs = get_zlg_funcs()?;
 
                 let mut receive_data = ZcanReceiveData {
@@ -497,9 +499,7 @@ impl CanBus for ZlgBus {
                 }))
             })
             .await
-            .map_err(|e| CanError::Io(format!("Task join error: {}", e)))?;
-
-            frame
+            .map_err(|e| CanError::Io(format!("Task join error: {}", e)))?
         }
     }
 

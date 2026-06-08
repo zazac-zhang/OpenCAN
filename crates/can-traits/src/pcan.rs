@@ -35,16 +35,16 @@ const PCAN_ERROR_BUSLIGHT: PcanStatus = 0x00004;
 
 // PCAN 通道状态参数
 const PCAN_CHANNEL_CONDITION: u32 = 0x0004;
-const PCAN_CHANNEL_FEATURES: u32 = 0x0005;
-const PCAN_CONTROLLER_NUMBER: u32 = 0x0006;
+const _PCAN_CHANNEL_FEATURES: u32 = 0x0005;
+const _PCAN_CONTROLLER_NUMBER: u32 = 0x0006;
 
 // PCAN 通道条件值
-const PCAN_CHANNEL_UNAVAILABLE: u32 = 0x0000;
-const PCAN_CHANNEL_AVAILABLE: u32 = 0x0001;
-const PCAN_CHANNEL_OCCUPIED: u32 = 0x0002;
+const _PCAN_CHANNEL_UNAVAILABLE: u32 = 0x0000;
+const _PCAN_CHANNEL_AVAILABLE: u32 = 0x0001;
+const _PCAN_CHANNEL_OCCUPIED: u32 = 0x0002;
 
 // PCAN 控制器状态
-const PCAN_CONTROLLER_ACTIVE: u32 = 0x0000;
+const _PCAN_CONTROLLER_ACTIVE: u32 = 0x0000;
 const PCAN_CONTROLLER_BUSWARNING: u32 = 0x0001;
 const PCAN_CONTROLLER_BUSOFF: u32 = 0x0002;
 
@@ -367,7 +367,9 @@ impl CanBus for PcanBus {
 
         async move {
             // PCAN_Read 是非阻塞的，需要轮询实现阻塞接收
-            let frame = tokio::task::spawn_blocking(move || {
+            
+
+            tokio::task::spawn_blocking(move || {
                 let funcs = get_pcan_funcs()?;
 
                 loop {
@@ -419,9 +421,7 @@ impl CanBus for PcanBus {
                 }
             })
             .await
-            .map_err(|e| CanError::Io(format!("Task join error: {}", e)))?;
-
-            frame
+            .map_err(|e| CanError::Io(format!("Task join error: {}", e)))?
         }
     }
 
@@ -447,7 +447,7 @@ impl CanBus for PcanBus {
         }
 
         // 检查通道是否可用
-        if condition & PCAN_CHANNEL_AVAILABLE == 0 {
+        if condition & _PCAN_CHANNEL_AVAILABLE == 0 {
             return CanState::NotConnected;
         }
 
@@ -456,7 +456,7 @@ impl CanBus for PcanBus {
         let status = unsafe {
             funcs.get_value(
                 self.handle,
-                PCAN_CONTROLLER_NUMBER, // 使用控制器编号参数查询状态
+                _PCAN_CONTROLLER_NUMBER, // 使用控制器编号参数查询状态
                 &mut controller_status,
                 std::mem::size_of::<u32>() as u32,
             )

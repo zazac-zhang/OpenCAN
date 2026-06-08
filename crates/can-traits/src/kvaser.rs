@@ -56,9 +56,9 @@ const CAN_BITRATE_50K: i32 = -7;
 const CANSTAT_ERROR_PASSIVE: u32 = 0x00000020;
 const CANSTAT_BUS_OFF: u32 = 0x00000040;
 const CANSTAT_ERROR_WARNING: u32 = 0x00000010;
-const CANSTAT_ERROR_ACTIVE: u32 = 0x00000008;
-const CANSTAT_TX_PENDING: u32 = 0x00000001;
-const CANSTAT_RX_PENDING: u32 = 0x00000002;
+const _CANSTAT_ERROR_ACTIVE: u32 = 0x00000008;
+const _CANSTAT_TX_PENDING: u32 = 0x00000001;
+const _CANSTAT_RX_PENDING: u32 = 0x00000002;
 
 // Kvaser canRead 函数指针
 #[allow(dead_code)]
@@ -108,6 +108,7 @@ impl KvaserFunctions {
         unsafe { func(handle.0) }
     }
 
+    #[allow(clippy::too_many_arguments)]
     unsafe fn set_bus_params(
         &self,
         handle: CanHandle,
@@ -135,6 +136,7 @@ impl KvaserFunctions {
         unsafe { func(handle.0, id, msg, dlc, flags) }
     }
 
+    #[allow(clippy::too_many_arguments)]
     unsafe fn read_wait(
         &self,
         handle: CanHandle,
@@ -392,7 +394,9 @@ impl CanBus for KvaserBus {
         let handle = self.handle;
 
         async move {
-            let frame = tokio::task::spawn_blocking(move || {
+            
+
+            tokio::task::spawn_blocking(move || {
                 let funcs = get_kvaser_funcs()?;
 
                 let mut id: i32 = 0;
@@ -439,9 +443,7 @@ impl CanBus for KvaserBus {
                 }))
             })
             .await
-            .map_err(|e| CanError::Io(format!("Task join error: {}", e)))?;
-
-            frame
+            .map_err(|e| CanError::Io(format!("Task join error: {}", e)))?
         }
     }
 
@@ -465,8 +467,6 @@ impl CanBus for KvaserBus {
             CanState::ErrorPassive
         } else if flags & CANSTAT_ERROR_WARNING != 0 {
             CanState::Warning
-        } else if flags & CANSTAT_ERROR_ACTIVE != 0 {
-            CanState::Active
         } else {
             CanState::Active
         }
