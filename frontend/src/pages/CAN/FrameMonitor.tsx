@@ -10,11 +10,13 @@
  * - Frame row click to select (for detail panel)
  * - Pause/resume control
  * - Auto-scroll toggle
+ * - Enhanced protocol decoding (SDO commands, EMCY errors, NMT commands)
  */
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { useFrames, useAppStore } from '@/lib/store';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Pause, Play, ArrowDown, Download, Bookmark, BookmarkCheck } from 'lucide-react';
+import { decodeSdoCommand, decodeFunctionCode, decodeEmcyErrorCode } from '@/lib/protocol-decoder';
 
 function decodeFrameType(cobId: number) {
   if (cobId === 0x080) return { label: 'SYNC', color: 'text-purple-400', bgColor: 'bg-purple-500/10' };
@@ -450,9 +452,40 @@ export function FrameMonitor() {
         {selectedFrameIdx !== null && filteredFrames[selectedFrameIdx] && (
           <span className="font-mono">
             Selected: COB-ID 0x{filteredFrames[selectedFrameIdx].cob_id.toString(16).toUpperCase()}
+            {' — '}{decodeFunctionCode(filteredFrames[selectedFrameIdx].cob_id).description}
           </span>
         )}
       </div>
+      {/* Protocol decode panel */}
+      {selectedFrameIdx !== null && filteredFrames[selectedFrameIdx] && (() => {
+        const frame = filteredFrames[selectedFrameIdx];
+        const typeInfo = decodeFrameType(frame.cob_id);
+        
+        // Enhanced protocol decode
+        let protocolInfo: string | null = null;
+        if (frame.data.length >= 4) {
+          // Check if this is an SDO frame
+          if (typeInfo.label === 'SDO_TX' || typeInfo.label === 'SDO_RX') {
+            const sdo = decodeSdoCommand(frame.data);
+            protocolInfo = `${sdo.command}`;
+            if (sdo.index !== undefined) {
+              protocolInfo += ` (Index: 0x${sdo.index.toString(16).padStart(4, '0')}, Sub: 0x${sdo.subindex?.toString(16).padStart(2, '0')})`;
+            }
+          }
+          // Check if this is an EMCY frame
+          if (typeInfo.label === 'EMCY') {
+            const errorCode = frame.data[0] | (frame.data[1] << 8);
+            const errorInfo = decodeEmcyErrorCode(errorCode);
+            protocolInfo = `Emergency: ${errorInfo.name} - ${errorInfo.description}`;
+          }
+        }
+        
+        return protocolInfo ? (
+          <div className="px-3 py-1 text-xs text-muted-foreground border-t bg-muted/30 shrink-0">
+            <span className="text-yellow-400">Protocol:</span> {protocolInfo}
+          </div>
+        ) : null;
+      })()}
     </div>
   );
 }
