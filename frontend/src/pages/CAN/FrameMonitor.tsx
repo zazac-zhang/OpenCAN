@@ -116,11 +116,14 @@ export function FrameMonitor() {
 
   // Export filtered frames as CSV
   const handleExportCsv = () => {
-    const header = 'Timestamp_ms,COB-ID,Direction,DLC,Data,Type\n';
+    const header = 'Timestamp_ms,COB-ID,Direction,DLC,Data,Type,FrameType,BRS,ESI\n';
     const rows = filteredFrames.map((f) => {
       const type = decodeFrameType(f.cob_id).label;
       const dataHex = f.data.slice(0, f.dlc).map((b) => b.toString(16).padStart(2, '0')).join(' ');
-      return `${f.timestamp_ms.toFixed(3)},0x${f.cob_id.toString(16).toUpperCase().padStart(3, '0')},${f.direction},${f.dlc},"${dataHex}",${type}`;
+      const frameType = f.frame_type === 'fd' ? 'FD' : 'Classic';
+      const brs = f.brs ? 'BRS' : '';
+      const esi = f.esi ? 'ESI' : '';
+      return `${f.timestamp_ms.toFixed(3)},0x${f.cob_id.toString(16).toUpperCase().padStart(3, '0')},${f.direction},${f.dlc},"${dataHex}",${type},${frameType},${brs},${esi}`;
     }).join('\n');
     downloadFile(header + rows, 'can_frames.csv', 'text/csv');
   };
@@ -398,7 +401,18 @@ export function FrameMonitor() {
                 <span className={`w-8 ${frame.direction === 'tx' ? 'text-blue-400' : 'text-green-400'}`}>
                   {frame.direction.toUpperCase()}
                 </span>
-                <span className="w-8">{frame.dlc}</span>
+                <span className="w-8">
+                  {frame.dlc}
+                  {frame.frame_type === 'fd' && (
+                    <span className="ml-0.5 text-[10px] text-purple-400 font-bold">FD</span>
+                  )}
+                </span>
+                {frame.frame_type === 'fd' && (
+                  <span className="w-12 text-[10px]">
+                    {frame.brs && <span className="text-yellow-400">BRS</span>}
+                    {frame.esi && <span className="text-red-400">ESI</span>}
+                  </span>
+                )}
                 <span className="w-16 text-muted-foreground">
                   {frame.cycleTime !== null ? `${frame.cycleTime}ms` : '—'}
                 </span>

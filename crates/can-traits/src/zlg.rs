@@ -13,7 +13,7 @@
 
 use crate::{
     CanBitrate, CanBus, CanBusDyn, CanBusFactory, CanConfig, CanFrame, CanId, CanState,
-    ClassicFrame, error::CanError,
+    ClassicFrame, FdFlags, FdFrame, error::CanError,
 };
 use std::future::Future;
 use std::sync::Mutex;
@@ -52,7 +52,7 @@ struct CanFrameFfi {
     data: [u8; 8],
 }
 
-/// CAN FD 帧结构（预留）
+/// CAN FD 帧结构
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 #[allow(dead_code)]
@@ -63,6 +63,22 @@ struct CanFdFrameFfi {
     __res0: u8,
     __res1: u8,
     data: [u8; 64],
+}
+
+/// CAN FD 发送数据结构
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct ZcanFdTransmitData {
+    frame: CanFdFrameFfi,
+    transmit_type: u32,
+}
+
+/// CAN FD 接收数据结构
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+struct ZcanFdReceiveData {
+    frame: CanFdFrameFfi,
+    timestamp: u64,
 }
 
 /// 通道初始化配置
@@ -119,6 +135,9 @@ struct ZlgFunctions {
     fn_get_receive_num: usize,
     fn_clear_buffer: usize,
     fn_read_channel_err_info: usize,
+    // CAN FD functions
+    fn_transmit_fd: usize,
+    fn_receive_fd: usize,
 }
 
 // SAFETY: ZlgFunctions 内部所有操作都在 Mutex 保护下进行
@@ -202,6 +221,43 @@ impl ZlgFunctions {
             unsafe { std::mem::transmute(self.fn_clear_buffer) };
         unsafe { func(channel_handle.0) }
     }
+
+    /// Check if CAN FD functions are available
+    fn has_fd_support(&self) -> bool {
+        self.fn_transmit_fd != 0 && self.fn_receive_fd != 0
+    }
+
+    /// Transmit a CAN FD frame
+    unsafe fn transmit_fd(
+        &self,
+        channel_handle: ChannelHandle,
+        data: *const ZcanFdTransmitData,
+        len: u32,
+    ) -> u32 {
+        let func: unsafe extern "C" fn(
+            *mut std::ffi::c_void,
+            *const ZcanFdTransmitData,
+            u32,
+        ) -> u32 = unsafe { std::mem::transmute(self.fn_transmit_fd) };
+        unsafe { func(channel_handle.0, data, len) }
+    }
+
+    /// Receive CAN FD frames
+    unsafe fn receive_fd(
+        &self,
+        channel_handle: ChannelHandle,
+        data: *mut ZcanFdReceiveData,
+        len: u32,
+        wait_time: i32,
+    ) -> u32 {
+        let func: unsafe extern "C" fn(
+            *mut std::ffi::c_void,
+            *mut ZcanFdReceiveData,
+            u32,
+            i32,
+        ) -> u32 = unsafe { std::mem::transmute(self.fn_receive_fd) };
+        unsafe { func(channel_handle.0, data, len, wait_time) }
+    }
 }
 
 /// 通道错误信息
@@ -243,6 +299,10 @@ unsafe fn load_zlg_functions() -> Result<ZlgFunctions, String> {
     let fn_clear_buffer = unsafe { load_sym(&lib, b"ZCAN_ClearBuffer")? };
     let fn_read_channel_err_info = unsafe { load_sym(&lib, b"ZCAN_ReadChannelErrInfo")? };
 
+    // CAN FD functions (optional - may not be available in all SDK versions)
+    let fn_transmit_fd = unsafe { load_sym(&lib, b"ZCAN_TransmitFD").unwrap_or(0) };
+    let fn_receive_fd = unsafe { load_sym(&lib, b"ZCAN_ReceiveFD").unwrap_or(0) };
+
     Ok(ZlgFunctions {
         _lib: lib,
         fn_open_device,
@@ -254,6 +314,8 @@ unsafe fn load_zlg_functions() -> Result<ZlgFunctions, String> {
         fn_get_receive_num,
         fn_clear_buffer,
         fn_read_channel_err_info,
+        fn_transmit_fd,
+        fn_receive_fd,
     })
 }
 
@@ -411,40 +473,75 @@ impl CanBus for ZlgBus {
         let funcs = get_zlg_funcs()?;
         let _lock = self._mutex.lock().unwrap();
 
-        let classic = match frame {
-            CanFrame::Classic(f) => f,
-            CanFrame::Fd(_) => {
-                return Err(CanError::Unsupported(
-                    "CAN FD not supported yet".to_string(),
-                ));
+        match frame {
+            CanFrame::Classic(classic) => {
+                let can_id = match classic.id {
+                    CanId::Standard(id) => id as u32,
+                    CanId::Extended(id) => id | 0x80000000,
+                };
+
+                let mut data = [0u8; 8];
+                let len = classic.len.min(8) as usize;
+                data[..len].copy_from_slice(&classic.data[..len]);
+
+                let transmit_data = ZcanTransmitData {
+                    frame: CanFrameFfi {
+                        can_id,
+                        can_dlc: classic.len,
+                        __pad: 0,
+                        __res0: 0,
+                        __res1: 0,
+                        data,
+                    },
+                    transmit_type: 0,
+                };
+
+                let status = unsafe { funcs.transmit(self.channel_handle, &transmit_data, 1) };
+                if status == 0 {
+                    return Err(CanError::BusError("ZLG transmit failed".to_string()));
+                }
             }
-        };
+            CanFrame::Fd(fd) => {
+                if !funcs.has_fd_support() {
+                    return Err(CanError::Unsupported(
+                        "ZLG CAN FD functions not available".to_string(),
+                    ));
+                }
 
-        let can_id = match classic.id {
-            CanId::Standard(id) => id as u32,
-            CanId::Extended(id) => id | 0x80000000, // 设置扩展帧标志
-        };
+                let can_id = match fd.id {
+                    CanId::Standard(id) => id as u32,
+                    CanId::Extended(id) => id | 0x80000000,
+                };
 
-        let mut data = [0u8; 8];
-        let len = classic.len.min(8) as usize;
-        data[..len].copy_from_slice(&classic.data[..len]);
+                let mut data = [0u8; 64];
+                let len = fd.data.len().min(64);
+                data[..len].copy_from_slice(&fd.data[..len]);
 
-        let transmit_data = ZcanTransmitData {
-            frame: CanFrameFfi {
-                can_id,
-                can_dlc: classic.len,
-                __pad: 0,
-                __res0: 0,
-                __res1: 0,
-                data,
-            },
-            transmit_type: 0, // 正常发送
-        };
+                let mut flags: u8 = 0;
+                if fd.flags.brs {
+                    flags |= 0x01; // BRS flag
+                }
+                if fd.flags.esi {
+                    flags |= 0x02; // ESI flag
+                }
 
-        let status = unsafe { funcs.transmit(self.channel_handle, &transmit_data, 1) };
+                let transmit_data = ZcanFdTransmitData {
+                    frame: CanFdFrameFfi {
+                        can_id,
+                        len: len as u8,
+                        flags,
+                        __res0: 0,
+                        __res1: 0,
+                        data,
+                    },
+                    transmit_type: 0,
+                };
 
-        if status == 0 {
-            return Err(CanError::BusError("ZLG transmit failed".to_string()));
+                let status = unsafe { funcs.transmit_fd(self.channel_handle, &transmit_data, 1) };
+                if status == 0 {
+                    return Err(CanError::BusError("ZLG FD transmit failed".to_string()));
+                }
+            }
         }
 
         Ok(())
@@ -459,6 +556,47 @@ impl CanBus for ZlgBus {
             tokio::task::spawn_blocking(move || {
                 let funcs = get_zlg_funcs()?;
 
+                // Try FD receive first if available
+                if funcs.has_fd_support() {
+                    let mut fd_receive_data = ZcanFdReceiveData {
+                        frame: CanFdFrameFfi {
+                            can_id: 0,
+                            len: 0,
+                            flags: 0,
+                            __res0: 0,
+                            __res1: 0,
+                            data: [0; 64],
+                        },
+                        timestamp: 0,
+                    };
+
+                    let status = unsafe { funcs.receive_fd(channel_handle, &mut fd_receive_data, 1, 0) };
+                    if status > 0 {
+                        let can_id = fd_receive_data.frame.can_id;
+                        let id = if can_id & 0x80000000 != 0 {
+                            CanId::Extended(can_id & 0x1FFFFFFF)
+                        } else {
+                            CanId::Standard((can_id & 0x7FF) as u16)
+                        };
+
+                        let len = fd_receive_data.frame.len.min(64) as usize;
+                        let data = fd_receive_data.frame.data[..len].to_vec();
+
+                        let flags = FdFlags {
+                            brs: fd_receive_data.frame.flags & 0x01 != 0,
+                            esi: fd_receive_data.frame.flags & 0x02 != 0,
+                        };
+
+                        return Ok(CanFrame::Fd(FdFrame {
+                            id,
+                            data,
+                            flags,
+                            timestamp_us: Some(fd_receive_data.timestamp),
+                        }));
+                    }
+                }
+
+                // Fall back to classic CAN receive
                 let mut receive_data = ZcanReceiveData {
                     frame: CanFrameFfi {
                         can_id: 0,
@@ -471,19 +609,15 @@ impl CanBus for ZlgBus {
                     timestamp: 0,
                 };
 
-                // timeout = -1 表示无限等待
                 let status = unsafe { funcs.receive(channel_handle, &mut receive_data, 1, -1) };
-
                 if status == 0 {
                     return Err(CanError::Io("ZLG receive failed".to_string()));
                 }
 
                 let can_id = receive_data.frame.can_id;
                 let id = if can_id & 0x80000000 != 0 {
-                    // 扩展帧
                     CanId::Extended(can_id & 0x1FFFFFFF)
                 } else {
-                    // 标准帧
                     CanId::Standard((can_id & 0x7FF) as u16)
                 };
 

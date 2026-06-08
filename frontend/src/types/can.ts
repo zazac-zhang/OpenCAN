@@ -6,6 +6,9 @@ export interface CanFrame {
   dlc: number;
   timestamp_ms: number;
   direction: 'tx' | 'rx';
+  frame_type?: 'classic' | 'fd'; // Frame type (classic CAN or CAN FD)
+  brs?: boolean; // Bit Rate Switch (CAN FD only)
+  esi?: boolean; // Error State Indicator (CAN FD only)
 }
 
 export interface BusStats {
