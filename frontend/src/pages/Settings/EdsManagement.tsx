@@ -6,7 +6,7 @@
  * and offers a tree-view object dictionary browser with index-range filtering.
  */
 import { useState, useMemo } from 'react';
-import { HardDrive, FolderOpen, Plus, Trash2, ChevronRight, ChevronDown, Search } from 'lucide-react';
+import { HardDrive, FolderOpen, Plus, Trash2, ChevronRight, ChevronDown, Search, Download, Info } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useLoadEdsFile, useGetOdEntries } from '@/hooks/useCommands';
 
@@ -64,6 +64,7 @@ export function EdsManagement() {
   const [expandedIndexes, setExpandedIndexes] = useState<Set<number>>(new Set());
   const [areaFilter, setAreaFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedEntry, setSelectedEntry] = useState<OdEntry | null>(null);
 
   const loadEdsMutation = useLoadEdsFile();
   const getOdEntriesMutation = useGetOdEntries();
@@ -212,8 +213,31 @@ export function EdsManagement() {
       const area = getAreaLabel(index);
       if (area !== areaFilter) return false;
     }
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      // Check if index matches
+      if (formatHex(index).toLowerCase().includes(term)) return true;
+      // Check if any sub-entry name matches
+      const entries = groupedByIndex.get(index) || [];
+      return entries.some((e) => e.name.toLowerCase().includes(term));
+    }
     return true;
   });
+
+  // Export OD as CSV
+  const handleExportCsv = () => {
+    const header = 'Index,SubIndex,Name,ObjectType,DataType,Value\n';
+    const rows = effectiveOdEntries.map((e) =>
+      `${formatHex(e.index)},0x${e.subindex.toString(16).padStart(2, '0')},"${e.name}",${e.objectType || ''},${e.dataType || ''},${e.value || ''}`
+    ).join('\n');
+    const blob = new Blob([header + rows], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'object_dictionary.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const formatBaudRate = (rate: number): string => {
     if (rate >= 1000000) return `${rate / 1000000}M`;
@@ -332,7 +356,21 @@ export function EdsManagement() {
 
       {/* Object Dictionary Viewer */}
       <section className="space-y-3">
-        <h3 className="text-sm font-medium text-foreground">Object Dictionary</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium text-foreground">Object Dictionary</h3>
+          {effectiveOdEntries.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">{effectiveOdEntries.length} entries</span>
+              <button
+                onClick={handleExportCsv}
+                className="flex items-center gap-1 px-2 py-1 text-xs rounded border hover:bg-muted transition-colors"
+              >
+                <Download className="h-3 w-3" />
+                Export CSV
+              </button>
+            </div>
+          )}
+        </div>
 
         {!loadEdsFile.data ? (
           <div className="bg-card border border-border rounded-md p-6 text-center">
@@ -392,21 +430,60 @@ export function EdsManagement() {
                     </button>
                     {isExpanded &&
                       groupedByIndex.get(index)?.map((entry, subI) => (
-                        <div
+                        <button
                           key={subI}
-                          className="flex items-center gap-2 pl-8 pr-3 py-1 text-xs font-mono text-muted-foreground"
+                          onClick={() => setSelectedEntry(selectedEntry === entry ? null : entry)}
+                          className={`flex items-center gap-2 pl-8 pr-3 py-1 text-xs font-mono w-full text-left transition-colors ${
+                            selectedEntry === entry ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-card/80'
+                          }`}
                         >
                           <span className="w-8">.{entry.subindex.toString(16).padStart(2, '0')}</span>
                           <span className="text-foreground truncate flex-1">{entry.name}</span>
                           {entry.dataType && (
                             <span className="text-muted-foreground">{entry.dataType}</span>
                           )}
-                        </div>
+                        </button>
                       ))}
                   </div>
                 );
               })}
             </div>
+
+            {/* Entry Detail Panel */}
+            {selectedEntry && (
+              <div className="bg-card border border-border rounded-md p-3 text-sm space-y-2">
+                <div className="flex items-center gap-2">
+                  <Info className="h-4 w-4 text-primary" />
+                  <span className="font-medium text-foreground">Entry Detail</span>
+                </div>
+                <div className="grid grid-cols-[100px_1fr] gap-1 font-mono text-xs">
+                  <span className="text-muted-foreground">Index</span>
+                  <span className="text-foreground">{formatHex(selectedEntry.index)}</span>
+                  <span className="text-muted-foreground">SubIndex</span>
+                  <span className="text-foreground">0x{selectedEntry.subindex.toString(16).padStart(2, '0')}</span>
+                  <span className="text-muted-foreground">Name</span>
+                  <span className="text-foreground">{selectedEntry.name}</span>
+                  {selectedEntry.objectType && (
+                    <>
+                      <span className="text-muted-foreground">Object Type</span>
+                      <span className="text-foreground">{selectedEntry.objectType}</span>
+                    </>
+                  )}
+                  {selectedEntry.dataType && (
+                    <>
+                      <span className="text-muted-foreground">Data Type</span>
+                      <span className="text-foreground">{selectedEntry.dataType}</span>
+                    </>
+                  )}
+                  {selectedEntry.value && (
+                    <>
+                      <span className="text-muted-foreground">Value</span>
+                      <span className="text-foreground">{selectedEntry.value}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
           </>
         )}
       </section>
