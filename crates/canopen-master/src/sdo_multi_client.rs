@@ -3,8 +3,8 @@
 //! This module provides multi-client SDO support, allowing multiple
 //! concurrent SDO sessions with different nodes.
 
-use super::client::SdoClient;
-use crate::CanDriver;
+use opencan_canopen_core::sdo::SdoClient;
+use opencan_canopen_core::CanDriver;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -134,7 +134,7 @@ impl<C: CanDriver> SdoMultiClient<C> {
         node_id: u8,
         index: u16,
         subindex: u8,
-    ) -> Result<crate::od::OdValue, SdoMultiClientError> {
+    ) -> Result<opencan_canopen_core::od::OdValue, SdoMultiClientError> {
         let client = self.clients.get_mut(&node_id).ok_or_else(|| {
             SdoMultiClientError::SessionNotFound(node_id)
         })?;
@@ -150,7 +150,7 @@ impl<C: CanDriver> SdoMultiClient<C> {
         node_id: u8,
         index: u16,
         subindex: u8,
-        value: &crate::od::OdValue,
+        value: &opencan_canopen_core::od::OdValue,
     ) -> Result<(), SdoMultiClientError> {
         let client = self.clients.get_mut(&node_id).ok_or_else(|| {
             SdoMultiClientError::SessionNotFound(node_id)
@@ -193,7 +193,7 @@ pub enum SdoMultiClientError {
     /// Maximum number of sessions reached.
     MaxSessionsReached(usize),
     /// SDO error from the underlying client.
-    SdoError(crate::CanOpenError),
+    SdoError(opencan_canopen_core::CanOpenError),
 }
 
 impl std::fmt::Display for SdoMultiClientError {
@@ -218,7 +218,7 @@ impl std::error::Error for SdoMultiClientError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::MockCanDriver;
+    use opencan_canopen_core::testing::MockCanDriver;
 
     #[test]
     fn test_multi_client_add_remove() {

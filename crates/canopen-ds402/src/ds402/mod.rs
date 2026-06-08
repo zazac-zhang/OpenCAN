@@ -7,9 +7,11 @@ pub mod control;
 pub mod error;
 pub mod mode_validator;
 pub mod modes;
+pub mod pdo_templates;
 pub mod state_machine;
 
 pub use control::Ds402Device;
 pub use error::{Ds402Error, LimitChecker, LimitDirection, PositionLimits, TorqueLimits, VelocityLimits};
 pub use mode_validator::{ModeSwitchValidator, ModeTransitionHistory};
+pub use pdo_templates::Ds402PdoTemplates;
 pub use state_machine::Ds402State;

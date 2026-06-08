@@ -33,9 +33,11 @@ pub mod emergency_handler;
 pub mod heartbeat_monitor;
 pub mod nmt_state_machine;
 pub mod node_manager;
+pub mod sdo_multi_client;
 
 pub use adapter::CanDriverAdapter;
 pub use emergency_handler::{EmergencyEvent, EmergencyHandler, EmergencyHandlerConfig, EmergencyHandlerEvent, EmergencyStats, EmergencySummary, ErrorCode, ErrorRegister};
 pub use heartbeat_monitor::{HeartbeatEvent, HeartbeatMonitor, HeartbeatStats, MonitorSummary, NodeMonitorConfig};
 pub use nmt_state_machine::{NmtCommand, NmtStateMachine, NmtStateMachineConfig, NmtSummary, StateTransition, TransitionSource};
 pub use node_manager::{NodeInfo, NodeManager, NodeManagerConfig, NodeSummary};
+pub use sdo_multi_client::{SdoClientSession, SdoMultiClient, SdoMultiClientError};

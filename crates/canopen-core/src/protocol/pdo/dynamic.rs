@@ -289,117 +289,6 @@ impl std::fmt::Display for PdoMappingError {
 
 impl std::error::Error for PdoMappingError {}
 
-/// Common PDO templates for DS402 devices.
-pub struct Ds402PdoTemplates;
-
-impl Ds402PdoTemplates {
-    /// Create a TPDO1 template for status word and actual position.
-    pub fn tpdo1_status_position() -> PdoTemplate {
-        PdoTemplate::new(
-            "tpdo1_status_position",
-            1,
-            PdoDirection::Tpdo,
-            vec![
-                PdoMapping::new(0x6041, 0, 16), // Status Word
-                PdoMapping::new(0x6064, 0, 32), // Position Actual
-            ],
-            vec![DataType::Unsigned16, DataType::Integer32],
-            "TPDO1: Status Word + Actual Position",
-        )
-    }
-
-    /// Create a TPDO2 template for status word and actual velocity.
-    pub fn tpdo2_status_velocity() -> PdoTemplate {
-        PdoTemplate::new(
-            "tpdo2_status_velocity",
-            2,
-            PdoDirection::Tpdo,
-            vec![
-                PdoMapping::new(0x6041, 0, 16), // Status Word
-                PdoMapping::new(0x606C, 0, 32), // Velocity Actual
-            ],
-            vec![DataType::Unsigned16, DataType::Integer32],
-            "TPDO2: Status Word + Actual Velocity",
-        )
-    }
-
-    /// Create a TPDO3 template for status word and actual torque.
-    pub fn tpdo3_status_torque() -> PdoTemplate {
-        PdoTemplate::new(
-            "tpdo3_status_torque",
-            3,
-            PdoDirection::Tpdo,
-            vec![
-                PdoMapping::new(0x6041, 0, 16), // Status Word
-                PdoMapping::new(0x6077, 0, 16), // Torque Actual
-            ],
-            vec![DataType::Unsigned16, DataType::Integer16],
-            "TPDO3: Status Word + Actual Torque",
-        )
-    }
-
-    /// Create a RPDO1 template for control word and target position.
-    pub fn rpdo1_control_position() -> PdoTemplate {
-        PdoTemplate::new(
-            "rpdo1_control_position",
-            1,
-            PdoDirection::Rpdo,
-            vec![
-                PdoMapping::new(0x6040, 0, 16), // Control Word
-                PdoMapping::new(0x607A, 0, 32), // Target Position
-            ],
-            vec![DataType::Unsigned16, DataType::Integer32],
-            "RPDO1: Control Word + Target Position",
-        )
-    }
-
-    /// Create a RPDO2 template for control word and target velocity.
-    pub fn rpdo2_control_velocity() -> PdoTemplate {
-        PdoTemplate::new(
-            "rpdo2_control_velocity",
-            2,
-            PdoDirection::Rpdo,
-            vec![
-                PdoMapping::new(0x6040, 0, 16), // Control Word
-                PdoMapping::new(0x60FF, 0, 32), // Target Velocity
-            ],
-            vec![DataType::Unsigned16, DataType::Integer32],
-            "RPDO2: Control Word + Target Velocity",
-        )
-    }
-
-    /// Create a RPDO3 template for control word and target torque.
-    pub fn rpdo3_control_torque() -> PdoTemplate {
-        PdoTemplate::new(
-            "rpdo3_control_torque",
-            3,
-            PdoDirection::Rpdo,
-            vec![
-                PdoMapping::new(0x6040, 0, 16), // Control Word
-                PdoMapping::new(0x6071, 0, 16), // Target Torque
-            ],
-            vec![DataType::Unsigned16, DataType::Integer16],
-            "RPDO3: Control Word + Target Torque",
-        )
-    }
-
-    /// Register all DS402 templates with a mapper.
-    pub fn register_all(mapper: &mut DynamicPdoMapper) {
-        let templates = vec![
-            Self::tpdo1_status_position(),
-            Self::tpdo2_status_velocity(),
-            Self::tpdo3_status_torque(),
-            Self::rpdo1_control_position(),
-            Self::rpdo2_control_velocity(),
-            Self::rpdo3_control_torque(),
-        ];
-
-        for template in templates {
-            let _ = mapper.register_template(template);
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -496,16 +385,6 @@ mod tests {
     fn test_dynamic_mapper_no_history_rollback() {
         let mut mapper = DynamicPdoMapper::new();
         assert!(mapper.rollback(1, PdoDirection::Tpdo).is_err());
-    }
-
-    #[test]
-    fn test_ds402_templates() {
-        let mut mapper = DynamicPdoMapper::new();
-        Ds402PdoTemplates::register_all(&mut mapper);
-
-        assert!(mapper.template("tpdo1_status_position").is_some());
-        assert!(mapper.template("rpdo1_control_position").is_some());
-        assert_eq!(mapper.template_names().len(), 6);
     }
 
     #[test]

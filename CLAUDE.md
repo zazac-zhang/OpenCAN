@@ -59,6 +59,24 @@ opencan (Tauri IPC via commands.rs)
 | `canopen-master` | 主站增强功能 (CanDriverAdapter, 节点管理) | ❌ (依赖 core) |
 | `canopen-ds402` | DS402 运动控制配置文件 | ❌ (依赖 core) |
 
+#### canopen-core 设计约束
+
+`canopen-core` 必须满足以下约束：
+
+1. **独立可发布** — 可单独发布到 crates.io，不依赖项目内其他 crate
+2. **主从站通用** — 同时满足主站和从站的功能需求
+3. **嵌入式友好** — 满足嵌入式环境的使用需求（no_std 兼容、低资源占用）
+4. **标准协议** — 仅包含 DS301 标准协议功能，设备配置文件（DS402）和主站增强功能放在其他 crate
+
+因此，以下内容应放在 `canopen-core`：
+- DS301 标准通信对象（SDO/PDO/NMT/Heartbeat/EMCY）
+- 主从站通用的增强功能（PDO 事件处理、SYNC 触发、SDO 错误恢复）
+- SDO Server 增强（从站使用）
+
+以下内容不应放在 `canopen-core`：
+- 主站专用功能（多客户端管理）→ 放在 `canopen-master`
+- 设备配置文件特定功能（DS402 模板）→ 放在 `canopen-ds402`
+
 DS402 代码位于 `canopen-ds402/src/ds402/` 下。
 EDS 解析器位于 `canopen-core/src/eds/` 下，通过 `canopen-core` 的 `eds` feature 启用。
 
@@ -94,8 +112,8 @@ canopen-core/src/
 ├── eds/                  # EDS 解析器（feature-gated）
 │   ├── parser.rs / model.rs / builder.rs
 ├── protocol/             # DS301 通信协议（按通信对象分组）
-│   ├── sdo/              # SDO：client.rs + server.rs + abort.rs
-│   ├── pdo/              # PDO：types.rs + config.rs
+│   ├── sdo/              # SDO：client.rs + server.rs + enhanced_server.rs + recovery.rs + abort.rs
+│   ├── pdo/              # PDO：types.rs + config.rs + dynamic.rs + event.rs + sync.rs
 │   ├── nmt/              # NMT 主站命令
 │   ├── heartbeat/        # Heartbeat 生产者/消费者 + SYNC 生产者/消费者
 │   └── emcy/             # Emergency 消息处理
@@ -103,8 +121,8 @@ canopen-core/src/
 
 - **CANOpen 帧编解码** — `frame.rs`：`CanOpenFrame`、`CobId`、`FunctionCode`、`SdoRequest`/`SdoResponse`、`TimestampFrame`
 - **对象字典** — `od.rs` + `concrete_od.rs`：`ObjectDictionary` trait、`ConcreteOd`、`OdBuilder`、`OdValue`
-- **SDO** — `protocol/sdo/`：`SdoClient`（client.rs，支持 expedited + segmented + block transfer）、`SdoServer`（server.rs）、abort codes（abort.rs）
-- **PDO** — `protocol/pdo/`：PDO 类型与 pack/unpack（types.rs）、`PdoConfigManager` 配置管理（config.rs）
+- **SDO** — `protocol/sdo/`：`SdoClient`（client.rs，支持 expedited + segmented + block transfer）、`SdoServer`（server.rs）、`EnhancedSdoServer`（增强型，含访问控制）、`SdoErrorRecovery`（错误恢复）、abort codes（abort.rs）
+- **PDO** — `protocol/pdo/`：PDO 类型与 pack/unpack（types.rs）、`PdoConfigManager` 配置管理（config.rs）、`DynamicPdoMapper` 动态映射（dynamic.rs）、`PdoEventHandler` 事件处理（event.rs）、`SyncPdoProcessor` SYNC 触发（sync.rs）
 - **NMT** — `protocol/nmt/`：NMT 主站命令（启动/停止/复位节点）
 - **Heartbeat + SYNC** — `protocol/heartbeat/`：Heartbeat 生产者/消费者、SYNC 生产者/消费者
 - **EMCY** — `protocol/emcy/`：Emergency 消息处理
@@ -115,14 +133,20 @@ canopen-core/src/
 #### canopen-master (主站增强功能)
 
 - **适配器** — `canopen-master/src/adapter.rs`：`CanDriverAdapter` 桥接 `CanBus` → `CanDriver`
-- **节点管理** — (规划中) 自动节点发现、状态跟踪
-- **网络诊断** — (规划中) 总线统计、错误跟踪
+- **节点管理** — `canopen-master/src/node_manager.rs`：`NodeManager` 自动节点发现、状态跟踪
+- **心跳监控** — `canopen-master/src/heartbeat_monitor.rs`：`HeartbeatMonitor` 增强心跳监控
+- **NMT 状态机** — `canopen-master/src/nmt_state_machine.rs`：`NmtStateMachine` 状态跟踪
+- **EMCY 处理** — `canopen-master/src/emergency_handler.rs`：`EmergencyHandler` 错误处理
+- **SDO 多客户端** — `canopen-master/src/sdo_multi_client.rs`：`SdoMultiClient` 多会话管理
 
 #### canopen-ds402 (DS402 运动控制)
 
 - **DS402 状态机** — `canopen-ds402/src/ds402/state_machine.rs`：`Ds402State`、StatusWord/ControlWord 位级解析
 - **DS402 设备** — `canopen-ds402/src/ds402/control.rs`：`Ds402Device` 运动控制 API
-- **DS402 模式** — `canopen-ds402/src/ds402/modes/`：CSP、CST、CSV、PP、PV、PT、Homing
+- **DS402 模式** — `canopen-ds402/src/ds402/modes/`：CSP、CST、CSV、PP、PV、PT、Homing、IP
+- **错误处理** — `canopen-ds402/src/ds402/error.rs`：`Ds402Error`、限制检查
+- **模式验证** — `canopen-ds402/src/ds402/mode_validator.rs`：模式切换状态验证
+- **PDO 模板** — `canopen-ds402/src/ds402/pdo_templates.rs`：DS402 PDO 配置模板
 
 #### Tauri GUI
 
