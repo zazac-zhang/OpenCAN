@@ -12,8 +12,8 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { useAppStore, useSelectedNode } from '@/lib/store';
-import { useDs402Enable, useDs402FaultReset, useDs402SetMode, useDs402SetTarget, useSdoUpload } from '@/hooks/useCommands';
-import { StateMachine } from '@/components/ds402/StateMachine';
+import { useDs402Enable, useDs402FaultReset, useDs402SetMode, useDs402SetTarget, useSdoUpload, useSdoDownload } from '@/hooks/useCommands';
+import { StateMachineFlow } from '@/components/ds402/StateMachineFlow';
 import { ModeSelector } from '@/components/ds402/ModeSelector';
 import { ControlPanel } from '@/components/ds402/ControlPanel';
 import { WaveformDisplay } from '@/components/ds402/WaveformDisplay';
@@ -81,6 +81,7 @@ export function Ds402Control() {
   const modeMutation = useDs402SetMode();
   const targetMutation = useDs402SetTarget();
   const sdoUpload = useSdoUpload();
+  const sdoDownload = useSdoDownload();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const nodeState = useAppStore((s) => s.ds402.nodeStates[nodeId]);
@@ -193,12 +194,22 @@ export function Ds402Control() {
       </div>
 
       {/* State machine visualization */}
-      <div className="border rounded bg-card p-3">
-        <StateMachine
-          currentState={nodeState?.state ?? 'Unknown'}
-          readOnly
-        />
-      </div>
+      <StateMachineFlow
+        currentState={nodeState?.state ?? 'Unknown'}
+        statusWord={nodeState?.status_word}
+        controlWord={nodeState?.control_word}
+        onSendControlWord={(value, _label) => {
+          // Send ControlWord via SDO write to 0x6040
+          const data = [value & 0xFF, (value >> 8) & 0xFF];
+          sdoDownload.mutate({
+            node_id: nodeId,
+            index: 0x6040,
+            subindex: 0,
+            data,
+          });
+        }}
+        readOnly={false}
+      />
 
       {/* StatusWord bit display */}
       {nodeState?.status_word !== undefined && (
