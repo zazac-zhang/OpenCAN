@@ -14,7 +14,7 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { useFrames, useAppStore } from '@/lib/store';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Pause, Play, ArrowDown, Download } from 'lucide-react';
+import { Pause, Play, ArrowDown, Download, Bookmark, BookmarkCheck } from 'lucide-react';
 
 function decodeFrameType(cobId: number) {
   if (cobId === 0x080) return { label: 'SYNC', color: 'text-purple-400', bgColor: 'bg-purple-500/10' };
@@ -46,6 +46,32 @@ export function FrameMonitor() {
   const [paused, setPaused] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const [selectedFrameIdx, setSelectedFrameIdx] = useState<number | null>(null);
+  const [presetName, setPresetName] = useState('');
+  const [showPresets, setShowPresets] = useState(false);
+
+  // Filter presets (localStorage)
+  interface FilterPreset { name: string; cob: string; dir: string; data: string }
+  const PRESETS_KEY = 'frame-filter-presets';
+  const loadPresets = (): FilterPreset[] => {
+    try { return JSON.parse(localStorage.getItem(PRESETS_KEY) || '[]'); } catch { return []; }
+  };
+  const savePresets = (presets: FilterPreset[]) => localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+  const handleSavePreset = () => {
+    if (!presetName.trim()) return;
+    const presets = loadPresets().filter((p) => p.name !== presetName);
+    presets.push({ name: presetName, cob: cobFilter, dir: dirFilter, data: dataFilter });
+    savePresets(presets);
+    setPresetName('');
+  };
+  const handleLoadPreset = (preset: FilterPreset) => {
+    setCobFilter(preset.cob);
+    setDirFilter(preset.dir as 'all' | 'rx' | 'tx');
+    setDataFilter(preset.data);
+  };
+  const handleDeletePreset = (name: string) => {
+    savePresets(loadPresets().filter((p) => p.name !== name));
+  };
+  const presets = loadPresets();
 
   // Cycle time: ms between consecutive frames of the same COB-ID
   const framesWithCycle = useMemo(() => {
@@ -192,6 +218,15 @@ export function FrameMonitor() {
           onChange={(e) => setDataFilter(e.target.value)}
           className="w-32 px-2 py-0.5 text-xs font-mono rounded border border-border bg-background"
         />
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setShowPresets(!showPresets)}
+            className="px-2 py-0.5 text-xs rounded border border-border hover:bg-muted"
+            title="Filter presets"
+          >
+            <Bookmark className="h-3 w-3" />
+          </button>
+        </div>
         <span className="text-xs text-muted-foreground ml-auto">
           {filteredFrames.length} / {frames.length} frames
         </span>
@@ -258,6 +293,46 @@ export function FrameMonitor() {
           })}
         </div>
       </div>
+
+      {/* Filter Presets Panel */}
+      {showPresets && (
+        <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-card/50 shrink-0">
+          <span className="text-xs text-muted-foreground">Presets:</span>
+          {presets.length > 0 && presets.map((p) => (
+            <div key={p.name} className="flex items-center">
+              <button
+                onClick={() => handleLoadPreset(p)}
+                className="flex items-center gap-1 px-2 py-0.5 text-xs rounded-l border border-border hover:bg-muted"
+                title={`COB: ${p.cob || 'any'}, Dir: ${p.dir}, Data: ${p.data || 'any'}`}
+              >
+                <BookmarkCheck className="h-3 w-3" />
+                {p.name}
+              </button>
+              <button
+                onClick={() => handleDeletePreset(p.name)}
+                className="px-1 py-0.5 text-xs rounded-r border-y border-r border-border hover:bg-red-500/10 text-red-400"
+                title="Delete preset"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+          <input
+            type="text"
+            placeholder="Preset name"
+            value={presetName}
+            onChange={(e) => setPresetName(e.target.value)}
+            className="w-24 px-2 py-0.5 text-xs rounded border border-border bg-background"
+          />
+          <button
+            onClick={handleSavePreset}
+            disabled={!presetName.trim()}
+            className="px-2 py-0.5 text-xs rounded bg-primary text-primary-foreground disabled:opacity-50"
+          >
+            Save
+          </button>
+        </div>
+      )}
 
       {/* Table header */}
       <div className="flex items-center gap-2 px-3 py-1 bg-muted text-xs font-medium border-b shrink-0">
