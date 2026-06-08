@@ -1,8 +1,8 @@
 // PDO stream hook
 
 import { useEffect } from 'react';
-import { onPdoStreamBatch } from '../lib/tauri';
 import { useAppStore } from '../lib/store';
+import { onPdoStreamBatch } from '../lib/tauri';
 
 export function usePdoStream() {
   useEffect(() => {

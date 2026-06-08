@@ -1,38 +1,76 @@
 // Root App component — new 3-column layout with context-aware bottom panel
 
-import { lazy, Suspense } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { TopBar } from '@/components/layout/TopBar';
+import { lazy, Suspense, useEffect } from 'react';
+import { ConnectionDialog } from '@/components/common/ConnectionDialog';
+import { BottomPanel } from '@/components/layout/BottomPanel';
+import { DetailPanel } from '@/components/layout/DetailPanel';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { StatusBar } from '@/components/layout/StatusBar';
 import { TabBar } from '@/components/layout/TabBar';
-import { DetailPanel } from '@/components/layout/DetailPanel';
-import { BottomPanel } from '@/components/layout/BottomPanel';
-import { useAppStore, useConnected, useActiveGroup, useGroupTabs } from '@/lib/store';
+import { TopBar } from '@/components/layout/TopBar';
 import { useFrameStream } from '@/hooks/useFrameStream';
-import { useEmcyStream, useHeartbeatStream, useDs402StateStream, useBusStatsStream } from '@/hooks/useStreams';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
-import { ConnectionDialog } from '@/components/common/ConnectionDialog';
-import { useEffect } from 'react';
+import {
+  useBusStatsStream,
+  useDs402StateStream,
+  useEmcyStream,
+  useHeartbeatStream,
+} from '@/hooks/useStreams';
+import { useActiveGroup, useAppStore, useConnected, useGroupTabs } from '@/lib/store';
 
 // Lazy-loaded page components — split by navigation group
-const FrameMonitor = lazy(() => import('@/pages/CAN/FrameMonitor').then(m => ({ default: m.FrameMonitor })));
-const SendPanel = lazy(() => import('@/pages/CAN/SendPanel').then(m => ({ default: m.SendPanel })));
-const BusStatistics = lazy(() => import('@/pages/CAN/BusStatistics').then(m => ({ default: m.BusStatistics })));
-const ErrorFrames = lazy(() => import('@/pages/CAN/ErrorFrames').then(m => ({ default: m.ErrorFrames })));
-const NetworkTopology = lazy(() => import('@/pages/CANOpen/NetworkTopology').then(m => ({ default: m.NetworkTopology })));
-const NodeDetail = lazy(() => import('@/pages/CANOpen/NodeDetail').then(m => ({ default: m.NodeDetail })));
-const PdoMonitor = lazy(() => import('@/pages/CANOpen/PdoMonitor').then(m => ({ default: m.PdoMonitor })));
-const Ds402Control = lazy(() => import('@/pages/CANOpen/Ds402Control').then(m => ({ default: m.Ds402Control })));
-const EmcyMonitor = lazy(() => import('@/pages/CANOpen/EmcyMonitor').then(m => ({ default: m.EmcyMonitor })));
-const HeartbeatMonitor = lazy(() => import('@/pages/CANOpen/HeartbeatMonitor').then(m => ({ default: m.HeartbeatMonitor })));
-const SyncManagement = lazy(() => import('@/pages/CANOpen/SyncManagement').then(m => ({ default: m.SyncManagement })));
-const SdoExplorer = lazy(() => import('@/pages/CANOpen/SdoExplorer').then(m => ({ default: m.SdoExplorer })));
-const ScriptEditor = lazy(() => import('@/pages/CANOpen/ScriptEditor').then(m => ({ default: m.ScriptEditor })));
-const SessionRecorder = lazy(() => import('@/pages/Recording/SessionRecorder').then(m => ({ default: m.SessionRecorder })));
-const SessionPlayer = lazy(() => import('@/pages/Recording/SessionPlayer').then(m => ({ default: m.SessionPlayer })));
-const ConnectionSettings = lazy(() => import('@/pages/Settings/ConnectionSettings').then(m => ({ default: m.ConnectionSettings })));
-const EdsManagement = lazy(() => import('@/pages/Settings/EdsManagement').then(m => ({ default: m.EdsManagement })));
+const FrameMonitor = lazy(() =>
+  import('@/pages/CAN/FrameMonitor').then((m) => ({ default: m.FrameMonitor })),
+);
+const SendPanel = lazy(() =>
+  import('@/pages/CAN/SendPanel').then((m) => ({ default: m.SendPanel })),
+);
+const BusStatistics = lazy(() =>
+  import('@/pages/CAN/BusStatistics').then((m) => ({ default: m.BusStatistics })),
+);
+const ErrorFrames = lazy(() =>
+  import('@/pages/CAN/ErrorFrames').then((m) => ({ default: m.ErrorFrames })),
+);
+const NetworkTopology = lazy(() =>
+  import('@/pages/CANOpen/NetworkTopology').then((m) => ({ default: m.NetworkTopology })),
+);
+const NodeDetail = lazy(() =>
+  import('@/pages/CANOpen/NodeDetail').then((m) => ({ default: m.NodeDetail })),
+);
+const PdoMonitor = lazy(() =>
+  import('@/pages/CANOpen/PdoMonitor').then((m) => ({ default: m.PdoMonitor })),
+);
+const Ds402Control = lazy(() =>
+  import('@/pages/CANOpen/Ds402Control').then((m) => ({ default: m.Ds402Control })),
+);
+const EmcyMonitor = lazy(() =>
+  import('@/pages/CANOpen/EmcyMonitor').then((m) => ({ default: m.EmcyMonitor })),
+);
+const HeartbeatMonitor = lazy(() =>
+  import('@/pages/CANOpen/HeartbeatMonitor').then((m) => ({ default: m.HeartbeatMonitor })),
+);
+const SyncManagement = lazy(() =>
+  import('@/pages/CANOpen/SyncManagement').then((m) => ({ default: m.SyncManagement })),
+);
+const SdoExplorer = lazy(() =>
+  import('@/pages/CANOpen/SdoExplorer').then((m) => ({ default: m.SdoExplorer })),
+);
+const ScriptEditor = lazy(() =>
+  import('@/pages/CANOpen/ScriptEditor').then((m) => ({ default: m.ScriptEditor })),
+);
+const SessionRecorder = lazy(() =>
+  import('@/pages/Recording/SessionRecorder').then((m) => ({ default: m.SessionRecorder })),
+);
+const SessionPlayer = lazy(() =>
+  import('@/pages/Recording/SessionPlayer').then((m) => ({ default: m.SessionPlayer })),
+);
+const ConnectionSettings = lazy(() =>
+  import('@/pages/Settings/ConnectionSettings').then((m) => ({ default: m.ConnectionSettings })),
+);
+const EdsManagement = lazy(() =>
+  import('@/pages/Settings/EdsManagement').then((m) => ({ default: m.EdsManagement })),
+);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -123,12 +161,13 @@ function AppContent() {
         ui: { ...s.ui, currentTab: migrated.tab },
       }));
     }
-  }, []);
+  }, [currentTab]);
 
   // Resolve the component to render
   const groupComponents = TAB_COMPONENTS[activeGroup] || {};
   // If currentTab doesn't match any tab in current group, use first tab
-  const validTab = groupTabs.find((t) => t.key === currentTab)?.key || groupTabs[0]?.key || 'Frames';
+  const validTab =
+    groupTabs.find((t) => t.key === currentTab)?.key || groupTabs[0]?.key || 'Frames';
   const ContentComponent = groupComponents[validTab] || FrameMonitor;
 
   return (
@@ -139,7 +178,13 @@ function AppContent() {
         <div className="flex flex-col flex-1 overflow-hidden">
           <TabBar />
           <div className="flex-1 overflow-hidden">
-            <Suspense fallback={<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>}>
+            <Suspense
+              fallback={
+                <div className="flex items-center justify-center h-full text-muted-foreground">
+                  Loading...
+                </div>
+              }
+            >
               <ContentComponent />
             </Suspense>
           </div>

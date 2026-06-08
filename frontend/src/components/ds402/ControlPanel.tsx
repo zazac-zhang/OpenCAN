@@ -11,10 +11,10 @@
  * Actual (read-only) position/velocity/torque values are displayed when provided.
  */
 
+import { ArrowRight, Gauge, Home, RotateCcw, Settings, Zap } from 'lucide-react';
 import { useState } from 'react';
-import { Settings, ArrowRight, Gauge, Zap, Home, RotateCcw } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { useDs402SetTarget } from '@/hooks/useCommands';
+import { cn } from '@/lib/utils';
 
 export interface ControlPanelProps {
   /** CANopen node ID */
@@ -149,22 +149,31 @@ export function ControlPanel({
 
   const modeNumber = (() => {
     switch (currentMode.toUpperCase()) {
-      case 'PP': return 1;
-      case 'VL': return 2;
-      case 'PV': return 3;
+      case 'PP':
+        return 1;
+      case 'VL':
+        return 2;
+      case 'PV':
+        return 3;
       case 'HM':
-      case 'HOMING': return 6;
-      case 'IP': return 7;
-      case 'CSP': return 8;
-      case 'CSV': return 9;
-      case 'CST': return 10;
-      default: return parseInt(currentMode, 10) || 1;
+      case 'HOMING':
+        return 6;
+      case 'IP':
+        return 7;
+      case 'CSP':
+        return 8;
+      case 'CSV':
+        return 9;
+      case 'CST':
+        return 10;
+      default:
+        return parseInt(currentMode, 10) || 1;
     }
   })();
 
   const handleSetPosition = () => {
     const val = parseFloat(targetPosition);
-    if (!isNaN(val)) {
+    if (!Number.isNaN(val)) {
       setTargetMutation.mutate({ nodeId, mode: modeNumber, target: val });
       onSetTarget(modeNumber, val);
     }
@@ -172,7 +181,7 @@ export function ControlPanel({
 
   const handleSetVelocity = () => {
     const val = parseFloat(targetVelocity);
-    if (!isNaN(val)) {
+    if (!Number.isNaN(val)) {
       setTargetMutation.mutate({ nodeId, mode: modeNumber, target: val });
       onSetTarget(modeNumber, val);
     }
@@ -180,7 +189,7 @@ export function ControlPanel({
 
   const handleSetTorque = () => {
     const val = parseFloat(targetTorque);
-    if (!isNaN(val)) {
+    if (!Number.isNaN(val)) {
       setTargetMutation.mutate({ nodeId, mode: modeNumber, target: val });
       onSetTarget(modeNumber, val);
     }
@@ -255,9 +264,7 @@ export function ControlPanel({
         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Motion Control
         </span>
-        <span className="ml-auto text-[10px] text-muted-foreground">
-          Node {nodeId}
-        </span>
+        <span className="ml-auto text-[10px] text-muted-foreground">Node {nodeId}</span>
       </div>
 
       {/* Auto-refresh toggle */}

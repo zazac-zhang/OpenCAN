@@ -5,17 +5,14 @@
  * controls with speed selector and seek slider, current-time display,
  * and a filtered frame list using DataTable.
  */
-import { useState, useMemo } from 'react';
-import { Play, Pause, Square, Search, Clock } from 'lucide-react';
-import { open } from '@tauri-apps/plugin-dialog';
-import { useAppStore } from '@/lib/store';
-import {
-  useLoadRecording,
-  useStartPlayback,
-  useStopPlayback,
-} from '@/hooks/useCommands';
-import { DataTable } from '@/components/common/DataTable';
+
 import type { ColumnDef } from '@tanstack/react-table';
+import { open } from '@tauri-apps/plugin-dialog';
+import { Clock, Pause, Play, Search, Square } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { DataTable } from '@/components/common/DataTable';
+import { useLoadRecording, useStartPlayback, useStopPlayback } from '@/hooks/useCommands';
+import { useAppStore } from '@/lib/store';
 
 const SPEED_PRESETS = [0.1, 0.25, 0.5, 1, 2] as const;
 const NUM_BINS = 80;
@@ -46,7 +43,13 @@ function formatRelativeTime(currentMs: number, startMs: number): string {
 }
 
 // Generate sample playback frames for demonstration
-function generatePlaybackFrames(frameCount: number, startTime: number, durationMs: number, cobMin: number, cobMax: number): PlaybackFrame[] {
+function generatePlaybackFrames(
+  frameCount: number,
+  startTime: number,
+  durationMs: number,
+  cobMin: number,
+  cobMax: number,
+): PlaybackFrame[] {
   const frames: PlaybackFrame[] = [];
   const interval = durationMs / Math.max(frameCount, 1);
   for (let i = 0; i < Math.min(frameCount, 200); i++) {
@@ -58,7 +61,12 @@ function generatePlaybackFrames(frameCount: number, startTime: number, durationM
       cobId: `0x${cobId.toString(16).toUpperCase().padStart(3, '0')}`,
       direction: Math.random() > 0.5 ? 'RX' : 'TX',
       dlc: Math.floor(Math.random() * 8) + 1,
-      data: Array.from({ length: 8 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, '0').toUpperCase()).join(' '),
+      data: Array.from({ length: 8 }, () =>
+        Math.floor(Math.random() * 256)
+          .toString(16)
+          .padStart(2, '0')
+          .toUpperCase(),
+      ).join(' '),
     });
   }
   return frames;
@@ -68,7 +76,10 @@ const PLAYBACK_COLUMNS: ColumnDef<PlaybackFrame>[] = [
   { accessorKey: 'idx', header: '#', meta: { width: '40px' } },
   { accessorKey: 'time', header: 'Time', meta: { width: '80px' } },
   { accessorKey: 'cobId', header: 'COB-ID', meta: { width: '80px' } },
-  { accessorKey: 'direction', header: 'Dir', meta: { width: '40px' },
+  {
+    accessorKey: 'direction',
+    header: 'Dir',
+    meta: { width: '40px' },
     cell: ({ getValue }) => {
       const val = getValue() as string;
       return <span className={val === 'TX' ? 'text-blue-500' : 'text-green-500'}>{val}</span>;
@@ -143,8 +154,8 @@ export function SessionPlayer() {
   // Generate playback frames for display
   const playbackFrames = useMemo((): PlaybackFrame[] => {
     if (!loadedMeta) return [];
-    const minCob = parseInt(cobMin) || 0;
-    const maxCob = parseInt(cobMax) || 0x7FF;
+    const minCob = parseInt(cobMin, 10) || 0;
+    const maxCob = parseInt(cobMax, 10) || 0x7ff;
     return generatePlaybackFrames(
       loadedMeta.frame_count,
       0,
@@ -152,12 +163,12 @@ export function SessionPlayer() {
       minCob,
       maxCob,
     );
-  }, [loadedMeta, cobMin, cobMax, currentTimeMs]);
+  }, [loadedMeta, cobMin, cobMax]);
 
   // COB-ID filter display
   const showCobFilter = cobMin !== '' || cobMax !== '';
   const cobRangeText = showCobFilter
-    ? `COB-ID: 0x${(parseInt(cobMin) || 0).toString(16).toUpperCase()} – 0x${(parseInt(cobMax) || 0x7FF).toString(16).toUpperCase()}`
+    ? `COB-ID: 0x${(parseInt(cobMin, 10) || 0).toString(16).toUpperCase()} – 0x${(parseInt(cobMax, 10) || 0x7ff).toString(16).toUpperCase()}`
     : null;
 
   if (!loadedMeta) {
@@ -188,7 +199,9 @@ export function SessionPlayer() {
             <span className="text-muted-foreground">File</span>
             <span className="text-foreground font-mono text-xs truncate">{loadedMeta.path}</span>
             <span className="text-muted-foreground">Frames</span>
-            <span className="text-foreground font-mono">{loadedMeta.frame_count.toLocaleString()}</span>
+            <span className="text-foreground font-mono">
+              {loadedMeta.frame_count.toLocaleString()}
+            </span>
             <span className="text-muted-foreground">Duration</span>
             <span className="text-foreground font-mono">{formatTime(loadedMeta.duration_ms)}</span>
             <span className="text-muted-foreground">Start</span>
@@ -312,9 +325,7 @@ export function SessionPlayer() {
         <h3 className="text-sm font-medium text-foreground">Playback Frames</h3>
         {playbackFrames.length === 0 ? (
           <div className="bg-card border border-border rounded-md p-6 text-center">
-            <p className="text-sm text-muted-foreground italic">
-              No frames to display
-            </p>
+            <p className="text-sm text-muted-foreground italic">No frames to display</p>
           </div>
         ) : (
           <div className="border rounded-lg overflow-hidden" style={{ height: '300px' }}>

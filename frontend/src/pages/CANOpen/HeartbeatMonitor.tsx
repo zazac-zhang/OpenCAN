@@ -9,9 +9,10 @@
  *   expected interval are highlighted as "Timed Out" with alarm styling
  * - Historical timeline of heartbeat events per node
  */
-import { useState, useEffect, useCallback } from 'react';
-import { useAppStore } from '@/lib/store';
+
 import { AlertTriangle, Clock } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useAppStore } from '@/lib/store';
 
 // Default heartbeat timeout in ms (used when we don't know the interval)
 const DEFAULT_HEARTBEAT_TIMEOUT = 5000;
@@ -60,9 +61,7 @@ export function HeartbeatMonitor() {
       }
 
       // Determine timeout threshold
-      const timeout = estimatedInterval
-        ? estimatedInterval * 2
-        : DEFAULT_HEARTBEAT_TIMEOUT;
+      const timeout = estimatedInterval ? estimatedInterval * 2 : DEFAULT_HEARTBEAT_TIMEOUT;
 
       const elapsedSinceLast = now - entry.last_seen_ms;
       const timedOut = entry.alive && elapsedSinceLast > timeout;
@@ -124,9 +123,7 @@ export function HeartbeatMonitor() {
       {info.length === 0 ? (
         <div className="bg-card border border-border rounded-md p-6 text-center">
           <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-          <p className="text-sm text-muted-foreground">
-            No heartbeat data yet
-          </p>
+          <p className="text-sm text-muted-foreground">No heartbeat data yet</p>
           <p className="text-xs text-muted-foreground mt-1">
             Heartbeats will appear here once the protocol stack receives them
           </p>
@@ -169,22 +166,22 @@ export function HeartbeatMonitor() {
                     )}
                   </div>
                   <div className="flex items-center gap-3 mt-1">
-                    <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                      hb.timedOut
-                        ? 'bg-red-500/20 text-red-400'
-                        : hb.alive
-                          ? 'bg-green-500/20 text-green-500'
-                          : 'bg-red-500/20 text-red-500'
-                    }`}>
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded font-medium ${
+                        hb.timedOut
+                          ? 'bg-red-500/20 text-red-400'
+                          : hb.alive
+                            ? 'bg-green-500/20 text-green-500'
+                            : 'bg-red-500/20 text-red-500'
+                      }`}
+                    >
                       {hb.timedOut ? 'Timed Out' : hb.alive ? 'Alive' : 'Lost'}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       {formatRelativeTime(elapsed)}
                     </span>
                     {hb.missCount > 0 && (
-                      <span className="text-xs text-orange-400">
-                        ~{hb.missCount} missed
-                      </span>
+                      <span className="text-xs text-orange-400">~{hb.missCount} missed</span>
                     )}
                   </div>
                 </div>

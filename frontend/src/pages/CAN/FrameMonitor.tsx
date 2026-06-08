@@ -12,29 +12,43 @@
  * - Auto-scroll toggle
  * - Enhanced protocol decoding (SDO commands, EMCY errors, NMT commands)
  */
-import { useState, useRef, useMemo, useEffect } from 'react';
-import { useFrames, useAppStore } from '@/lib/store';
+
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Pause, Play, ArrowDown, Download, Bookmark, BookmarkCheck } from 'lucide-react';
-import { decodeSdoCommand, decodeFunctionCode, decodeEmcyErrorCode } from '@/lib/protocol-decoder';
+import { ArrowDown, Bookmark, BookmarkCheck, Download, Pause, Play } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { decodeEmcyErrorCode, decodeFunctionCode, decodeSdoCommand } from '@/lib/protocol-decoder';
+import { useAppStore, useFrames } from '@/lib/store';
 
 function decodeFrameType(cobId: number) {
-  if (cobId === 0x080) return { label: 'SYNC', color: 'text-purple-400', bgColor: 'bg-purple-500/10' };
-  if (cobId >= 0x700 && cobId <= 0x77F) return { label: 'HB', color: 'text-green-400', bgColor: 'bg-green-500/10' };
-  if (cobId >= 0x180 && cobId <= 0x1FF) return { label: 'TPDO1', color: 'text-blue-400', bgColor: 'bg-blue-500/10' };
-  if (cobId >= 0x280 && cobId <= 0x2FF) return { label: 'TPDO2', color: 'text-blue-300', bgColor: 'bg-blue-500/10' };
-  if (cobId >= 0x380 && cobId <= 0x3FF) return { label: 'TPDO3', color: 'text-blue-200', bgColor: 'bg-blue-500/10' };
-  if (cobId >= 0x480 && cobId <= 0x4FF) return { label: 'TPDO4', color: 'text-blue-100', bgColor: 'bg-blue-500/10' };
-  if (cobId >= 0x200 && cobId <= 0x27F) return { label: 'RPDO1', color: 'text-orange-400', bgColor: 'bg-orange-500/10' };
-  if (cobId >= 0x300 && cobId <= 0x37F) return { label: 'RPDO2', color: 'text-orange-300', bgColor: 'bg-orange-500/10' };
-  if (cobId >= 0x400 && cobId <= 0x47F) return { label: 'RPDO3', color: 'text-orange-200', bgColor: 'bg-orange-500/10' };
-  if (cobId >= 0x500 && cobId <= 0x57F) return { label: 'RPDO4', color: 'text-orange-100', bgColor: 'bg-orange-500/10' };
-  if ((cobId >= 0x580 && cobId <= 0x5FF) || (cobId >= 0x600 && cobId <= 0x67F)) {
+  if (cobId === 0x080)
+    return { label: 'SYNC', color: 'text-purple-400', bgColor: 'bg-purple-500/10' };
+  if (cobId >= 0x700 && cobId <= 0x77f)
+    return { label: 'HB', color: 'text-green-400', bgColor: 'bg-green-500/10' };
+  if (cobId >= 0x180 && cobId <= 0x1ff)
+    return { label: 'TPDO1', color: 'text-blue-400', bgColor: 'bg-blue-500/10' };
+  if (cobId >= 0x280 && cobId <= 0x2ff)
+    return { label: 'TPDO2', color: 'text-blue-300', bgColor: 'bg-blue-500/10' };
+  if (cobId >= 0x380 && cobId <= 0x3ff)
+    return { label: 'TPDO3', color: 'text-blue-200', bgColor: 'bg-blue-500/10' };
+  if (cobId >= 0x480 && cobId <= 0x4ff)
+    return { label: 'TPDO4', color: 'text-blue-100', bgColor: 'bg-blue-500/10' };
+  if (cobId >= 0x200 && cobId <= 0x27f)
+    return { label: 'RPDO1', color: 'text-orange-400', bgColor: 'bg-orange-500/10' };
+  if (cobId >= 0x300 && cobId <= 0x37f)
+    return { label: 'RPDO2', color: 'text-orange-300', bgColor: 'bg-orange-500/10' };
+  if (cobId >= 0x400 && cobId <= 0x47f)
+    return { label: 'RPDO3', color: 'text-orange-200', bgColor: 'bg-orange-500/10' };
+  if (cobId >= 0x500 && cobId <= 0x57f)
+    return { label: 'RPDO4', color: 'text-orange-100', bgColor: 'bg-orange-500/10' };
+  if ((cobId >= 0x580 && cobId <= 0x5ff) || (cobId >= 0x600 && cobId <= 0x67f)) {
     return { label: 'SDO', color: 'text-yellow-400', bgColor: 'bg-yellow-500/10' };
   }
-  if (cobId >= 0x081 && cobId <= 0x0FF) return { label: 'NMT', color: 'text-pink-400', bgColor: 'bg-pink-500/10' };
-  if (cobId >= 0x80 && cobId <= 0x7F) return { label: 'NMT', color: 'text-pink-400', bgColor: 'bg-pink-500/10' };
-  if (cobId >= 0x81 && cobId <= 0xBF) return { label: 'EMCY', color: 'text-red-400', bgColor: 'bg-red-500/10' };
+  if (cobId >= 0x081 && cobId <= 0x0ff)
+    return { label: 'NMT', color: 'text-pink-400', bgColor: 'bg-pink-500/10' };
+  if (cobId >= 0x80 && cobId <= 0x7f)
+    return { label: 'NMT', color: 'text-pink-400', bgColor: 'bg-pink-500/10' };
+  if (cobId >= 0x81 && cobId <= 0xbf)
+    return { label: 'EMCY', color: 'text-red-400', bgColor: 'bg-red-500/10' };
   return { label: '—', color: 'text-muted-foreground', bgColor: '' };
 }
 
@@ -52,12 +66,22 @@ export function FrameMonitor() {
   const [showPresets, setShowPresets] = useState(false);
 
   // Filter presets (localStorage)
-  interface FilterPreset { name: string; cob: string; dir: string; data: string }
+  interface FilterPreset {
+    name: string;
+    cob: string;
+    dir: string;
+    data: string;
+  }
   const PRESETS_KEY = 'frame-filter-presets';
   const loadPresets = (): FilterPreset[] => {
-    try { return JSON.parse(localStorage.getItem(PRESETS_KEY) || '[]'); } catch { return []; }
+    try {
+      return JSON.parse(localStorage.getItem(PRESETS_KEY) || '[]');
+    } catch {
+      return [];
+    }
   };
-  const savePresets = (presets: FilterPreset[]) => localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+  const savePresets = (presets: FilterPreset[]) =>
+    localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
   const handleSavePreset = () => {
     if (!presetName.trim()) return;
     const presets = loadPresets().filter((p) => p.name !== presetName);
@@ -96,7 +120,7 @@ export function FrameMonitor() {
 
     if (cobFilter !== '') {
       const cobNum = parseInt(cobFilter, 16);
-      if (!isNaN(cobNum)) {
+      if (!Number.isNaN(cobNum)) {
         result = result.filter((f) => f.cob_id === cobNum);
       } else {
         // Treat as partial hex match
@@ -119,14 +143,19 @@ export function FrameMonitor() {
   // Export filtered frames as CSV
   const handleExportCsv = () => {
     const header = 'Timestamp_ms,COB-ID,Direction,DLC,Data,Type,FrameType,BRS,ESI\n';
-    const rows = filteredFrames.map((f) => {
-      const type = decodeFrameType(f.cob_id).label;
-      const dataHex = f.data.slice(0, f.dlc).map((b) => b.toString(16).padStart(2, '0')).join(' ');
-      const frameType = f.frame_type === 'fd' ? 'FD' : 'Classic';
-      const brs = f.brs ? 'BRS' : '';
-      const esi = f.esi ? 'ESI' : '';
-      return `${f.timestamp_ms.toFixed(3)},0x${f.cob_id.toString(16).toUpperCase().padStart(3, '0')},${f.direction},${f.dlc},"${dataHex}",${type},${frameType},${brs},${esi}`;
-    }).join('\n');
+    const rows = filteredFrames
+      .map((f) => {
+        const type = decodeFrameType(f.cob_id).label;
+        const dataHex = f.data
+          .slice(0, f.dlc)
+          .map((b) => b.toString(16).padStart(2, '0'))
+          .join(' ');
+        const frameType = f.frame_type === 'fd' ? 'FD' : 'Classic';
+        const brs = f.brs ? 'BRS' : '';
+        const esi = f.esi ? 'ESI' : '';
+        return `${f.timestamp_ms.toFixed(3)},0x${f.cob_id.toString(16).toUpperCase().padStart(3, '0')},${f.direction},${f.dlc},"${dataHex}",${type},${frameType},${brs},${esi}`;
+      })
+      .join('\n');
     downloadFile(header + rows, 'can_frames.csv', 'text/csv');
   };
 
@@ -138,11 +167,14 @@ export function FrameMonitor() {
       const id = f.cob_id.toString(16).toUpperCase().padStart(3, '0');
       const dir = f.direction === 'rx' ? 'Rx' : 'Tx';
       const dlc = f.dlc;
-      const data = f.data.slice(0, dlc).map((b) => b.toString(16).padStart(2, '0')).join(' ');
+      const data = f.data
+        .slice(0, dlc)
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join(' ');
       return `${time} ${id} ${dir} d ${dlc} ${data}`;
     });
     const header = `date ${new Date().toISOString().split('T')[0]}\ntimebase absolute\n`;
-    downloadFile(header + lines.join('\n') + '\n', 'can_frames.asc', 'text/plain');
+    downloadFile(`${header + lines.join('\n')}\n`, 'can_frames.asc', 'text/plain');
   };
 
   function downloadFile(content: string, filename: string, mimeType: string) {
@@ -303,25 +335,26 @@ export function FrameMonitor() {
       {showPresets && (
         <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-card/50 shrink-0">
           <span className="text-xs text-muted-foreground">Presets:</span>
-          {presets.length > 0 && presets.map((p) => (
-            <div key={p.name} className="flex items-center">
-              <button
-                onClick={() => handleLoadPreset(p)}
-                className="flex items-center gap-1 px-2 py-0.5 text-xs rounded-l border border-border hover:bg-muted"
-                title={`COB: ${p.cob || 'any'}, Dir: ${p.dir}, Data: ${p.data || 'any'}`}
-              >
-                <BookmarkCheck className="h-3 w-3" />
-                {p.name}
-              </button>
-              <button
-                onClick={() => handleDeletePreset(p.name)}
-                className="px-1 py-0.5 text-xs rounded-r border-y border-r border-border hover:bg-red-500/10 text-red-400"
-                title="Delete preset"
-              >
-                ×
-              </button>
-            </div>
-          ))}
+          {presets.length > 0 &&
+            presets.map((p) => (
+              <div key={p.name} className="flex items-center">
+                <button
+                  onClick={() => handleLoadPreset(p)}
+                  className="flex items-center gap-1 px-2 py-0.5 text-xs rounded-l border border-border hover:bg-muted"
+                  title={`COB: ${p.cob || 'any'}, Dir: ${p.dir}, Data: ${p.data || 'any'}`}
+                >
+                  <BookmarkCheck className="h-3 w-3" />
+                  {p.name}
+                </button>
+                <button
+                  onClick={() => handleDeletePreset(p.name)}
+                  className="px-1 py-0.5 text-xs rounded-r border-y border-r border-border hover:bg-red-500/10 text-red-400"
+                  title="Delete preset"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
           <input
             type="text"
             placeholder="Preset name"
@@ -360,7 +393,9 @@ export function FrameMonitor() {
         {filteredFrames.length === 0 && !paused && (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <p className="text-sm text-muted-foreground">No frames captured</p>
-            <p className="text-xs text-muted-foreground">Connect to a CAN bus to start monitoring</p>
+            <p className="text-xs text-muted-foreground">
+              Connect to a CAN bus to start monitoring
+            </p>
           </div>
         )}
         <div
@@ -385,9 +420,7 @@ export function FrameMonitor() {
                   transform: `translateY(${virtualRow.start}px)`,
                 }}
                 className={`flex items-center gap-2 px-3 text-xs font-mono border-b cursor-pointer transition-colors ${
-                  isSelected
-                    ? 'bg-primary/20 border-primary/30'
-                    : 'hover:bg-muted/50'
+                  isSelected ? 'bg-primary/20 border-primary/30' : 'hover:bg-muted/50'
                 }`}
                 onClick={() => setSelectedFrameIdx(virtualRow.index)}
               >
@@ -397,10 +430,10 @@ export function FrameMonitor() {
                 <span className="w-16 font-medium">
                   0x{frame.cob_id.toString(16).padStart(3, '0').toUpperCase()}
                 </span>
-                <span className={`w-14 ${typeInfo.color}`}>
-                  {typeInfo.label}
-                </span>
-                <span className={`w-8 ${frame.direction === 'tx' ? 'text-blue-400' : 'text-green-400'}`}>
+                <span className={`w-14 ${typeInfo.color}`}>{typeInfo.label}</span>
+                <span
+                  className={`w-8 ${frame.direction === 'tx' ? 'text-blue-400' : 'text-green-400'}`}
+                >
                   {frame.direction.toUpperCase()}
                 </span>
                 <span className="w-8">
@@ -418,9 +451,7 @@ export function FrameMonitor() {
                 <span className="w-16 text-muted-foreground">
                   {frame.cycleTime !== null ? `${frame.cycleTime}ms` : '—'}
                 </span>
-                <span className="flex-1 truncate">
-                  {formatData(frame.data)}
-                </span>
+                <span className="flex-1 truncate">{formatData(frame.data)}</span>
               </div>
             );
           })}
@@ -441,7 +472,9 @@ export function FrameMonitor() {
             .slice(0, 5)
             .map(([type, count]) => {
               const typeInfo = frames.find((f) => decodeFrameType(f.cob_id).label === type);
-              const color = typeInfo ? decodeFrameType(typeInfo.cob_id).color : 'text-muted-foreground';
+              const color = typeInfo
+                ? decodeFrameType(typeInfo.cob_id).color
+                : 'text-muted-foreground';
               return (
                 <span key={type} className={`font-mono ${color}`}>
                   {type}: {count}
@@ -452,40 +485,43 @@ export function FrameMonitor() {
         {selectedFrameIdx !== null && filteredFrames[selectedFrameIdx] && (
           <span className="font-mono">
             Selected: COB-ID 0x{filteredFrames[selectedFrameIdx].cob_id.toString(16).toUpperCase()}
-            {' — '}{decodeFunctionCode(filteredFrames[selectedFrameIdx].cob_id).description}
+            {' — '}
+            {decodeFunctionCode(filteredFrames[selectedFrameIdx].cob_id).description}
           </span>
         )}
       </div>
       {/* Protocol decode panel */}
-      {selectedFrameIdx !== null && filteredFrames[selectedFrameIdx] && (() => {
-        const frame = filteredFrames[selectedFrameIdx];
-        const typeInfo = decodeFrameType(frame.cob_id);
-        
-        // Enhanced protocol decode
-        let protocolInfo: string | null = null;
-        if (frame.data.length >= 4) {
-          // Check if this is an SDO frame
-          if (typeInfo.label === 'SDO_TX' || typeInfo.label === 'SDO_RX') {
-            const sdo = decodeSdoCommand(frame.data);
-            protocolInfo = `${sdo.command}`;
-            if (sdo.index !== undefined) {
-              protocolInfo += ` (Index: 0x${sdo.index.toString(16).padStart(4, '0')}, Sub: 0x${sdo.subindex?.toString(16).padStart(2, '0')})`;
+      {selectedFrameIdx !== null &&
+        filteredFrames[selectedFrameIdx] &&
+        (() => {
+          const frame = filteredFrames[selectedFrameIdx];
+          const typeInfo = decodeFrameType(frame.cob_id);
+
+          // Enhanced protocol decode
+          let protocolInfo: string | null = null;
+          if (frame.data.length >= 4) {
+            // Check if this is an SDO frame
+            if (typeInfo.label === 'SDO_TX' || typeInfo.label === 'SDO_RX') {
+              const sdo = decodeSdoCommand(frame.data);
+              protocolInfo = `${sdo.command}`;
+              if (sdo.index !== undefined) {
+                protocolInfo += ` (Index: 0x${sdo.index.toString(16).padStart(4, '0')}, Sub: 0x${sdo.subindex?.toString(16).padStart(2, '0')})`;
+              }
+            }
+            // Check if this is an EMCY frame
+            if (typeInfo.label === 'EMCY') {
+              const errorCode = frame.data[0] | (frame.data[1] << 8);
+              const errorInfo = decodeEmcyErrorCode(errorCode);
+              protocolInfo = `Emergency: ${errorInfo.name} - ${errorInfo.description}`;
             }
           }
-          // Check if this is an EMCY frame
-          if (typeInfo.label === 'EMCY') {
-            const errorCode = frame.data[0] | (frame.data[1] << 8);
-            const errorInfo = decodeEmcyErrorCode(errorCode);
-            protocolInfo = `Emergency: ${errorInfo.name} - ${errorInfo.description}`;
-          }
-        }
-        
-        return protocolInfo ? (
-          <div className="px-3 py-1 text-xs text-muted-foreground border-t bg-muted/30 shrink-0">
-            <span className="text-yellow-400">Protocol:</span> {protocolInfo}
-          </div>
-        ) : null;
-      })()}
+
+          return protocolInfo ? (
+            <div className="px-3 py-1 text-xs text-muted-foreground border-t bg-muted/30 shrink-0">
+              <span className="text-yellow-400">Protocol:</span> {protocolInfo}
+            </div>
+          ) : null;
+        })()}
     </div>
   );
 }

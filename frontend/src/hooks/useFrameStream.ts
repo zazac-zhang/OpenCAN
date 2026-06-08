@@ -1,8 +1,8 @@
 // Frame stream hook with throttling
 
 import { useEffect, useState } from 'react';
-import { onFrameStreamBatch, onErrorFrameStream } from '../lib/tauri';
 import { useAppStore } from '../lib/store';
+import { onErrorFrameStream, onFrameStreamBatch } from '../lib/tauri';
 
 export function useFrameStream() {
   const [isListening, setIsListening] = useState(false);

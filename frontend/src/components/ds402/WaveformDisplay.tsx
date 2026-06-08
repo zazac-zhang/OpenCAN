@@ -11,8 +11,8 @@
  * - "No data" message when all histories are empty
  */
 
-import { useState } from 'react';
 import { Activity, Eye, EyeOff } from 'lucide-react';
+import { useState } from 'react';
 import { Waveform } from '@/components/common/Waveform';
 import type { DataPoint } from '@/types/ds402';
 
@@ -38,9 +38,7 @@ export function WaveformDisplay({
   const [showTorque, setShowTorque] = useState(true);
 
   const hasData =
-    positionHistory.length > 0 ||
-    velocityHistory.length > 0 ||
-    torqueHistory.length > 0;
+    positionHistory.length > 0 || velocityHistory.length > 0 || torqueHistory.length > 0;
 
   /** Toggle button for axis visibility */
   const ToggleBtn = ({
@@ -57,11 +55,7 @@ export function WaveformDisplay({
       className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-muted-foreground hover:text-foreground transition-colors"
       title={visible ? `Hide ${label}` : `Show ${label}`}
     >
-      {visible ? (
-        <Eye className="w-3 h-3" />
-      ) : (
-        <EyeOff className="w-3 h-3" />
-      )}
+      {visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
       <span>{label}</span>
     </button>
   );
@@ -74,15 +68,11 @@ export function WaveformDisplay({
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Telemetry
           </span>
-          <span className="ml-auto text-[10px] text-muted-foreground">
-            Node {nodeId}
-          </span>
+          <span className="ml-auto text-[10px] text-muted-foreground">Node {nodeId}</span>
         </div>
         <div className="flex flex-col items-center justify-center border rounded bg-card py-8">
           <Activity className="w-6 h-6 text-muted-foreground/50 mb-2" />
-          <span className="text-xs text-muted-foreground">
-            No telemetry data for Node {nodeId}
-          </span>
+          <span className="text-xs text-muted-foreground">No telemetry data for Node {nodeId}</span>
           <span className="text-[10px] text-muted-foreground/70 mt-1">
             Enable the drive and start motion to see waveforms
           </span>

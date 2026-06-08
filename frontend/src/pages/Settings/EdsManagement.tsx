@@ -5,10 +5,21 @@
  * maintains a localStorage-based library of previously loaded EDS files,
  * and offers a tree-view object dictionary browser with index-range filtering.
  */
-import { useState, useMemo } from 'react';
-import { HardDrive, FolderOpen, Plus, Trash2, ChevronRight, ChevronDown, Search, Download, Info } from 'lucide-react';
+
 import { open } from '@tauri-apps/plugin-dialog';
-import { useLoadEdsFile, useGetOdEntries } from '@/hooks/useCommands';
+import {
+  ChevronDown,
+  ChevronRight,
+  Download,
+  FolderOpen,
+  HardDrive,
+  Info,
+  Plus,
+  Search,
+  Trash2,
+} from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useGetOdEntries, useLoadEdsFile } from '@/hooks/useCommands';
 
 const EDS_LIBRARY_KEY = 'eds-library';
 
@@ -46,11 +57,11 @@ function saveLibrary(entries: EdsLibraryEntry[]) {
 }
 
 function getAreaLabel(index: number): string {
-  if (index >= 0x1000 && index <= 0x1FFF) return 'Communication Area';
-  if (index >= 0x2000 && index <= 0x5FFF) return 'Manufacturer Specific';
-  if (index >= 0x6000 && index <= 0x9FFF) return 'Device Profile';
-  if (index >= 0xA000 && index <= 0xBFFF) return 'Reserved';
-  if (index >= 0xC000 && index <= 0xFFFF) return 'Device Profile Specific';
+  if (index >= 0x1000 && index <= 0x1fff) return 'Communication Area';
+  if (index >= 0x2000 && index <= 0x5fff) return 'Manufacturer Specific';
+  if (index >= 0x6000 && index <= 0x9fff) return 'Device Profile';
+  if (index >= 0xa000 && index <= 0xbfff) return 'Reserved';
+  if (index >= 0xc000 && index <= 0xffff) return 'Device Profile Specific';
   return 'Unknown';
 }
 
@@ -72,10 +83,20 @@ export function EdsManagement() {
 
   function dataTypeCodeToString(code: number): string {
     const map: Record<number, string> = {
-      1: 'BOOLEAN', 2: 'INTEGER8', 3: 'INTEGER16', 4: 'INTEGER32',
-      5: 'UNSIGNED8', 6: 'UNSIGNED16', 7: 'UNSIGNED32', 8: 'REAL32',
-      9: 'VISIBLE_STRING', 10: 'OCTET_STRING', 11: 'UNICODE_STRING',
-      15: 'REAL64', 16: 'INTEGER64', 17: 'UNSIGNED64',
+      1: 'BOOLEAN',
+      2: 'INTEGER8',
+      3: 'INTEGER16',
+      4: 'INTEGER32',
+      5: 'UNSIGNED8',
+      6: 'UNSIGNED16',
+      7: 'UNSIGNED32',
+      8: 'REAL32',
+      9: 'VISIBLE_STRING',
+      10: 'OCTET_STRING',
+      11: 'UNICODE_STRING',
+      15: 'REAL64',
+      16: 'INTEGER64',
+      17: 'UNSIGNED64',
     };
     return map[code] || `TYPE_${code}`;
   }
@@ -114,39 +135,206 @@ export function EdsManagement() {
     if (!loadEdsFile.data) return [];
     const entries: OdEntry[] = [
       // Communication area (1000-1FFF)
-      { index: 0x1000, subindex: 0, name: 'Device Type', objectType: 'VAR', dataType: 'UNSIGNED32', value: `0x${loadEdsFile.data.product_code.toString(16)}` },
-      { index: 0x1001, subindex: 0, name: 'Error Register', objectType: 'VAR', dataType: 'UNSIGNED8' },
-      { index: 0x1003, subindex: 0, name: 'Predefined Error Field', objectType: 'ARRAY', dataType: 'UNSIGNED32' },
-      { index: 0x1005, subindex: 0, name: 'COB-ID SYNC Message', objectType: 'VAR', dataType: 'UNSIGNED32' },
-      { index: 0x1006, subindex: 0, name: 'Communication Cycle Period', objectType: 'VAR', dataType: 'UNSIGNED32' },
-      { index: 0x1008, subindex: 0, name: 'Manufacturer Device Name', objectType: 'VAR', dataType: 'VISIBLE_STRING', value: loadEdsFile.data.product_name },
-      { index: 0x1009, subindex: 0, name: 'Manufacturer Hardware Version', objectType: 'VAR', dataType: 'VISIBLE_STRING' },
-      { index: 0x100A, subindex: 0, name: 'Manufacturer Software Version', objectType: 'VAR', dataType: 'VISIBLE_STRING' },
+      {
+        index: 0x1000,
+        subindex: 0,
+        name: 'Device Type',
+        objectType: 'VAR',
+        dataType: 'UNSIGNED32',
+        value: `0x${loadEdsFile.data.product_code.toString(16)}`,
+      },
+      {
+        index: 0x1001,
+        subindex: 0,
+        name: 'Error Register',
+        objectType: 'VAR',
+        dataType: 'UNSIGNED8',
+      },
+      {
+        index: 0x1003,
+        subindex: 0,
+        name: 'Predefined Error Field',
+        objectType: 'ARRAY',
+        dataType: 'UNSIGNED32',
+      },
+      {
+        index: 0x1005,
+        subindex: 0,
+        name: 'COB-ID SYNC Message',
+        objectType: 'VAR',
+        dataType: 'UNSIGNED32',
+      },
+      {
+        index: 0x1006,
+        subindex: 0,
+        name: 'Communication Cycle Period',
+        objectType: 'VAR',
+        dataType: 'UNSIGNED32',
+      },
+      {
+        index: 0x1008,
+        subindex: 0,
+        name: 'Manufacturer Device Name',
+        objectType: 'VAR',
+        dataType: 'VISIBLE_STRING',
+        value: loadEdsFile.data.product_name,
+      },
+      {
+        index: 0x1009,
+        subindex: 0,
+        name: 'Manufacturer Hardware Version',
+        objectType: 'VAR',
+        dataType: 'VISIBLE_STRING',
+      },
+      {
+        index: 0x100a,
+        subindex: 0,
+        name: 'Manufacturer Software Version',
+        objectType: 'VAR',
+        dataType: 'VISIBLE_STRING',
+      },
       { index: 0x1010, subindex: 0, name: 'Store Parameters', objectType: 'RECORD' },
-      { index: 0x1010, subindex: 1, name: 'Save All Parameters', objectType: 'VAR', dataType: 'UNSIGNED32' },
+      {
+        index: 0x1010,
+        subindex: 1,
+        name: 'Save All Parameters',
+        objectType: 'VAR',
+        dataType: 'UNSIGNED32',
+      },
       { index: 0x1011, subindex: 0, name: 'Restore Default Parameters', objectType: 'RECORD' },
-      { index: 0x1011, subindex: 1, name: 'Restore All Default Parameters', objectType: 'VAR', dataType: 'UNSIGNED32' },
-      { index: 0x1014, subindex: 0, name: 'COB-ID EMCY Message', objectType: 'VAR', dataType: 'UNSIGNED32' },
-      { index: 0x1015, subindex: 0, name: 'Inhibit Time EMCY', objectType: 'VAR', dataType: 'UNSIGNED16' },
+      {
+        index: 0x1011,
+        subindex: 1,
+        name: 'Restore All Default Parameters',
+        objectType: 'VAR',
+        dataType: 'UNSIGNED32',
+      },
+      {
+        index: 0x1014,
+        subindex: 0,
+        name: 'COB-ID EMCY Message',
+        objectType: 'VAR',
+        dataType: 'UNSIGNED32',
+      },
+      {
+        index: 0x1015,
+        subindex: 0,
+        name: 'Inhibit Time EMCY',
+        objectType: 'VAR',
+        dataType: 'UNSIGNED16',
+      },
       { index: 0x1016, subindex: 0, name: 'Consumer Heartbeat Time', objectType: 'RECORD' },
-      { index: 0x1017, subindex: 0, name: 'Producer Heartbeat Time', objectType: 'VAR', dataType: 'UNSIGNED16' },
+      {
+        index: 0x1017,
+        subindex: 0,
+        name: 'Producer Heartbeat Time',
+        objectType: 'VAR',
+        dataType: 'UNSIGNED16',
+      },
       { index: 0x1018, subindex: 0, name: 'Identity Object', objectType: 'RECORD' },
-      { index: 0x1018, subindex: 1, name: 'Vendor-ID', objectType: 'VAR', dataType: 'UNSIGNED32', value: `0x${loadEdsFile.data.vendor_id.toString(16)}` },
-      { index: 0x1018, subindex: 2, name: 'Product Code', objectType: 'VAR', dataType: 'UNSIGNED32', value: `0x${loadEdsFile.data.product_code.toString(16)}` },
-      { index: 0x1018, subindex: 3, name: 'Revision Number', objectType: 'VAR', dataType: 'UNSIGNED32', value: `0x${loadEdsFile.data.revision_number.toString(16)}` },
-      { index: 0x1018, subindex: 4, name: 'Serial Number', objectType: 'VAR', dataType: 'UNSIGNED32' },
+      {
+        index: 0x1018,
+        subindex: 1,
+        name: 'Vendor-ID',
+        objectType: 'VAR',
+        dataType: 'UNSIGNED32',
+        value: `0x${loadEdsFile.data.vendor_id.toString(16)}`,
+      },
+      {
+        index: 0x1018,
+        subindex: 2,
+        name: 'Product Code',
+        objectType: 'VAR',
+        dataType: 'UNSIGNED32',
+        value: `0x${loadEdsFile.data.product_code.toString(16)}`,
+      },
+      {
+        index: 0x1018,
+        subindex: 3,
+        name: 'Revision Number',
+        objectType: 'VAR',
+        dataType: 'UNSIGNED32',
+        value: `0x${loadEdsFile.data.revision_number.toString(16)}`,
+      },
+      {
+        index: 0x1018,
+        subindex: 4,
+        name: 'Serial Number',
+        objectType: 'VAR',
+        dataType: 'UNSIGNED32',
+      },
       // DS402 area (6000-6FFF)
-      { index: 0x6040, subindex: 0, name: 'ControlWord', objectType: 'VAR', dataType: 'UNSIGNED16' },
+      {
+        index: 0x6040,
+        subindex: 0,
+        name: 'ControlWord',
+        objectType: 'VAR',
+        dataType: 'UNSIGNED16',
+      },
       { index: 0x6041, subindex: 0, name: 'StatusWord', objectType: 'VAR', dataType: 'UNSIGNED16' },
-      { index: 0x6060, subindex: 0, name: 'Modes of Operation', objectType: 'VAR', dataType: 'INTEGER8' },
-      { index: 0x6061, subindex: 0, name: 'Modes of Operation Display', objectType: 'VAR', dataType: 'INTEGER8' },
-      { index: 0x6064, subindex: 0, name: 'Position Actual Value', objectType: 'VAR', dataType: 'INTEGER32' },
-      { index: 0x606C, subindex: 0, name: 'Velocity Actual Value', objectType: 'VAR', dataType: 'INTEGER32' },
-      { index: 0x6077, subindex: 0, name: 'Torque Actual Value', objectType: 'VAR', dataType: 'INTEGER16' },
-      { index: 0x607A, subindex: 0, name: 'Target Position', objectType: 'VAR', dataType: 'INTEGER32' },
-      { index: 0x60FF, subindex: 0, name: 'Target Velocity', objectType: 'VAR', dataType: 'INTEGER32' },
-      { index: 0x6071, subindex: 0, name: 'Target Torque', objectType: 'VAR', dataType: 'INTEGER16' },
-      { index: 0x6098, subindex: 0, name: 'Homing Method', objectType: 'VAR', dataType: 'INTEGER8' },
+      {
+        index: 0x6060,
+        subindex: 0,
+        name: 'Modes of Operation',
+        objectType: 'VAR',
+        dataType: 'INTEGER8',
+      },
+      {
+        index: 0x6061,
+        subindex: 0,
+        name: 'Modes of Operation Display',
+        objectType: 'VAR',
+        dataType: 'INTEGER8',
+      },
+      {
+        index: 0x6064,
+        subindex: 0,
+        name: 'Position Actual Value',
+        objectType: 'VAR',
+        dataType: 'INTEGER32',
+      },
+      {
+        index: 0x606c,
+        subindex: 0,
+        name: 'Velocity Actual Value',
+        objectType: 'VAR',
+        dataType: 'INTEGER32',
+      },
+      {
+        index: 0x6077,
+        subindex: 0,
+        name: 'Torque Actual Value',
+        objectType: 'VAR',
+        dataType: 'INTEGER16',
+      },
+      {
+        index: 0x607a,
+        subindex: 0,
+        name: 'Target Position',
+        objectType: 'VAR',
+        dataType: 'INTEGER32',
+      },
+      {
+        index: 0x60ff,
+        subindex: 0,
+        name: 'Target Velocity',
+        objectType: 'VAR',
+        dataType: 'INTEGER32',
+      },
+      {
+        index: 0x6071,
+        subindex: 0,
+        name: 'Target Torque',
+        objectType: 'VAR',
+        dataType: 'INTEGER16',
+      },
+      {
+        index: 0x6098,
+        subindex: 0,
+        name: 'Homing Method',
+        objectType: 'VAR',
+        dataType: 'INTEGER8',
+      },
     ];
     return entries;
   }, [loadEdsFile.data]);
@@ -227,9 +415,12 @@ export function EdsManagement() {
   // Export OD as CSV
   const handleExportCsv = () => {
     const header = 'Index,SubIndex,Name,ObjectType,DataType,Value\n';
-    const rows = effectiveOdEntries.map((e) =>
-      `${formatHex(e.index)},0x${e.subindex.toString(16).padStart(2, '0')},"${e.name}",${e.objectType || ''},${e.dataType || ''},${e.value || ''}`
-    ).join('\n');
+    const rows = effectiveOdEntries
+      .map(
+        (e) =>
+          `${formatHex(e.index)},0x${e.subindex.toString(16).padStart(2, '0')},"${e.name}",${e.objectType || ''},${e.dataType || ''},${e.value || ''}`,
+      )
+      .join('\n');
     const blob = new Blob([header + rows], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -324,10 +515,7 @@ export function EdsManagement() {
         ) : (
           <div className="bg-card border border-border rounded-md divide-y divide-border">
             {library.map((entry, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-3 px-3 py-2 text-xs"
-              >
+              <div key={i} className="flex items-center gap-3 px-3 py-2 text-xs">
                 <button
                   onClick={() => handleReloadFromLibrary(entry)}
                   className="flex-1 text-left hover:text-primary transition-colors"
@@ -360,7 +548,9 @@ export function EdsManagement() {
           <h3 className="text-sm font-medium text-foreground">Object Dictionary</h3>
           {effectiveOdEntries.length > 0 && (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">{effectiveOdEntries.length} entries</span>
+              <span className="text-xs text-muted-foreground">
+                {effectiveOdEntries.length} entries
+              </span>
               <button
                 onClick={handleExportCsv}
                 className="flex items-center gap-1 px-2 py-1 text-xs rounded border hover:bg-muted transition-colors"
@@ -374,7 +564,9 @@ export function EdsManagement() {
 
         {!loadEdsFile.data ? (
           <div className="bg-card border border-border rounded-md p-6 text-center">
-            <p className="text-sm text-muted-foreground italic">Load an EDS file to view its object dictionary</p>
+            <p className="text-sm text-muted-foreground italic">
+              Load an EDS file to view its object dictionary
+            </p>
           </div>
         ) : (
           <>
@@ -434,10 +626,14 @@ export function EdsManagement() {
                           key={subI}
                           onClick={() => setSelectedEntry(selectedEntry === entry ? null : entry)}
                           className={`flex items-center gap-2 pl-8 pr-3 py-1 text-xs font-mono w-full text-left transition-colors ${
-                            selectedEntry === entry ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-card/80'
+                            selectedEntry === entry
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-muted-foreground hover:bg-card/80'
                           }`}
                         >
-                          <span className="w-8">.{entry.subindex.toString(16).padStart(2, '0')}</span>
+                          <span className="w-8">
+                            .{entry.subindex.toString(16).padStart(2, '0')}
+                          </span>
                           <span className="text-foreground truncate flex-1">{entry.name}</span>
                           {entry.dataType && (
                             <span className="text-muted-foreground">{entry.dataType}</span>
@@ -460,7 +656,9 @@ export function EdsManagement() {
                   <span className="text-muted-foreground">Index</span>
                   <span className="text-foreground">{formatHex(selectedEntry.index)}</span>
                   <span className="text-muted-foreground">SubIndex</span>
-                  <span className="text-foreground">0x{selectedEntry.subindex.toString(16).padStart(2, '0')}</span>
+                  <span className="text-foreground">
+                    0x{selectedEntry.subindex.toString(16).padStart(2, '0')}
+                  </span>
                   <span className="text-muted-foreground">Name</span>
                   <span className="text-foreground">{selectedEntry.name}</span>
                   {selectedEntry.objectType && (

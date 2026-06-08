@@ -4,17 +4,18 @@
  * Provides start/stop recording with file save dialog, and playback
  * controls (load, play, pause, speed, progress) for session recordings.
  */
-import { useState, useEffect } from 'react';
-import { Circle, Square, Play, FolderOpen } from 'lucide-react';
-import { save, open } from '@tauri-apps/plugin-dialog';
-import { useRecording } from '@/hooks/useRecording';
+
+import { open, save } from '@tauri-apps/plugin-dialog';
+import { Circle, FolderOpen, Play, Square } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import {
-  useStartRecording,
-  useStopRecording,
   useLoadRecording,
   useStartPlayback,
+  useStartRecording,
   useStopPlayback,
+  useStopRecording,
 } from '@/hooks/useCommands';
+import { useRecording } from '@/hooks/useRecording';
 
 export function SessionRecorder() {
   const recording = useRecording();
@@ -137,9 +138,13 @@ export function SessionRecorder() {
             <div className="bg-card border border-border rounded-md p-3 space-y-1 text-sm">
               <div className="grid grid-cols-2 gap-1">
                 <span className="text-muted-foreground">Frames:</span>
-                <span className="text-foreground font-mono">{loadedMeta.frame_count.toLocaleString()}</span>
+                <span className="text-foreground font-mono">
+                  {loadedMeta.frame_count.toLocaleString()}
+                </span>
                 <span className="text-muted-foreground">Duration:</span>
-                <span className="text-foreground font-mono">{formatDuration(loadedMeta.duration_ms)}</span>
+                <span className="text-foreground font-mono">
+                  {formatDuration(loadedMeta.duration_ms)}
+                </span>
                 <span className="text-muted-foreground">Start:</span>
                 <span className="text-foreground font-mono text-xs">{loadedMeta.start_time}</span>
               </div>

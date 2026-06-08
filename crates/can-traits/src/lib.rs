@@ -13,9 +13,9 @@
 //! | Feature     | Backend    | Platform |
 //! |-------------|------------|----------|
 //! | `socketcan` | SocketCAN  | Linux    |
-//! | `kvaser`    | Kvaser     | Stub     |
-//! | `pcan`      | PCAN       | Stub     |
-//! | `zlg`       | ZLG        | Stub     |
+//! | `kvaser`    | Kvaser     | Win/Linux (FFI) |
+//! | `pcan`      | PCAN       | Win/Linux (FFI) |
+//! | `zlg`       | ZLG        | Win/Linux (FFI) |
 
 pub mod error;
 

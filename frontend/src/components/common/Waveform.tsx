@@ -4,8 +4,14 @@
  * and dark theme support.
  */
 
-import { useRef, useEffect } from 'react';
-import { createChart, type IChartApi, type ISeriesApi, type UTCTimestamp, ColorType } from 'lightweight-charts';
+import {
+  ColorType,
+  createChart,
+  type IChartApi,
+  type ISeriesApi,
+  type UTCTimestamp,
+} from 'lightweight-charts';
+import { useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface WaveformPoint {
@@ -88,7 +94,7 @@ export function Waveform({
       chartRef.current = null;
       seriesRef.current = null;
     };
-  }, [color, height, label]);
+  }, [color, height]);
 
   // Update data whenever it changes
   useEffect(() => {
@@ -111,10 +117,7 @@ export function Waveform({
   if (data.length === 0) {
     return (
       <div
-        className={cn(
-          'flex items-center justify-center border rounded bg-card',
-          className,
-        )}
+        className={cn('flex items-center justify-center border rounded bg-card', className)}
         style={{ height }}
       >
         <span className="text-sm text-muted-foreground">No data</span>
@@ -126,10 +129,7 @@ export function Waveform({
     <div className={cn('flex flex-col border rounded bg-card', className)}>
       {label && (
         <div className="flex items-center px-3 py-1 border-b shrink-0">
-          <span
-            className="w-2 h-2 rounded-full mr-2"
-            style={{ backgroundColor: color }}
-          />
+          <span className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: color }} />
           <span className="text-xs font-medium">{label}</span>
         </div>
       )}

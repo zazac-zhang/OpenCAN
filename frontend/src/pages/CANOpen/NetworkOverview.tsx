@@ -7,16 +7,27 @@
  * - Summary statistics (total nodes, operational, error states)
  * - Node health indicators based on heartbeat freshness
  */
-import { useNodes, useAppStore } from '@/lib/store';
-import { useScanNodes, useNmtCommand } from '@/hooks/useCommands';
+
+import { Activity, Network, Power, RotateCw, Square, Zap } from 'lucide-react';
 import { NodeCard } from '@/components/common/NodeCard';
-import { Network, Activity, Power, Square, RotateCw, Zap } from 'lucide-react';
+import { useNmtCommand, useScanNodes } from '@/hooks/useCommands';
+import { useAppStore, useNodes } from '@/lib/store';
 
 const NMT_COMMANDS = [
   { command: 'StartNode', label: 'Start', icon: Power, color: 'bg-green-600 hover:bg-green-700' },
   { command: 'StopNode', label: 'Stop', icon: Square, color: 'bg-red-600 hover:bg-red-700' },
-  { command: 'EnterPreOperational', label: 'Pre-Op', icon: Zap, color: 'bg-yellow-600 hover:bg-yellow-700' },
-  { command: 'ResetNode', label: 'Reset', icon: RotateCw, color: 'bg-orange-600 hover:bg-orange-700' },
+  {
+    command: 'EnterPreOperational',
+    label: 'Pre-Op',
+    icon: Zap,
+    color: 'bg-yellow-600 hover:bg-yellow-700',
+  },
+  {
+    command: 'ResetNode',
+    label: 'Reset',
+    icon: RotateCw,
+    color: 'bg-orange-600 hover:bg-orange-700',
+  },
 ] as const;
 
 export function NetworkOverview() {
@@ -40,9 +51,7 @@ export function NetworkOverview() {
       const elapsed = Date.now() - hb.lastSeen;
       return {
         ...node,
-        nmt_state: hb.alive && elapsed < 10000
-          ? 'Operational'
-          : 'Not Responding',
+        nmt_state: hb.alive && elapsed < 10000 ? 'Operational' : 'Not Responding',
         _heartbeatFresh: elapsed,
       };
     }
@@ -100,7 +109,9 @@ export function NetworkOverview() {
           </div>
           <div className="p-3 border rounded-lg bg-card">
             <div className="text-xs text-muted-foreground">Operational</div>
-            <div className="text-xl font-bold font-mono mt-1 text-green-400">{operationalCount}</div>
+            <div className="text-xl font-bold font-mono mt-1 text-green-400">
+              {operationalCount}
+            </div>
           </div>
           <div className="p-3 border rounded-lg bg-card">
             <div className="text-xs text-muted-foreground">Pre-Operational</div>
@@ -108,7 +119,9 @@ export function NetworkOverview() {
           </div>
           <div className="p-3 border rounded-lg bg-card">
             <div className="text-xs text-muted-foreground">Not Responding</div>
-            <div className="text-xl font-bold font-mono mt-1 text-red-400">{notRespondingCount}</div>
+            <div className="text-xl font-bold font-mono mt-1 text-red-400">
+              {notRespondingCount}
+            </div>
           </div>
         </div>
       )}
@@ -117,7 +130,9 @@ export function NetworkOverview() {
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <Network className="h-12 w-12 text-muted-foreground mb-4" />
           <p className="text-sm text-muted-foreground mb-2">No nodes discovered</p>
-          <p className="text-xs text-muted-foreground">Click "Scan Nodes" to find devices on the bus</p>
+          <p className="text-xs text-muted-foreground">
+            Click "Scan Nodes" to find devices on the bus
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

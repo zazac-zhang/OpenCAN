@@ -8,10 +8,11 @@
  * - Measured SYNC frequency and jitter
  * - Consumer statistics (receive count, measured frequency)
  */
-import { useState } from 'react';
-import { useAppStore } from '@/lib/store';
-import { useStartSync, useStopSync } from '@/hooks/useCommands';
+
 import { Activity, Clock, Radio } from 'lucide-react';
+import { useState } from 'react';
+import { useStartSync, useStopSync } from '@/hooks/useCommands';
+import { useAppStore } from '@/lib/store';
 
 export function SyncManagement() {
   const syncStatus = useAppStore((s) => s.sync.status);
@@ -45,12 +46,13 @@ export function SyncManagement() {
     if (intervals.length > 0) {
       const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
       avgIntervalMs = Math.round(avg * 10) / 10;
-      const variance = intervals.reduce((sum, val) => sum + Math.abs(val - avg), 0) / intervals.length;
+      const variance =
+        intervals.reduce((sum, val) => sum + Math.abs(val - avg), 0) / intervals.length;
       jitterMs = Math.round(Math.sqrt(variance) * 10) / 10;
     }
   }
 
-  const expectedIntervalMs = (parseInt(period) || 1000) / 1000;
+  const expectedIntervalMs = (parseInt(period, 10) || 1000) / 1000;
 
   // Parse COB-ID for display
   const syncCobId = parseInt(cobId, 16) || 0x080;
@@ -126,7 +128,7 @@ export function SyncManagement() {
           {!syncStatus.is_producer ? (
             <button
               className="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-              onClick={() => startMutation.mutate(parseInt(period) || 1000)}
+              onClick={() => startMutation.mutate(parseInt(period, 10) || 1000)}
               disabled={startMutation.isPending}
             >
               Start Producer
@@ -145,9 +147,18 @@ export function SyncManagement() {
         {syncStatus.is_producer && (
           <div className="flex gap-4 text-xs text-muted-foreground">
             <span>Configured: {syncStatus.producer_period_us || period} μs</span>
-            <span>Expected: {expectedIntervalMs}ms ({Math.round(1000 / expectedIntervalMs * 100) / 100} Hz)</span>
+            <span>
+              Expected: {expectedIntervalMs}ms (
+              {Math.round((1000 / expectedIntervalMs) * 100) / 100} Hz)
+            </span>
             {measuredFreq !== null && (
-              <span className={Math.abs(measuredFreq - 1000 / expectedIntervalMs) > 5 ? 'text-orange-400' : 'text-green-400'}>
+              <span
+                className={
+                  Math.abs(measuredFreq - 1000 / expectedIntervalMs) > 5
+                    ? 'text-orange-400'
+                    : 'text-green-400'
+                }
+              >
                 Measured: {measuredFreq} Hz
               </span>
             )}
@@ -169,7 +180,9 @@ export function SyncManagement() {
           </div>
           <div className="p-2 border rounded bg-background">
             <div className="text-[10px] text-muted-foreground">Consumer COB-ID</div>
-            <div className="text-lg font-bold font-mono">0x{syncCobId.toString(16).toUpperCase().padStart(3, '0')}</div>
+            <div className="text-lg font-bold font-mono">
+              0x{syncCobId.toString(16).toUpperCase().padStart(3, '0')}
+            </div>
           </div>
         </div>
 
@@ -180,12 +193,11 @@ export function SyncManagement() {
               {syncHistory.slice(-20).map((ts: number, i: number, arr: number[]) => {
                 if (i === 0) return null;
                 const interval = ts - arr[i - 1];
-                const deviation = avgIntervalMs !== null
-                  ? Math.abs(interval - avgIntervalMs)
-                  : 0;
-                const color = deviation > (avgIntervalMs || 10) * 0.1
-                  ? 'bg-orange-500/30 text-orange-400'
-                  : 'bg-green-500/20 text-green-400';
+                const deviation = avgIntervalMs !== null ? Math.abs(interval - avgIntervalMs) : 0;
+                const color =
+                  deviation > (avgIntervalMs || 10) * 0.1
+                    ? 'bg-orange-500/30 text-orange-400'
+                    : 'bg-green-500/20 text-green-400';
                 return (
                   <span
                     key={i}
@@ -201,8 +213,8 @@ export function SyncManagement() {
         )}
 
         <p className="text-xs text-muted-foreground">
-          SYNC consumption is handled automatically by the protocol stack.
-          Each received SYNC triggers PDO updates and internal synchronization.
+          SYNC consumption is handled automatically by the protocol stack. Each received SYNC
+          triggers PDO updates and internal synchronization.
         </p>
       </div>
     </div>

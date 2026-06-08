@@ -59,9 +59,7 @@ export function NodeCard({ node, onClick, selected }: NodeCardProps) {
           <span className={cn('w-2.5 h-2.5 rounded-full shrink-0', dotColor)} />
           <span className="text-sm font-medium truncate">{stateLabel}</span>
         </div>
-        <span className="text-xs text-muted-foreground">
-          Node {node.node_id}
-        </span>
+        <span className="text-xs text-muted-foreground">Node {node.node_id}</span>
         {node.device_type !== undefined && (
           <span className="text-xs text-muted-foreground truncate">
             Device type: 0x{node.device_type.toString(16).toUpperCase()}

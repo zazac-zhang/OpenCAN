@@ -10,7 +10,7 @@
  * - Quick control word buttons
  */
 
-import { useMemo, useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 
 // ===== Types =====
@@ -39,14 +39,56 @@ interface Ds402State {
 }
 
 const DS402_STATES: Ds402State[] = [
-  { key: 'not_ready', label: 'Not Ready to Switch On', short: 'Not Ready', statusWordMask: 0x004F, statusWordValue: 0x0000 },
-  { key: 'switch_on_disabled', label: 'Switch On Disabled', short: 'SW Disabled', statusWordMask: 0x004F, statusWordValue: 0x0040 },
-  { key: 'ready_to_switch_on', label: 'Ready to Switch On', short: 'Ready', statusWordMask: 0x006F, statusWordValue: 0x0021 },
-  { key: 'switched_on', label: 'Switched On', short: 'Switched On', statusWordMask: 0x006F, statusWordValue: 0x0023 },
-  { key: 'operation_enabled', label: 'Operation Enabled', short: 'Op Enabled', statusWordMask: 0x006F, statusWordValue: 0x0027 },
-  { key: 'quick_stop', label: 'Quick Stop Active', short: 'Quick Stop', statusWordMask: 0x006F, statusWordValue: 0x0007 },
-  { key: 'fault_reaction', label: 'Fault Reaction Active', short: 'Fault React', statusWordMask: 0x004F, statusWordValue: 0x000F },
-  { key: 'fault', label: 'Fault', short: 'Fault', statusWordMask: 0x004F, statusWordValue: 0x0008 },
+  {
+    key: 'not_ready',
+    label: 'Not Ready to Switch On',
+    short: 'Not Ready',
+    statusWordMask: 0x004f,
+    statusWordValue: 0x0000,
+  },
+  {
+    key: 'switch_on_disabled',
+    label: 'Switch On Disabled',
+    short: 'SW Disabled',
+    statusWordMask: 0x004f,
+    statusWordValue: 0x0040,
+  },
+  {
+    key: 'ready_to_switch_on',
+    label: 'Ready to Switch On',
+    short: 'Ready',
+    statusWordMask: 0x006f,
+    statusWordValue: 0x0021,
+  },
+  {
+    key: 'switched_on',
+    label: 'Switched On',
+    short: 'Switched On',
+    statusWordMask: 0x006f,
+    statusWordValue: 0x0023,
+  },
+  {
+    key: 'operation_enabled',
+    label: 'Operation Enabled',
+    short: 'Op Enabled',
+    statusWordMask: 0x006f,
+    statusWordValue: 0x0027,
+  },
+  {
+    key: 'quick_stop',
+    label: 'Quick Stop Active',
+    short: 'Quick Stop',
+    statusWordMask: 0x006f,
+    statusWordValue: 0x0007,
+  },
+  {
+    key: 'fault_reaction',
+    label: 'Fault Reaction Active',
+    short: 'Fault React',
+    statusWordMask: 0x004f,
+    statusWordValue: 0x000f,
+  },
+  { key: 'fault', label: 'Fault', short: 'Fault', statusWordMask: 0x004f, statusWordValue: 0x0008 },
 ];
 
 // ===== Transition Definitions =====
@@ -61,25 +103,103 @@ interface Transition {
 
 const TRANSITIONS: Transition[] = [
   // From Switch On Disabled
-  { from: 'switch_on_disabled', to: 'ready_to_switch_on', label: 'Shutdown', controlWord: 0x0006, description: 'SDO Write 0x6040 = 0x0006' },
+  {
+    from: 'switch_on_disabled',
+    to: 'ready_to_switch_on',
+    label: 'Shutdown',
+    controlWord: 0x0006,
+    description: 'SDO Write 0x6040 = 0x0006',
+  },
   // From Ready to Switch On
-  { from: 'ready_to_switch_on', to: 'switched_on', label: 'Switch On', controlWord: 0x0007, description: 'SDO Write 0x6040 = 0x0007' },
-  { from: 'ready_to_switch_on', to: 'switch_on_disabled', label: 'Disable Voltage', controlWord: 0x0000, description: 'SDO Write 0x6040 = 0x0000' },
+  {
+    from: 'ready_to_switch_on',
+    to: 'switched_on',
+    label: 'Switch On',
+    controlWord: 0x0007,
+    description: 'SDO Write 0x6040 = 0x0007',
+  },
+  {
+    from: 'ready_to_switch_on',
+    to: 'switch_on_disabled',
+    label: 'Disable Voltage',
+    controlWord: 0x0000,
+    description: 'SDO Write 0x6040 = 0x0000',
+  },
   // From Switched On
-  { from: 'switched_on', to: 'operation_enabled', label: 'Enable Operation', controlWord: 0x000F, description: 'SDO Write 0x6040 = 0x000F' },
-  { from: 'switched_on', to: 'ready_to_switch_on', label: 'Shutdown', controlWord: 0x0006, description: 'SDO Write 0x6040 = 0x0006' },
-  { from: 'switched_on', to: 'switch_on_disabled', label: 'Disable Voltage', controlWord: 0x0000, description: 'SDO Write 0x6040 = 0x0000' },
+  {
+    from: 'switched_on',
+    to: 'operation_enabled',
+    label: 'Enable Operation',
+    controlWord: 0x000f,
+    description: 'SDO Write 0x6040 = 0x000F',
+  },
+  {
+    from: 'switched_on',
+    to: 'ready_to_switch_on',
+    label: 'Shutdown',
+    controlWord: 0x0006,
+    description: 'SDO Write 0x6040 = 0x0006',
+  },
+  {
+    from: 'switched_on',
+    to: 'switch_on_disabled',
+    label: 'Disable Voltage',
+    controlWord: 0x0000,
+    description: 'SDO Write 0x6040 = 0x0000',
+  },
   // From Operation Enabled
-  { from: 'operation_enabled', to: 'switched_on', label: 'Disable Operation', controlWord: 0x0007, description: 'SDO Write 0x6040 = 0x0007' },
-  { from: 'operation_enabled', to: 'ready_to_switch_on', label: 'Shutdown', controlWord: 0x0006, description: 'SDO Write 0x6040 = 0x0006' },
-  { from: 'operation_enabled', to: 'quick_stop', label: 'Quick Stop', controlWord: 0x0002, description: 'SDO Write 0x6040 = 0x0002' },
+  {
+    from: 'operation_enabled',
+    to: 'switched_on',
+    label: 'Disable Operation',
+    controlWord: 0x0007,
+    description: 'SDO Write 0x6040 = 0x0007',
+  },
+  {
+    from: 'operation_enabled',
+    to: 'ready_to_switch_on',
+    label: 'Shutdown',
+    controlWord: 0x0006,
+    description: 'SDO Write 0x6040 = 0x0006',
+  },
+  {
+    from: 'operation_enabled',
+    to: 'quick_stop',
+    label: 'Quick Stop',
+    controlWord: 0x0002,
+    description: 'SDO Write 0x6040 = 0x0002',
+  },
   // From Quick Stop
-  { from: 'quick_stop', to: 'switch_on_disabled', label: 'Disable Voltage', controlWord: 0x0000, description: 'SDO Write 0x6040 = 0x0000' },
+  {
+    from: 'quick_stop',
+    to: 'switch_on_disabled',
+    label: 'Disable Voltage',
+    controlWord: 0x0000,
+    description: 'SDO Write 0x6040 = 0x0000',
+  },
   // From Fault
-  { from: 'fault', to: 'switch_on_disabled', label: 'Fault Reset', controlWord: 0x0080, description: 'SDO Write 0x6040 = 0x0080' },
+  {
+    from: 'fault',
+    to: 'switch_on_disabled',
+    label: 'Fault Reset',
+    controlWord: 0x0080,
+    description: 'SDO Write 0x6040 = 0x0080',
+  },
   // Auto transitions (no user action)
-  { from: 'not_ready', to: 'switch_on_disabled', label: 'Auto', controlWord: 0, description: 'Automatic transition' },
-  { from: 'fault_reaction', to: 'fault', label: 'Auto', controlWord: 0, description: 'Automatic transition' },
+  {
+    from: 'not_ready',
+    to: 'switch_on_disabled',
+    label: 'Auto',
+    controlWord: 0,
+    description: 'Automatic transition',
+  },
+  {
+    from: 'fault_reaction',
+    to: 'fault',
+    label: 'Auto',
+    controlWord: 0,
+    description: 'Automatic transition',
+  },
 ];
 
 // ===== StatusWord Bit Definitions =====
@@ -110,14 +230,14 @@ const PAD = 20;
 
 // State positions in the SVG (x, y)
 const STATE_POSITIONS: Record<string, { x: number; y: number }> = {
-  not_ready:          { x: PAD, y: PAD },
+  not_ready: { x: PAD, y: PAD },
   switch_on_disabled: { x: PAD + 200, y: PAD },
   ready_to_switch_on: { x: PAD + 200, y: PAD + 100 },
-  switched_on:        { x: PAD + 200, y: PAD + 200 },
-  operation_enabled:  { x: PAD + 200, y: PAD + 300 },
-  quick_stop:         { x: PAD, y: PAD + 300 },
-  fault_reaction:     { x: PAD + 400, y: PAD + 100 },
-  fault:              { x: PAD + 400, y: PAD + 200 },
+  switched_on: { x: PAD + 200, y: PAD + 200 },
+  operation_enabled: { x: PAD + 200, y: PAD + 300 },
+  quick_stop: { x: PAD, y: PAD + 300 },
+  fault_reaction: { x: PAD + 400, y: PAD + 100 },
+  fault: { x: PAD + 400, y: PAD + 200 },
 };
 
 const SVG_W = PAD * 2 + 400 + NODE_W;
@@ -143,8 +263,8 @@ function stateNameToKey(name: string): string {
     'Operation Enabled': 'operation_enabled',
     'Quick Stop Active': 'quick_stop',
     'Fault Reaction Active': 'fault_reaction',
-    'Fault': 'fault',
-    'Unknown': 'not_ready',
+    Fault: 'fault',
+    Unknown: 'not_ready',
   };
   return map[name] || 'not_ready';
 }
@@ -152,13 +272,18 @@ function stateNameToKey(name: string): string {
 function getStateColor(key: string, isActive: boolean): string {
   if (!isActive) return '#374151'; // gray-700
   switch (key) {
-    case 'operation_enabled': return '#22c55e'; // green-500
+    case 'operation_enabled':
+      return '#22c55e'; // green-500
     case 'ready_to_switch_on':
-    case 'switched_on': return '#eab308'; // yellow-500
+    case 'switched_on':
+      return '#eab308'; // yellow-500
     case 'fault':
-    case 'fault_reaction': return '#ef4444'; // red-500
-    case 'quick_stop': return '#f97316'; // orange-500
-    default: return '#6b7280'; // gray-500
+    case 'fault_reaction':
+      return '#ef4444'; // red-500
+    case 'quick_stop':
+      return '#f97316'; // orange-500
+    default:
+      return '#6b7280'; // gray-500
   }
 }
 
@@ -190,8 +315,8 @@ function getEdgePath(from: string, to: string): string {
   const offset = len * 0.15;
 
   // Perpendicular offset for curve
-  const nx = -dy / len * offset;
-  const ny = dx / len * offset;
+  const nx = (-dy / len) * offset;
+  const ny = (dx / len) * offset;
 
   return `M ${startX} ${startY} Q ${midX + nx} ${midY + ny} ${endX} ${endY}`;
 }
@@ -208,8 +333,8 @@ function getEdgeLabelPos(from: string, to: string): { x: number; y: number } {
   const dy = ty - fy;
   const len = Math.sqrt(dx * dx + dy * dy);
   const offset = len * 0.15;
-  const nx = -dy / len * offset;
-  const ny = dx / len * offset;
+  const nx = (-dy / len) * offset;
+  const ny = (dx / len) * offset;
   return {
     x: (fx + tx) / 2 + nx,
     y: (fy + ty) / 2 + ny,
@@ -266,12 +391,7 @@ export function StateMachineFlow({
           </span>
         </div>
         <div className="overflow-auto p-2">
-          <svg
-            width={SVG_W}
-            height={SVG_H}
-            viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-            className="mx-auto"
-          >
+          <svg width={SVG_W} height={SVG_H} viewBox={`0 0 ${SVG_W} ${SVG_H}`} className="mx-auto">
             {/* Edges */}
             {TRANSITIONS.map((t, i) => {
               const path = getEdgePath(t.from, t.to);
@@ -326,12 +446,26 @@ export function StateMachineFlow({
 
             {/* Arrow markers */}
             <defs>
-              <marker id="arrow-blue" viewBox="0 0 10 10" refX="10" refY="5"
-                markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <marker
+                id="arrow-blue"
+                viewBox="0 0 10 10"
+                refX="10"
+                refY="5"
+                markerWidth="6"
+                markerHeight="6"
+                orient="auto-start-reverse"
+              >
                 <path d="M 0 0 L 10 5 L 0 10 z" fill="#3b82f6" />
               </marker>
-              <marker id="arrow-gray" viewBox="0 0 10 10" refX="10" refY="5"
-                markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <marker
+                id="arrow-gray"
+                viewBox="0 0 10 10"
+                refX="10"
+                refY="5"
+                markerWidth="6"
+                markerHeight="6"
+                orient="auto-start-reverse"
+              >
                 <path d="M 0 0 L 10 5 L 0 10 z" fill="#4b5563" />
               </marker>
             </defs>
@@ -352,7 +486,7 @@ export function StateMachineFlow({
                     width={NODE_W}
                     height={NODE_H}
                     rx={NODE_RX}
-                    fill={isActive ? color + '20' : '#1f2937'}
+                    fill={isActive ? `${color}20` : '#1f2937'}
                     stroke={isActive ? color : '#374151'}
                     strokeWidth={isActive ? 2 : 1}
                     className={isActive ? 'animate-pulse-slow' : ''}
@@ -373,9 +507,10 @@ export function StateMachineFlow({
                     y={pos.y + NODE_H / 2 + 10}
                     textAnchor="middle"
                     className="text-[9px] font-mono"
-                    fill={isActive ? color + 'cc' : '#6b7280'}
+                    fill={isActive ? `${color}cc` : '#6b7280'}
                   >
-                    (SW & 0x{state.statusWordMask.toString(16).padStart(4, '0')}) = 0x{state.statusWordValue.toString(16).padStart(4, '0')}
+                    (SW & 0x{state.statusWordMask.toString(16).padStart(4, '0')}) = 0x
+                    {state.statusWordValue.toString(16).padStart(4, '0')}
                   </text>
                   {/* Active indicator */}
                   {isActive && (
@@ -441,7 +576,8 @@ export function StateMachineFlow({
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-medium">StatusWord (0x6041)</h3>
             <span className="text-xs font-mono text-muted-foreground">
-              0x{statusWord.toString(16).padStart(4, '0').toUpperCase()} = {statusWord.toString(2).padStart(16, '0')}
+              0x{statusWord.toString(16).padStart(4, '0').toUpperCase()} ={' '}
+              {statusWord.toString(2).padStart(16, '0')}
             </span>
           </div>
           <div className="grid grid-cols-2 gap-1">
@@ -475,7 +611,8 @@ export function StateMachineFlow({
         <div className="border rounded-lg bg-card p-3">
           <h3 className="text-sm font-medium mb-1">ControlWord (0x6040)</h3>
           <span className="text-xs font-mono text-muted-foreground">
-            0x{controlWord.toString(16).padStart(4, '0').toUpperCase()} = {controlWord.toString(2).padStart(16, '0')}
+            0x{controlWord.toString(16).padStart(4, '0').toUpperCase()} ={' '}
+            {controlWord.toString(2).padStart(16, '0')}
           </span>
         </div>
       )}

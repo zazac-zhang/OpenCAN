@@ -1,8 +1,15 @@
 // Zustand store for global application state
 
 import { create } from 'zustand';
-import type { NodeInfo, SdoEntry, PdoEntry, EmcyEntry, HeartbeatEntry, SyncStatus } from '../types/canopen';
-import type { CanFrame, BusStats, ErrorFrame } from '../types/can';
+import type { BusStats, CanFrame, ErrorFrame } from '../types/can';
+import type {
+  EmcyEntry,
+  HeartbeatEntry,
+  NodeInfo,
+  PdoEntry,
+  SdoEntry,
+  SyncStatus,
+} from '../types/canopen';
 import type { Ds402NodeState } from '../types/ds402';
 import type { RecordingState } from '../types/recording';
 
@@ -322,7 +329,14 @@ export const useAppStore = create<AppState>()((set) => ({
       }),
   },
   sync: {
-    status: { is_producer: false, producer_period_us: 1000, sync_count: 0, first_sync_ts: undefined, last_sync_ts: undefined, history: [] },
+    status: {
+      is_producer: false,
+      producer_period_us: 1000,
+      sync_count: 0,
+      first_sync_ts: undefined,
+      last_sync_ts: undefined,
+      history: [],
+    },
     updateStatus: (partial) =>
       set((state) => ({ sync: { ...state.sync, status: { ...state.sync.status, ...partial } } })),
   },
@@ -332,8 +346,10 @@ export const useAppStore = create<AppState>()((set) => ({
     channel: 'can0',
     bitrate: 500000,
     nodeId: '0',
-    show: () => set((state) => ({ connectionDialog: { ...state.connectionDialog, visible: true } })),
-    hide: () => set((state) => ({ connectionDialog: { ...state.connectionDialog, visible: false } })),
+    show: () =>
+      set((state) => ({ connectionDialog: { ...state.connectionDialog, visible: true } })),
+    hide: () =>
+      set((state) => ({ connectionDialog: { ...state.connectionDialog, visible: false } })),
   },
   sidebar: {
     activeGroup: 'can',
@@ -365,7 +381,8 @@ export const useAppStore = create<AppState>()((set) => ({
     activeTab: 'Bus Load',
     height: 150,
     setVisible: (visible) => set((state) => ({ bottomPanel: { ...state.bottomPanel, visible } })),
-    setActiveTab: (tab) => set((state) => ({ bottomPanel: { ...state.bottomPanel, activeTab: tab } })),
+    setActiveTab: (tab) =>
+      set((state) => ({ bottomPanel: { ...state.bottomPanel, activeTab: tab } })),
     setHeight: (height) => set((state) => ({ bottomPanel: { ...state.bottomPanel, height } })),
   },
   ui: {

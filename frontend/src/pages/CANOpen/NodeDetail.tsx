@@ -8,10 +8,11 @@
  * - Value formatting based on data type (signed/unsigned/hex/float/string)
  * - SDO history with filtering and expandable details
  */
-import { useState, useMemo } from 'react';
-import { useAppStore, useSelectedNode, useSdoHistory } from '@/lib/store';
-import { useSdoUpload, useSdoDownload } from '@/hooks/useCommands';
+
 import { Activity } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useSdoDownload, useSdoUpload } from '@/hooks/useCommands';
+import { useAppStore, useSdoHistory, useSelectedNode } from '@/lib/store';
 
 const DATA_TYPES = [
   { key: 'UNS8', name: 'UNS8', bytes: 1 },
@@ -38,45 +39,45 @@ const QUICK_READS = [
   { label: 'Vendor ID', index: 0x1018, subindex: 1, type: 'UNS32' },
   { label: 'Mfr Name', index: 0x1008, subindex: 0, type: 'VISIBLE_STRING' },
   { label: 'HW Version', index: 0x1009, subindex: 0, type: 'VISIBLE_STRING' },
-  { label: 'SW Version', index: 0x100A, subindex: 0, type: 'VISIBLE_STRING' },
+  { label: 'SW Version', index: 0x100a, subindex: 0, type: 'VISIBLE_STRING' },
   { label: 'Heartbeat', index: 0x1017, subindex: 0, type: 'UNS16' },
   { label: 'Status Word', index: 0x6041, subindex: 0, type: 'UNS16' },
   { label: 'ControlWord', index: 0x6040, subindex: 0, type: 'UNS16' },
   { label: 'Actual Pos', index: 0x6064, subindex: 0, type: 'INTEGER32' },
-  { label: 'Actual Vel', index: 0x606C, subindex: 0, type: 'INTEGER32' },
+  { label: 'Actual Vel', index: 0x606c, subindex: 0, type: 'INTEGER32' },
   { label: 'Actual Torque', index: 0x6077, subindex: 0, type: 'INTEGER16' },
   { label: 'Mode', index: 0x6060, subindex: 0, type: 'INTEGER8' },
 ];
 
 // Known object names for common indexes
 const OBJECT_NAMES: Record<number, string> = {
-  0x1000: 'Device Type',
-  0x1001: 'Error Register',
-  0x1003: 'Predefined Error Field',
-  0x1005: 'COB-ID SYNC Message',
-  0x1006: 'Communication Cycle Period',
-  0x1008: 'Manufacturer Device Name',
-  0x1009: 'Manufacturer Hardware Version',
-  0x100A: 'Manufacturer Software Version',
-  0x1010: 'Store Parameters',
-  0x1011: 'Restore Default Parameters',
-  0x1014: 'COB-ID EMCY Message',
-  0x1015: 'Inhibit Time EMCY',
-  0x1016: 'Consumer Heartbeat Time',
-  0x1017: 'Producer Heartbeat Time',
-  0x1018: 'Identity Object',
-  0x1019: 'Synchronous Counter Overflow Value',
-  0x6040: 'ControlWord',
-  0x6041: 'StatusWord',
-  0x6060: 'Modes of Operation',
-  0x6061: 'Modes of Operation Display',
-  0x6064: 'Position Actual Value',
-  0x606C: 'Velocity Actual Value',
-  0x6077: 'Torque Actual Value',
-  0x607A: 'Target Position',
-  0x60FF: 'Target Velocity',
-  0x6071: 'Target Torque',
-  0x6098: 'Homing Method',
+  4096: 'Device Type',
+  4097: 'Error Register',
+  4099: 'Predefined Error Field',
+  4101: 'COB-ID SYNC Message',
+  4102: 'Communication Cycle Period',
+  4104: 'Manufacturer Device Name',
+  4105: 'Manufacturer Hardware Version',
+  4106: 'Manufacturer Software Version',
+  4112: 'Store Parameters',
+  4113: 'Restore Default Parameters',
+  4116: 'COB-ID EMCY Message',
+  4117: 'Inhibit Time EMCY',
+  4118: 'Consumer Heartbeat Time',
+  4119: 'Producer Heartbeat Time',
+  4120: 'Identity Object',
+  4121: 'Synchronous Counter Overflow Value',
+  24640: 'ControlWord',
+  24641: 'StatusWord',
+  24672: 'Modes of Operation',
+  24673: 'Modes of Operation Display',
+  24676: 'Position Actual Value',
+  24684: 'Velocity Actual Value',
+  24695: 'Torque Actual Value',
+  24698: 'Target Position',
+  24831: 'Target Velocity',
+  24689: 'Target Torque',
+  24728: 'Homing Method',
 };
 
 function formatValueByType(rawBytes: number[], dataType: string): string {
@@ -90,7 +91,8 @@ function formatValueByType(rawBytes: number[], dataType: string): string {
       return `${v} (0x${v.toString(16).toUpperCase().padStart(4, '0')})`;
     }
     case 'UNS32': {
-      const v = (rawBytes[0] | (rawBytes[1] << 8) | (rawBytes[2] << 16) | (rawBytes[3] << 24)) >>> 0;
+      const v =
+        (rawBytes[0] | (rawBytes[1] << 8) | (rawBytes[2] << 16) | (rawBytes[3] << 24)) >>> 0;
       return `${v} (0x${v.toString(16).toUpperCase().padStart(8, '0')})`;
     }
     case 'UNS64':
@@ -155,19 +157,21 @@ export function NodeDetail() {
   // Live node state from heartbeat
   const heartbeatEntry = heartbeatEntries.find((e) => e.node_id === nodeId);
   const nmtState = heartbeatEntry
-    ? (heartbeatEntry.alive ? 'Operational' : 'Not Responding')
+    ? heartbeatEntry.alive
+      ? 'Operational'
+      : 'Not Responding'
     : 'Unknown';
 
   // Parse current index for object name lookup
   const currentIndexNum = useMemo(() => {
     const parsed = parseInt(index.replace('0x', ''), 16);
-    return isNaN(parsed) ? 0 : parsed;
+    return Number.isNaN(parsed) ? 0 : parsed;
   }, [index]);
   const objectName = getObjectName(currentIndexNum);
 
   const handleRead = () => {
     const idx = parseInt(index.replace('0x', ''), 16) || 0;
-    const sub = parseInt(subindex) || 0;
+    const sub = parseInt(subindex, 10) || 0;
     uploadMutation.mutate({
       node_id: nodeId,
       index: idx,
@@ -178,12 +182,12 @@ export function NodeDetail() {
 
   const handleWrite = () => {
     const idx = parseInt(index.replace('0x', ''), 16) || 0;
-    const sub = parseInt(subindex) || 0;
+    const sub = parseInt(subindex, 10) || 0;
     const bytes = value
       .split(' ')
       .filter(Boolean)
       .map((b) => parseInt(b, 16))
-      .filter((b) => !isNaN(b));
+      .filter((b) => !Number.isNaN(b));
     downloadMutation.mutate({
       node_id: nodeId,
       index: idx,
@@ -219,13 +223,15 @@ export function NodeDetail() {
         <h2 className="text-lg font-semibold">SDO Client</h2>
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">Node {nodeId}</span>
-          <span className={`flex items-center gap-1 px-2 py-0.5 text-xs rounded font-medium ${
-            nmtState === 'Operational'
-              ? 'bg-green-500/20 text-green-500'
-              : nmtState === 'Not Responding'
-                ? 'bg-red-500/20 text-red-500'
-                : 'bg-yellow-500/20 text-yellow-500'
-          }`}>
+          <span
+            className={`flex items-center gap-1 px-2 py-0.5 text-xs rounded font-medium ${
+              nmtState === 'Operational'
+                ? 'bg-green-500/20 text-green-500'
+                : nmtState === 'Not Responding'
+                  ? 'bg-red-500/20 text-red-500'
+                  : 'bg-yellow-500/20 text-yellow-500'
+            }`}
+          >
             <Activity className="h-3 w-3" />
             {nmtState}
           </span>
@@ -251,9 +257,7 @@ export function NodeDetail() {
               onChange={(e) => setSubindex(e.target.value)}
             />
           </div>
-          {objectName && (
-            <span className="text-xs text-primary font-medium">{objectName}</span>
-          )}
+          {objectName && <span className="text-xs text-primary font-medium">{objectName}</span>}
         </div>
 
         {/* Data type selection */}
@@ -376,8 +380,11 @@ export function NodeDetail() {
                     // Try to parse raw bytes and format
                     const byteMatch = entry.value.match(/^([0-9a-fA-F]{2}\s*)+$/);
                     if (byteMatch) {
-                      const bytes = entry.value.trim().split(/\s+/).map((b) => parseInt(b, 16));
-                      if (bytes.every((b) => !isNaN(b))) {
+                      const bytes = entry.value
+                        .trim()
+                        .split(/\s+/)
+                        .map((b) => parseInt(b, 16));
+                      if (bytes.every((b) => !Number.isNaN(b))) {
                         return formatValueByType(bytes, entry.data_type || 'OCTET_STRING');
                       }
                     }
@@ -402,7 +409,9 @@ export function NodeDetail() {
                       {entry.data_type || '—'}
                     </span>
                     <span className="flex-1 truncate">{formattedValue}</span>
-                    <span className={`w-12 text-[10px] ${entry.success ? 'text-green-500' : 'text-red-500'}`}>
+                    <span
+                      className={`w-12 text-[10px] ${entry.success ? 'text-green-500' : 'text-red-500'}`}
+                    >
                       {entry.success ? 'OK' : 'ERR'}
                     </span>
                   </div>

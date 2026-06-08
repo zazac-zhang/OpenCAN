@@ -9,10 +9,19 @@
  * - Multi-format value display (Hex/Bin/Dec)
  */
 
-import { useState, useMemo, useCallback } from 'react';
-import { ChevronRight, ChevronDown, Search, RefreshCw, History, Trash2, Play, Download } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Download,
+  History,
+  Play,
+  RefreshCw,
+  Search,
+  Trash2,
+} from 'lucide-react';
+import { useCallback, useMemo, useState } from 'react';
+import { useSdoDownload, useSdoUpload } from '@/hooks/useCommands';
 import { useAppStore } from '@/lib/store';
-import { useSdoUpload, useSdoDownload } from '@/hooks/useCommands';
 import { cn } from '@/lib/utils';
 
 // ===== Types =====
@@ -49,11 +58,11 @@ const AREA_LABELS: Record<string, { range: string; label: string; color: string 
 };
 
 function getArea(index: number): string {
-  if (index >= 0x1000 && index <= 0x1FFF) return 'communication';
-  if (index >= 0x2000 && index <= 0x5FFF) return 'manufacturer';
-  if (index >= 0x6000 && index <= 0x9FFF) return 'device_profile';
-  if (index >= 0xA000 && index <= 0xBFFF) return 'reserved';
-  if (index >= 0xC000 && index <= 0xFFFF) return 'profile_specific';
+  if (index >= 0x1000 && index <= 0x1fff) return 'communication';
+  if (index >= 0x2000 && index <= 0x5fff) return 'manufacturer';
+  if (index >= 0x6000 && index <= 0x9fff) return 'device_profile';
+  if (index >= 0xa000 && index <= 0xbfff) return 'reserved';
+  if (index >= 0xc000 && index <= 0xffff) return 'profile_specific';
   return 'reserved';
 }
 
@@ -63,32 +72,193 @@ function formatHex(value: number, width: number = 4): string {
 
 // Common DS301/DS402 OD entries for fallback
 const COMMON_ENTRIES: OdEntry[] = [
-  { index: 0x1000, subindex: 0, name: 'Device Type', objectType: 'VAR', dataType: 'UNSIGNED32', access: 'RO' },
-  { index: 0x1001, subindex: 0, name: 'Error Register', objectType: 'VAR', dataType: 'UNSIGNED8', access: 'RO' },
-  { index: 0x1005, subindex: 0, name: 'COB-ID SYNC', objectType: 'VAR', dataType: 'UNSIGNED32', access: 'RW' },
-  { index: 0x1006, subindex: 0, name: 'Comm Cycle Period', objectType: 'VAR', dataType: 'UNSIGNED32', access: 'RW' },
-  { index: 0x1008, subindex: 0, name: 'Device Name', objectType: 'VAR', dataType: 'VISIBLE_STRING', access: 'RO' },
+  {
+    index: 0x1000,
+    subindex: 0,
+    name: 'Device Type',
+    objectType: 'VAR',
+    dataType: 'UNSIGNED32',
+    access: 'RO',
+  },
+  {
+    index: 0x1001,
+    subindex: 0,
+    name: 'Error Register',
+    objectType: 'VAR',
+    dataType: 'UNSIGNED8',
+    access: 'RO',
+  },
+  {
+    index: 0x1005,
+    subindex: 0,
+    name: 'COB-ID SYNC',
+    objectType: 'VAR',
+    dataType: 'UNSIGNED32',
+    access: 'RW',
+  },
+  {
+    index: 0x1006,
+    subindex: 0,
+    name: 'Comm Cycle Period',
+    objectType: 'VAR',
+    dataType: 'UNSIGNED32',
+    access: 'RW',
+  },
+  {
+    index: 0x1008,
+    subindex: 0,
+    name: 'Device Name',
+    objectType: 'VAR',
+    dataType: 'VISIBLE_STRING',
+    access: 'RO',
+  },
   { index: 0x1010, subindex: 0, name: 'Store Parameters', objectType: 'RECORD', access: 'RO' },
-  { index: 0x1010, subindex: 1, name: 'Save All Params', objectType: 'VAR', dataType: 'UNSIGNED32', access: 'RW' },
-  { index: 0x1014, subindex: 0, name: 'COB-ID EMCY', objectType: 'VAR', dataType: 'UNSIGNED32', access: 'RW' },
-  { index: 0x1017, subindex: 0, name: 'Producer Heartbeat', objectType: 'VAR', dataType: 'UNSIGNED16', access: 'RW' },
+  {
+    index: 0x1010,
+    subindex: 1,
+    name: 'Save All Params',
+    objectType: 'VAR',
+    dataType: 'UNSIGNED32',
+    access: 'RW',
+  },
+  {
+    index: 0x1014,
+    subindex: 0,
+    name: 'COB-ID EMCY',
+    objectType: 'VAR',
+    dataType: 'UNSIGNED32',
+    access: 'RW',
+  },
+  {
+    index: 0x1017,
+    subindex: 0,
+    name: 'Producer Heartbeat',
+    objectType: 'VAR',
+    dataType: 'UNSIGNED16',
+    access: 'RW',
+  },
   { index: 0x1018, subindex: 0, name: 'Identity Object', objectType: 'RECORD', access: 'RO' },
-  { index: 0x1018, subindex: 1, name: 'Vendor ID', objectType: 'VAR', dataType: 'UNSIGNED32', access: 'RO' },
-  { index: 0x1018, subindex: 2, name: 'Product Code', objectType: 'VAR', dataType: 'UNSIGNED32', access: 'RO' },
-  { index: 0x1018, subindex: 3, name: 'Revision Number', objectType: 'VAR', dataType: 'UNSIGNED32', access: 'RO' },
-  { index: 0x1018, subindex: 4, name: 'Serial Number', objectType: 'VAR', dataType: 'UNSIGNED32', access: 'RO' },
+  {
+    index: 0x1018,
+    subindex: 1,
+    name: 'Vendor ID',
+    objectType: 'VAR',
+    dataType: 'UNSIGNED32',
+    access: 'RO',
+  },
+  {
+    index: 0x1018,
+    subindex: 2,
+    name: 'Product Code',
+    objectType: 'VAR',
+    dataType: 'UNSIGNED32',
+    access: 'RO',
+  },
+  {
+    index: 0x1018,
+    subindex: 3,
+    name: 'Revision Number',
+    objectType: 'VAR',
+    dataType: 'UNSIGNED32',
+    access: 'RO',
+  },
+  {
+    index: 0x1018,
+    subindex: 4,
+    name: 'Serial Number',
+    objectType: 'VAR',
+    dataType: 'UNSIGNED32',
+    access: 'RO',
+  },
   // DS402
-  { index: 0x6040, subindex: 0, name: 'ControlWord', objectType: 'VAR', dataType: 'UNSIGNED16', access: 'RW' },
-  { index: 0x6041, subindex: 0, name: 'StatusWord', objectType: 'VAR', dataType: 'UNSIGNED16', access: 'RO' },
-  { index: 0x6060, subindex: 0, name: 'Modes of Operation', objectType: 'VAR', dataType: 'INTEGER8', access: 'RW' },
-  { index: 0x6061, subindex: 0, name: 'Modes Display', objectType: 'VAR', dataType: 'INTEGER8', access: 'RO' },
-  { index: 0x6064, subindex: 0, name: 'Position Actual', objectType: 'VAR', dataType: 'INTEGER32', access: 'RO' },
-  { index: 0x606C, subindex: 0, name: 'Velocity Actual', objectType: 'VAR', dataType: 'INTEGER32', access: 'RO' },
-  { index: 0x6077, subindex: 0, name: 'Torque Actual', objectType: 'VAR', dataType: 'INTEGER16', access: 'RO' },
-  { index: 0x607A, subindex: 0, name: 'Target Position', objectType: 'VAR', dataType: 'INTEGER32', access: 'RW' },
-  { index: 0x60FF, subindex: 0, name: 'Target Velocity', objectType: 'VAR', dataType: 'INTEGER32', access: 'RW' },
-  { index: 0x6071, subindex: 0, name: 'Target Torque', objectType: 'VAR', dataType: 'INTEGER16', access: 'RW' },
-  { index: 0x6098, subindex: 0, name: 'Homing Method', objectType: 'VAR', dataType: 'INTEGER8', access: 'RW' },
+  {
+    index: 0x6040,
+    subindex: 0,
+    name: 'ControlWord',
+    objectType: 'VAR',
+    dataType: 'UNSIGNED16',
+    access: 'RW',
+  },
+  {
+    index: 0x6041,
+    subindex: 0,
+    name: 'StatusWord',
+    objectType: 'VAR',
+    dataType: 'UNSIGNED16',
+    access: 'RO',
+  },
+  {
+    index: 0x6060,
+    subindex: 0,
+    name: 'Modes of Operation',
+    objectType: 'VAR',
+    dataType: 'INTEGER8',
+    access: 'RW',
+  },
+  {
+    index: 0x6061,
+    subindex: 0,
+    name: 'Modes Display',
+    objectType: 'VAR',
+    dataType: 'INTEGER8',
+    access: 'RO',
+  },
+  {
+    index: 0x6064,
+    subindex: 0,
+    name: 'Position Actual',
+    objectType: 'VAR',
+    dataType: 'INTEGER32',
+    access: 'RO',
+  },
+  {
+    index: 0x606c,
+    subindex: 0,
+    name: 'Velocity Actual',
+    objectType: 'VAR',
+    dataType: 'INTEGER32',
+    access: 'RO',
+  },
+  {
+    index: 0x6077,
+    subindex: 0,
+    name: 'Torque Actual',
+    objectType: 'VAR',
+    dataType: 'INTEGER16',
+    access: 'RO',
+  },
+  {
+    index: 0x607a,
+    subindex: 0,
+    name: 'Target Position',
+    objectType: 'VAR',
+    dataType: 'INTEGER32',
+    access: 'RW',
+  },
+  {
+    index: 0x60ff,
+    subindex: 0,
+    name: 'Target Velocity',
+    objectType: 'VAR',
+    dataType: 'INTEGER32',
+    access: 'RW',
+  },
+  {
+    index: 0x6071,
+    subindex: 0,
+    name: 'Target Torque',
+    objectType: 'VAR',
+    dataType: 'INTEGER16',
+    access: 'RW',
+  },
+  {
+    index: 0x6098,
+    subindex: 0,
+    name: 'Homing Method',
+    objectType: 'VAR',
+    dataType: 'INTEGER8',
+    access: 'RW',
+  },
 ];
 
 // ===== Main Component =====
@@ -122,7 +292,7 @@ export function SdoExplorer() {
       }
     }
     return groups;
-  }, [odEntries]);
+  }, []);
 
   // Filter indexes by search term
   const filteredIndexes = useMemo(() => {
@@ -150,50 +320,56 @@ export function SdoExplorer() {
   }, []);
 
   // Add to history
-  const addToHistory = useCallback((entry: Omit<SdoHistoryEntry, 'id' | 'timestamp'>) => {
-    setHistoryId((prev) => prev + 1);
-    setHistory((prev) => [
-      { ...entry, id: historyId + 1, timestamp: Date.now() },
-      ...prev.slice(0, 99), // Keep last 100
-    ]);
-  }, [historyId]);
+  const addToHistory = useCallback(
+    (entry: Omit<SdoHistoryEntry, 'id' | 'timestamp'>) => {
+      setHistoryId((prev) => prev + 1);
+      setHistory((prev) => [
+        { ...entry, id: historyId + 1, timestamp: Date.now() },
+        ...prev.slice(0, 99), // Keep last 100
+      ]);
+    },
+    [historyId],
+  );
 
   // Read entry via SDO upload
-  const handleRead = useCallback((entry: OdEntry) => {
-    setSelectedEntry(entry);
-    setReadValue(null);
-    sdoUpload.mutate(
-      {
-        node_id: selectedNode,
-        index: entry.index,
-        subindex: entry.subindex,
-        data_type: entry.dataType || 'UNS16',
-      },
-      {
-        onSuccess: (result) => {
-          const bytes = result.data || [];
-          setReadValue(bytes);
-          addToHistory({
-            direction: 'read',
-            index: entry.index,
-            subindex: entry.subindex,
-            value: bytes,
-            result: bytes.map((b: number) => b.toString(16).padStart(2, '0')).join(' '),
-            success: true,
-          });
+  const handleRead = useCallback(
+    (entry: OdEntry) => {
+      setSelectedEntry(entry);
+      setReadValue(null);
+      sdoUpload.mutate(
+        {
+          node_id: selectedNode,
+          index: entry.index,
+          subindex: entry.subindex,
+          data_type: entry.dataType || 'UNS16',
         },
-        onError: (err) => {
-          addToHistory({
-            direction: 'read',
-            index: entry.index,
-            subindex: entry.subindex,
-            result: String(err),
-            success: false,
-          });
+        {
+          onSuccess: (result) => {
+            const bytes = result.data || [];
+            setReadValue(bytes);
+            addToHistory({
+              direction: 'read',
+              index: entry.index,
+              subindex: entry.subindex,
+              value: bytes,
+              result: bytes.map((b: number) => b.toString(16).padStart(2, '0')).join(' '),
+              success: true,
+            });
+          },
+          onError: (err) => {
+            addToHistory({
+              direction: 'read',
+              index: entry.index,
+              subindex: entry.subindex,
+              result: String(err),
+              success: false,
+            });
+          },
         },
-      },
-    );
-  }, [selectedNode, sdoUpload, addToHistory]);
+      );
+    },
+    [selectedNode, sdoUpload, addToHistory],
+  );
 
   // Write entry via SDO download
   const handleWrite = useCallback(() => {
@@ -248,11 +424,13 @@ export function SdoExplorer() {
   // Export history as CSV
   const handleExportHistory = () => {
     const header = 'Time,Direction,Index,SubIndex,Value,Result,Success\n';
-    const rows = history.map((h) => {
-      const time = new Date(h.timestamp).toISOString();
-      const value = h.value?.map((b) => b.toString(16).padStart(2, '0')).join(' ') || '';
-      return `${time},${h.direction},${formatHex(h.index)},0x${h.subindex.toString(16).padStart(2, '0')},"${value}","${h.result || ''}",${h.success}`;
-    }).join('\n');
+    const rows = history
+      .map((h) => {
+        const time = new Date(h.timestamp).toISOString();
+        const value = h.value?.map((b) => b.toString(16).padStart(2, '0')).join(' ') || '';
+        return `${time},${h.direction},${formatHex(h.index)},0x${h.subindex.toString(16).padStart(2, '0')},"${value}","${h.result || ''}",${h.success}`;
+      })
+      .join('\n');
     const blob = new Blob([header + rows], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -335,7 +513,8 @@ export function SdoExplorer() {
             <div className="px-3 py-2 border-b">
               <div className="flex items-center gap-2">
                 <span className="font-mono text-sm text-primary">
-                  {formatHex(selectedEntry.index)}:{selectedEntry.subindex.toString(16).padStart(2, '0')}
+                  {formatHex(selectedEntry.index)}:
+                  {selectedEntry.subindex.toString(16).padStart(2, '0')}
                 </span>
                 <span className="text-sm font-medium">{selectedEntry.name}</span>
               </div>
@@ -459,10 +638,9 @@ export function SdoExplorer() {
                             {h.value.map((b) => b.toString(16).padStart(2, '0')).join(' ')}
                           </span>
                         )}
-                        <span className={cn(
-                          'ml-auto',
-                          h.success ? 'text-green-400' : 'text-red-400',
-                        )}>
+                        <span
+                          className={cn('ml-auto', h.success ? 'text-green-400' : 'text-red-400')}
+                        >
                           {h.result}
                         </span>
                         {/* Replay button */}

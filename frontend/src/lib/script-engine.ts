@@ -90,7 +90,7 @@ export function parseScript(script: string): ScriptParseResult {
             type: 'sdo_read',
             line: lineNum,
             params: {
-              node: parseInt(parts[1]),
+              node: parseInt(parts[1], 10),
               index: parts[2],
               subindex: parts[3],
             },
@@ -99,14 +99,17 @@ export function parseScript(script: string): ScriptParseResult {
 
         case 'sdo_write': {
           if (parts.length < 5) {
-            errors.push({ line: lineNum, message: 'Usage: sdo_write <node> <index> <subindex> <value>' });
+            errors.push({
+              line: lineNum,
+              message: 'Usage: sdo_write <node> <index> <subindex> <value>',
+            });
             continue;
           }
           return {
             type: 'sdo_write',
             line: lineNum,
             params: {
-              node: parseInt(parts[1]),
+              node: parseInt(parts[1], 10),
               index: parts[2],
               subindex: parts[3],
               value: parts.slice(4).join(' '),
@@ -122,7 +125,7 @@ export function parseScript(script: string): ScriptParseResult {
           return {
             type: 'wait',
             line: lineNum,
-            params: { ms: parseInt(parts[1]) },
+            params: { ms: parseInt(parts[1], 10) },
           };
         }
 
@@ -143,7 +146,7 @@ export function parseScript(script: string): ScriptParseResult {
             type: 'nmt',
             line: lineNum,
             params: {
-              node: parseInt(parts[1]),
+              node: parseInt(parts[1], 10),
               command: parts[2],
             },
           };
@@ -154,8 +157,8 @@ export function parseScript(script: string): ScriptParseResult {
             errors.push({ line: lineNum, message: 'Usage: repeat <count> {' });
             continue;
           }
-          const count = parseInt(parts[1]);
-          if (isNaN(count) || count < 1) {
+          const count = parseInt(parts[1], 10);
+          if (Number.isNaN(count) || count < 1) {
             errors.push({ line: lineNum, message: 'Invalid repeat count' });
             continue;
           }
@@ -212,7 +215,9 @@ export function parseScript(script: string): ScriptParseResult {
 
 // ===== Executor =====
 
-export type CommandExecutor = (command: ScriptCommand) => Promise<{ success: boolean; message?: string }>;
+export type CommandExecutor = (
+  command: ScriptCommand,
+) => Promise<{ success: boolean; message?: string }>;
 
 export async function executeScript(
   commands: ScriptCommand[],
@@ -304,8 +309,11 @@ function formatCommand(cmd: ScriptCommand): string {
 
 // ===== Predefined Scripts =====
 
-export const PREDEFINED_SCRIPTS: Record<string, { name: string; description: string; script: string }> = {
-  'quick_health_check': {
+export const PREDEFINED_SCRIPTS: Record<
+  string,
+  { name: string; description: string; script: string }
+> = {
+  quick_health_check: {
     name: 'Quick Health Check',
     description: 'Read basic device info from a node',
     script: `// Quick Health Check
@@ -318,7 +326,7 @@ wait 100
 sdo_read 1 6041 0
 log "Health check complete"`,
   },
-  'ds402_enable_sequence': {
+  ds402_enable_sequence: {
     name: 'DS402 Enable Sequence',
     description: 'Standard DS402 enable sequence (Shutdown → Switch On → Enable Operation)',
     script: `// DS402 Enable Sequence
@@ -338,7 +346,7 @@ wait 100
 sdo_read 1 6041 0
 log "DS402 enable sequence complete"`,
   },
-  'scan_all_nodes': {
+  scan_all_nodes: {
     name: 'Scan All Nodes',
     description: 'Scan nodes 1-127 with SDO read',
     script: `// Scan All Nodes
@@ -351,7 +359,7 @@ repeat 127 {
 }
 log "Scan complete"`,
   },
-  'pdo_test': {
+  pdo_test: {
     name: 'PDO Configuration Test',
     description: 'Configure and test PDO communication',
     script: `// PDO Configuration Test

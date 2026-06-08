@@ -8,19 +8,19 @@
  * - Start/stop controls
  */
 
-import { useState, useCallback, useRef } from 'react';
-import { Play, Square, FileCode, BookOpen, Trash2, Download, Copy } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { BookOpen, Copy, Download, FileCode, Play, Square, Trash2 } from 'lucide-react';
+import { useCallback, useRef, useState } from 'react';
+import { useNmtCommand, useSdoDownload, useSdoUpload } from '@/hooks/useCommands';
 import {
-  parseScript,
+  type CommandExecutor,
   executeScript,
-  PREDEFINED_SCRIPTS,
   getScriptTemplate,
+  PREDEFINED_SCRIPTS,
+  parseScript,
   type ScriptCommand,
   type ScriptExecutionLog,
-  type CommandExecutor,
 } from '@/lib/script-engine';
-import { useSdoUpload, useSdoDownload, useNmtCommand } from '@/hooks/useCommands';
+import { cn } from '@/lib/utils';
 
 // ===== Main Component =====
 
@@ -91,7 +91,7 @@ export function ScriptEditor() {
         }
         case 'sdo_write': {
           const value = parseInt(cmd.params.value as string, 16);
-          const data = [value & 0xFF, (value >> 8) & 0xFF];
+          const data = [value & 0xff, (value >> 8) & 0xff];
           return new Promise((resolve) => {
             sdoDownload.mutate(
               {
@@ -180,12 +180,15 @@ export function ScriptEditor() {
   }, []);
 
   // Load predefined script
-  const handleLoadScript = useCallback((key: string) => {
-    const predefined = PREDEFINED_SCRIPTS[key];
-    if (predefined) {
-      handleScriptChange(predefined.script);
-    }
-  }, [handleScriptChange]);
+  const handleLoadScript = useCallback(
+    (key: string) => {
+      const predefined = PREDEFINED_SCRIPTS[key];
+      if (predefined) {
+        handleScriptChange(predefined.script);
+      }
+    },
+    [handleScriptChange],
+  );
 
   // Copy script
   const handleCopy = useCallback(() => {
@@ -195,10 +198,12 @@ export function ScriptEditor() {
   // Export log
   const handleExportLog = useCallback(() => {
     const header = 'Timestamp,Command,Status,Message,Duration_ms\n';
-    const rows = executionLog.map((log) => {
-      const time = new Date(log.timestamp).toISOString();
-      return `${time},"${log.command}",${log.status},"${log.message || ''}",${log.duration || ''}`;
-    }).join('\n');
+    const rows = executionLog
+      .map((log) => {
+        const time = new Date(log.timestamp).toISOString();
+        return `${time},"${log.command}",${log.status},"${log.message || ''}",${log.duration || ''}`;
+      })
+      .join('\n');
     const blob = new Blob([header + rows], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -227,17 +232,17 @@ export function ScriptEditor() {
               className="text-xs bg-muted/30 rounded px-2 py-1 border"
               defaultValue=""
             >
-              <option value="" disabled>Load template...</option>
+              <option value="" disabled>
+                Load template...
+              </option>
               {Object.entries(PREDEFINED_SCRIPTS).map(([key, script]) => (
-                <option key={key} value={key}>{script.name}</option>
+                <option key={key} value={key}>
+                  {script.name}
+                </option>
               ))}
             </select>
           </div>
-          <button
-            onClick={handleCopy}
-            className="p-1.5 rounded hover:bg-muted"
-            title="Copy script"
-          >
+          <button onClick={handleCopy} className="p-1.5 rounded hover:bg-muted" title="Copy script">
             <Copy className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -303,9 +308,7 @@ export function ScriptEditor() {
         <div className="px-3 py-2 border-b flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <span className="text-sm font-medium">Execution Log</span>
-            <span className="text-xs text-muted-foreground">
-              ({executionLog.length} entries)
-            </span>
+            <span className="text-xs text-muted-foreground">({executionLog.length} entries)</span>
           </div>
           <div className="flex items-center gap-1">
             <button
@@ -347,14 +350,22 @@ export function ScriptEditor() {
                   <span className="text-muted-foreground w-16 shrink-0">
                     {new Date(log.timestamp).toLocaleTimeString()}
                   </span>
-                  <span className={cn(
-                    'w-16 shrink-0',
-                    log.status === 'success' && 'text-green-400',
-                    log.status === 'error' && 'text-red-400',
-                    log.status === 'running' && 'text-blue-400',
-                    log.status === 'skipped' && 'text-muted-foreground',
-                  )}>
-                    {log.status === 'success' ? '✓' : log.status === 'error' ? '✗' : log.status === 'running' ? '⟳' : '○'}
+                  <span
+                    className={cn(
+                      'w-16 shrink-0',
+                      log.status === 'success' && 'text-green-400',
+                      log.status === 'error' && 'text-red-400',
+                      log.status === 'running' && 'text-blue-400',
+                      log.status === 'skipped' && 'text-muted-foreground',
+                    )}
+                  >
+                    {log.status === 'success'
+                      ? '✓'
+                      : log.status === 'error'
+                        ? '✗'
+                        : log.status === 'running'
+                          ? '⟳'
+                          : '○'}
                   </span>
                   <span className="flex-1 break-all">{log.command}</span>
                   {log.message && (

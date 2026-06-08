@@ -1,13 +1,13 @@
 /** Hooks for subscribing to various Tauri event channels and writing to the Zustand store. */
 
 import { useEffect } from 'react';
+import { useAppStore } from '../lib/store';
 import {
+  onBusStatsStream,
+  onDs402StateStream,
   onEmcyStream,
   onHeartbeatStream,
-  onDs402StateStream,
-  onBusStatsStream,
 } from '../lib/tauri';
-import { useAppStore } from '../lib/store';
 
 /** Subscribe to EMCY stream events. */
 export function useEmcyStream() {

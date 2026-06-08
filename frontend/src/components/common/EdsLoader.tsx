@@ -7,12 +7,12 @@
  * successful loading.
  */
 
-import { useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
+import { AlertCircle, FileCheck, FolderOpen, Loader2 } from 'lucide-react';
+import { useState } from 'react';
 import { useLoadEdsFile } from '@/hooks/useCommands';
-import { cn } from '@/lib/utils';
-import { FileCheck, AlertCircle, Loader2, FolderOpen } from 'lucide-react';
 import type { EdsInfo } from '@/lib/tauri';
+import { cn } from '@/lib/utils';
 
 export interface EdsLoaderProps {
   className?: string;
@@ -70,7 +70,10 @@ export function EdsLoader({ className }: EdsLoaderProps) {
         </button>
 
         {filePath && (
-          <span className="text-xs font-mono text-muted-foreground truncate max-w-xs" title={filePath}>
+          <span
+            className="text-xs font-mono text-muted-foreground truncate max-w-xs"
+            title={filePath}
+          >
             {filePath.split('/').pop()}
           </span>
         )}
@@ -98,8 +101,8 @@ export function EdsLoader({ className }: EdsLoaderProps) {
           <FileCheck className="w-3.5 h-3.5 text-green-500 shrink-0" />
           <span className="font-medium">{edsInfo.product_name || 'Unnamed device'}</span>
           <span className="text-muted-foreground">
-            (Vendor: 0x{edsInfo.vendor_id.toString(16).toUpperCase()},
-            Product: 0x{edsInfo.product_code.toString(16).toUpperCase()})
+            (Vendor: 0x{edsInfo.vendor_id.toString(16).toUpperCase()}, Product: 0x
+            {edsInfo.product_code.toString(16).toUpperCase()})
           </span>
         </div>
       )}

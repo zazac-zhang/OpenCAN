@@ -5,11 +5,11 @@
  * Supports auto-scroll with pause/resume, frame count footer, and a clear button.
  */
 
-import { useEffect, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Pause, Play, Trash2 } from 'lucide-react';
-import type { CanFrame } from '@/types/can';
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
+import type { CanFrame } from '@/types/can';
 
 interface FrameTableProps {
   frames: CanFrame[];

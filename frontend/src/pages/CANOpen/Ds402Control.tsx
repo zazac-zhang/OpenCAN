@@ -10,13 +10,20 @@
  * - ControlWord action buttons
  * - Telemetry waveform display with auto-refresh
  */
-import { useState, useEffect, useRef } from 'react';
-import { useAppStore, useSelectedNode } from '@/lib/store';
-import { useDs402Enable, useDs402FaultReset, useDs402SetMode, useDs402SetTarget, useSdoUpload, useSdoDownload } from '@/hooks/useCommands';
-import { StateMachineFlow } from '@/components/ds402/StateMachineFlow';
-import { ModeSelector } from '@/components/ds402/ModeSelector';
+import { useEffect, useRef, useState } from 'react';
 import { ControlPanel } from '@/components/ds402/ControlPanel';
+import { ModeSelector } from '@/components/ds402/ModeSelector';
+import { StateMachineFlow } from '@/components/ds402/StateMachineFlow';
 import { WaveformDisplay } from '@/components/ds402/WaveformDisplay';
+import {
+  useDs402Enable,
+  useDs402FaultReset,
+  useDs402SetMode,
+  useDs402SetTarget,
+  useSdoDownload,
+  useSdoUpload,
+} from '@/hooks/useCommands';
+import { useAppStore, useSelectedNode } from '@/lib/store';
 
 /** Map mode number to display name */
 const MODE_NAMES: Record<number, string> = {
@@ -64,7 +71,10 @@ const CONTROLWORD_BITS: [number, string][] = [
   [11, 'Manufacturer Specific'],
 ];
 
-function decodeBits(value: number, bits: [number, string, string?][]): { bit: number; label: string; icon?: string; set: boolean }[] {
+function decodeBits(
+  value: number,
+  bits: [number, string, string?][],
+): { bit: number; label: string; icon?: string; set: boolean }[] {
   return bits.map(([bit, label, icon]) => ({
     bit,
     label,
@@ -126,9 +136,8 @@ export function Ds402Control() {
   }, [autoRefresh, nodeId, sdoUpload]);
 
   // Decode StatusWord
-  const statusWordBits = nodeState?.status_word !== undefined
-    ? decodeBits(nodeState.status_word, STATUSWORD_BITS)
-    : [];
+  const statusWordBits =
+    nodeState?.status_word !== undefined ? decodeBits(nodeState.status_word, STATUSWORD_BITS) : [];
 
   // Decode ControlWord
   const controlWord = nodeState?.control_word ?? 0;
@@ -148,9 +157,7 @@ export function Ds402Control() {
             />
             Auto-refresh
           </label>
-          {autoRefresh && (
-            <span className="text-xs text-green-400 animate-pulse">● Polling</span>
-          )}
+          {autoRefresh && <span className="text-xs text-green-400 animate-pulse">● Polling</span>}
         </div>
       </div>
 
@@ -200,7 +207,7 @@ export function Ds402Control() {
         controlWord={nodeState?.control_word}
         onSendControlWord={(value, _label) => {
           // Send ControlWord via SDO write to 0x6040
-          const data = [value & 0xFF, (value >> 8) & 0xFF];
+          const data = [value & 0xff, (value >> 8) & 0xff];
           sdoDownload.mutate({
             node_id: nodeId,
             index: 0x6040,
@@ -217,8 +224,8 @@ export function Ds402Control() {
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium">StatusWord Bits</h3>
             <span className="text-xs font-mono text-muted-foreground">
-              0x{nodeState.status_word.toString(16).padStart(4, '0').toUpperCase()}
-              {' '}= {nodeState.status_word.toString(2).padStart(16, '0')}
+              0x{nodeState.status_word.toString(16).padStart(4, '0').toUpperCase()} ={' '}
+              {nodeState.status_word.toString(2).padStart(16, '0')}
             </span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-1">
@@ -232,9 +239,11 @@ export function Ds402Control() {
                 <span>{icon}</span>
                 <span>Bit {bit}</span>
                 <span className="truncate flex-1">{label}</span>
-                <span className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] ${
-                  set ? 'border-green-500 bg-green-500/20' : 'border-border'
-                }`}>
+                <span
+                  className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] ${
+                    set ? 'border-green-500 bg-green-500/20' : 'border-border'
+                  }`}
+                >
                   {set ? '1' : '0'}
                 </span>
               </div>
@@ -262,9 +271,11 @@ export function Ds402Control() {
               >
                 <span>Bit {bit}</span>
                 <span className="truncate flex-1">{label}</span>
-                <span className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] ${
-                  set ? 'border-blue-500 bg-blue-500/20' : 'border-border'
-                }`}>
+                <span
+                  className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] ${
+                    set ? 'border-blue-500 bg-blue-500/20' : 'border-border'
+                  }`}
+                >
                   {set ? '1' : '0'}
                 </span>
               </div>
@@ -279,7 +290,9 @@ export function Ds402Control() {
           selectedMode={currentMode}
           onModeChange={(mode) => {
             modeMutation.mutate({ nodeId, mode });
-            useAppStore.getState().ds402.updateNodeState(nodeId, { selected_mode: mode.toString() });
+            useAppStore
+              .getState()
+              .ds402.updateNodeState(nodeId, { selected_mode: mode.toString() });
           }}
         />
       </div>
@@ -301,9 +314,7 @@ export function Ds402Control() {
           onTargetTorqueChange={(v) =>
             useAppStore.getState().ds402.updateNodeState(nodeId, { target_torque: v })
           }
-          onSetTarget={(mode, value) =>
-            targetMutation.mutate({ nodeId, mode, target: value })
-          }
+          onSetTarget={(mode, value) => targetMutation.mutate({ nodeId, mode, target: value })}
           actualPosition={nodeState?.actual_position}
           actualVelocity={nodeState?.actual_velocity}
           actualTorque={nodeState?.actual_torque}

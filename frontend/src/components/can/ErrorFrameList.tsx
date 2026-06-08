@@ -6,8 +6,8 @@
  */
 
 import { Trash2 } from 'lucide-react';
-import type { ErrorFrame } from '@/types/can';
 import { cn } from '@/lib/utils';
+import type { ErrorFrame } from '@/types/can';
 
 interface ErrorFrameListProps {
   errorFrames: ErrorFrame[];
@@ -90,9 +90,7 @@ export function ErrorFrameList({ errorFrames, onClear }: ErrorFrameListProps) {
                 severityRowClass[severity],
               )}
             >
-              <span className="w-24 text-muted-foreground">
-                {formatRelativeMs(relativeMs)}
-              </span>
+              <span className="w-24 text-muted-foreground">{formatRelativeMs(relativeMs)}</span>
               <span className="flex-1">
                 <span
                   className={cn(

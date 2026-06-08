@@ -114,7 +114,9 @@ export function onFrameStream(callback: (event: CanFrameEvent) => void): Promise
   return listen<CanFrameEvent>('frame_stream', (e) => callback(e.payload));
 }
 
-export function onFrameStreamBatch(callback: (events: CanFrameEvent[]) => void): Promise<UnlistenFn> {
+export function onFrameStreamBatch(
+  callback: (events: CanFrameEvent[]) => void,
+): Promise<UnlistenFn> {
   return listen<CanFrameEvent[]>('frame_stream_batch', (e) => callback(e.payload));
 }
 
@@ -138,7 +140,9 @@ export function onHeartbeatStream(callback: (event: HeartbeatEvent) => void): Pr
   return listen<HeartbeatEvent>('heartbeat_stream', (e) => callback(e.payload));
 }
 
-export function onDs402StateStream(callback: (event: Ds402StateEvent) => void): Promise<UnlistenFn> {
+export function onDs402StateStream(
+  callback: (event: Ds402StateEvent) => void,
+): Promise<UnlistenFn> {
   return listen<Ds402StateEvent>('ds402_state_stream', (e) => callback(e.payload));
 }
 
@@ -146,7 +150,9 @@ export function onBusStatsStream(callback: (event: BusStatsEvent) => void): Prom
   return listen<BusStatsEvent>('bus_stats_stream', (e) => callback(e.payload));
 }
 
-export function onErrorFrameStream(callback: (event: ErrorFrameEvent) => void): Promise<UnlistenFn> {
+export function onErrorFrameStream(
+  callback: (event: ErrorFrameEvent) => void,
+): Promise<UnlistenFn> {
   return listen<ErrorFrameEvent>('error_frame_stream', (e) => callback(e.payload));
 }
 

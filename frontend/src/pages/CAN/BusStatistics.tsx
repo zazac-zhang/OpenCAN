@@ -7,10 +7,11 @@
  * - Peak/average statistics
  * - Error trend indicators (rising/falling/stable)
  */
-import { useState, useEffect, useMemo } from 'react';
-import { useBusStats, useAppStore } from '@/lib/store';
+
+import { Minus, TrendingDown, TrendingUp } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { BusStatsCards } from '@/components/can/BusStatsCards';
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { useAppStore, useBusStats } from '@/lib/store';
 
 const MAX_HISTORY = 60; // Keep last 60 samples (1 minute at 1s interval)
 
@@ -23,18 +24,28 @@ interface StatSample {
   errorFrames: number;
 }
 
-function Sparkline({ data, color, height = 32 }: { data: number[]; color: string; height?: number }) {
+function Sparkline({
+  data,
+  color,
+  height = 32,
+}: {
+  data: number[];
+  color: string;
+  height?: number;
+}) {
   if (data.length < 2) return null;
   const max = Math.max(...data, 1);
   const min = Math.min(...data, 0);
   const range = max - min || 1;
   const width = data.length * 3;
 
-  const points = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * width;
-    const y = height - ((v - min) / range) * (height - 4) - 2;
-    return `${x},${y}`;
-  }).join(' ');
+  const points = data
+    .map((v, i) => {
+      const x = (i / (data.length - 1)) * width;
+      const y = height - ((v - min) / range) * (height - 4) - 2;
+      return `${x},${y}`;
+    })
+    .join(' ');
 
   // Area fill
   const areaPoints = `0,${height} ${points} ${width},${height}`;
@@ -81,15 +92,21 @@ export function BusStatistics() {
     });
     setPeakLoad((p) => Math.max(p, busStats.bus_load));
     setPeakRate((p) => Math.max(p, busStats.frame_rate));
-  }, [busStats.bus_load, busStats.frame_rate, busStats.tx_errors, busStats.rx_errors, busStats.error_frame_count]);
+  }, [
+    busStats.bus_load,
+    busStats.frame_rate,
+    busStats.tx_errors,
+    busStats.rx_errors,
+    busStats.error_frame_count,
+  ]);
 
   // Compute averages from history
   const averages = useMemo(() => {
     if (history.length < 2) return null;
     const last10 = history.slice(-10);
     return {
-      avgLoad: Math.round(last10.reduce((s, h) => s + h.busLoad, 0) / last10.length * 10) / 10,
-      avgRate: Math.round(last10.reduce((s, h) => s + h.frameRate, 0) / last10.length * 10) / 10,
+      avgLoad: Math.round((last10.reduce((s, h) => s + h.busLoad, 0) / last10.length) * 10) / 10,
+      avgRate: Math.round((last10.reduce((s, h) => s + h.frameRate, 0) / last10.length) * 10) / 10,
     };
   }, [history]);
 

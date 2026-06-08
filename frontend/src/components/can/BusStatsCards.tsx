@@ -6,8 +6,8 @@
  */
 
 import { Activity, AlertTriangle, Gauge } from 'lucide-react';
-import type { BusStats } from '@/types/can';
 import { cn } from '@/lib/utils';
+import type { BusStats } from '@/types/can';
 
 interface BusStatsCardsProps {
   stats: BusStats;

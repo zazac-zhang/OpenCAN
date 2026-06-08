@@ -1,9 +1,9 @@
 // Detail panel (right sidebar) with accordion sections
 
-import { useState, useCallback } from 'react';
-import { useSelectedNode, useNodes, useAppStore } from '@/lib/store';
-import { useSdoUpload, useNmtCommand } from '@/hooks/useCommands';
-import { ChevronDown, ChevronRight, X, Eye } from 'lucide-react';
+import { ChevronDown, ChevronRight, Eye, X } from 'lucide-react';
+import { useCallback, useState } from 'react';
+import { useNmtCommand, useSdoUpload } from '@/hooks/useCommands';
+import { useAppStore, useNodes, useSelectedNode } from '@/lib/store';
 
 // Accordion section component
 function AccordionSection({
@@ -53,14 +53,17 @@ function SdoQuickRead({
   const [result, setResult] = useState<string | null>(null);
 
   const handleRead = useCallback(() => {
-    uploadMutation.mutate({ node_id: nodeId, index, subindex, data_type: dataType }, {
-      onSuccess: (data) => {
-        setResult(data?.data.map((b) => b.toString(16).padStart(2, '0')).join(' ') || '—');
+    uploadMutation.mutate(
+      { node_id: nodeId, index, subindex, data_type: dataType },
+      {
+        onSuccess: (data) => {
+          setResult(data?.data.map((b) => b.toString(16).padStart(2, '0')).join(' ') || '—');
+        },
+        onError: () => {
+          setResult('Error');
+        },
       },
-      onError: () => {
-        setResult('Error');
-      },
-    });
+    );
   }, [uploadMutation, nodeId, index, subindex, dataType]);
 
   return (
@@ -154,18 +157,38 @@ export function DetailPanel() {
           <div className="space-y-1.5">
             {/* NMT state */}
             <div className="flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${
-                node.nmt_state === 'Operational' ? 'bg-green-500' :
-                node.nmt_state === 'PreOperational' ? 'bg-yellow-500' : 'bg-red-500'
-              }`} />
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  node.nmt_state === 'Operational'
+                    ? 'bg-green-500'
+                    : node.nmt_state === 'PreOperational'
+                      ? 'bg-yellow-500'
+                      : 'bg-red-500'
+                }`}
+              />
               <span className="text-xs">{node.nmt_state}</span>
             </div>
 
             {/* NMT quick actions */}
             <div className="grid grid-cols-3 gap-1">
-              <NmtActionButton nodeId={node.node_id} command="start" label="Start" colorClass="bg-green-500/10 text-green-500 border-green-500/20 hover:bg-green-500/20" />
-              <NmtActionButton nodeId={node.node_id} command="stop" label="Stop" colorClass="bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500/20" />
-              <NmtActionButton nodeId={node.node_id} command="reset" label="Reset" colorClass="bg-yellow-500/10 text-yellow-500 border-yellow-500/20 hover:bg-yellow-500/20" />
+              <NmtActionButton
+                nodeId={node.node_id}
+                command="start"
+                label="Start"
+                colorClass="bg-green-500/10 text-green-500 border-green-500/20 hover:bg-green-500/20"
+              />
+              <NmtActionButton
+                nodeId={node.node_id}
+                command="stop"
+                label="Stop"
+                colorClass="bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500/20"
+              />
+              <NmtActionButton
+                nodeId={node.node_id}
+                command="reset"
+                label="Reset"
+                colorClass="bg-yellow-500/10 text-yellow-500 border-yellow-500/20 hover:bg-yellow-500/20"
+              />
             </div>
 
             {/* Device info */}
@@ -207,13 +230,15 @@ export function DetailPanel() {
           <AccordionSection title="DS402 Control" defaultOpen>
             <div className="space-y-2">
               {/* State badge */}
-              <div className={`px-2 py-1 rounded text-[10px] font-medium text-center ${
-                nodeState.state === 'Operation Enabled'
-                  ? 'bg-green-500/20 text-green-400'
-                  : nodeState.state === 'Fault'
-                    ? 'bg-red-500/20 text-red-400'
-                    : 'bg-yellow-500/20 text-yellow-400'
-              }`}>
+              <div
+                className={`px-2 py-1 rounded text-[10px] font-medium text-center ${
+                  nodeState.state === 'Operation Enabled'
+                    ? 'bg-green-500/20 text-green-400'
+                    : nodeState.state === 'Fault'
+                      ? 'bg-red-500/20 text-red-400'
+                      : 'bg-yellow-500/20 text-yellow-400'
+                }`}
+              >
                 {nodeState.state}
               </div>
 

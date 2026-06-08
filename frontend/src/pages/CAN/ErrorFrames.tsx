@@ -4,12 +4,13 @@
  * Displays error frames via ErrorFrameList with filtering by error type,
  * summary statistics, TEC/REC trend visualization, and a "Simulate Error" button.
  */
-import { useState, useMemo, useEffect } from 'react';
-import { useErrorFrames, useAppStore } from '@/lib/store';
+
+import { Activity } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { ErrorFrameList } from '@/components/can/ErrorFrameList';
 import { useErrorFrameStream } from '@/hooks/useFrameStream';
+import { useAppStore, useErrorFrames } from '@/lib/store';
 import type { ErrorFrame } from '@/types/can';
-import { Activity } from 'lucide-react';
 
 const ERROR_TYPES = ['Bus Off', 'Error Passive', 'Warning', 'Normal'];
 
@@ -21,7 +22,14 @@ function generateMockErrorFrame(): ErrorFrame {
   return {
     timestamp_ms: Date.now() - 100000 + errorCounter * 500,
     error_type: errorType,
-    tec: errorType === 'Bus Off' ? 255 : errorType === 'Error Passive' ? 128 + Math.floor(Math.random() * 127) : errorType === 'Warning' ? 96 + Math.floor(Math.random() * 32) : Math.floor(Math.random() * 50),
+    tec:
+      errorType === 'Bus Off'
+        ? 255
+        : errorType === 'Error Passive'
+          ? 128 + Math.floor(Math.random() * 127)
+          : errorType === 'Warning'
+            ? 96 + Math.floor(Math.random() * 32)
+            : Math.floor(Math.random() * 50),
     rec: Math.floor(Math.random() * 200),
   };
 }
@@ -32,11 +40,13 @@ function MiniSparkline({ data, color }: { data: number[]; color: string }) {
   const max = Math.max(...data, 1);
   const height = 24;
   const width = data.length * 3;
-  const points = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * width;
-    const y = height - (v / max) * (height - 4) - 2;
-    return `${x},${y}`;
-  }).join(' ');
+  const points = data
+    .map((v, i) => {
+      const x = (i / (data.length - 1)) * width;
+      const y = height - (v / max) * (height - 4) - 2;
+      return `${x},${y}`;
+    })
+    .join(' ');
   return (
     <svg width={width} height={height} className="w-full">
       <polyline points={points} fill="none" stroke={color} strokeWidth="1.5" />
@@ -66,13 +76,11 @@ export function ErrorFrames() {
       setTecHistory((prev) => [...prev.slice(-59), latest.tec]);
       setRecHistory((prev) => [...prev.slice(-59), latest.rec]);
     }
-  }, [errorFrames.length]);
+  }, [errorFrames.length, errorFrames]);
 
   const filteredFrames = useMemo(
     () =>
-      filterType === 'All'
-        ? errorFrames
-        : errorFrames.filter((ef) => ef.error_type === filterType),
+      filterType === 'All' ? errorFrames : errorFrames.filter((ef) => ef.error_type === filterType),
     [errorFrames, filterType],
   );
 
@@ -179,7 +187,13 @@ export function ErrorFrames() {
             </div>
             <MiniSparkline data={tecHistory} color="hsl(0, 84%, 60%)" />
             <div className="text-[10px] text-muted-foreground">
-              {latestTec >= 255 ? 'Bus Off' : latestTec >= 128 ? 'Error Passive' : latestTec >= 96 ? 'Warning' : 'Active'}
+              {latestTec >= 255
+                ? 'Bus Off'
+                : latestTec >= 128
+                  ? 'Error Passive'
+                  : latestTec >= 96
+                    ? 'Warning'
+                    : 'Active'}
             </div>
           </div>
           <div className="p-3 border rounded-lg bg-card space-y-1">
@@ -205,12 +219,22 @@ export function ErrorFrames() {
             {ERROR_TYPES.map((type) => {
               const count = typeCounts[type] || 0;
               const pct = totalErrors > 0 ? (count / totalErrors) * 100 : 0;
-              const color = type === 'Bus Off' ? 'bg-red-500' : type === 'Error Passive' ? 'bg-orange-500' : type === 'Warning' ? 'bg-yellow-500' : 'bg-green-500';
+              const color =
+                type === 'Bus Off'
+                  ? 'bg-red-500'
+                  : type === 'Error Passive'
+                    ? 'bg-orange-500'
+                    : type === 'Warning'
+                      ? 'bg-yellow-500'
+                      : 'bg-green-500';
               return (
                 <div key={type} className="flex items-center gap-2 text-xs">
                   <span className="w-28 truncate">{type}</span>
                   <div className="flex-1 h-3 bg-muted rounded overflow-hidden">
-                    <div className={`h-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+                    <div
+                      className={`h-full ${color} transition-all`}
+                      style={{ width: `${pct}%` }}
+                    />
                   </div>
                   <span className="w-12 text-right font-mono">{count}</span>
                   <span className="w-10 text-right text-muted-foreground">{pct.toFixed(0)}%</span>

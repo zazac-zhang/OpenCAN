@@ -11,10 +11,10 @@
  * - Drag-to-rearrange layout
  */
 
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { RefreshCw, Network, Zap, Power, Square, RotateCw } from 'lucide-react';
+import { Network, Power, RefreshCw, RotateCw, Square, Zap } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNmtCommand, useScanNodes } from '@/hooks/useCommands';
 import { useAppStore } from '@/lib/store';
-import { useScanNodes, useNmtCommand } from '@/hooks/useCommands';
 import { cn } from '@/lib/utils';
 
 // ===== Types =====
@@ -102,10 +102,7 @@ export function NetworkTopology() {
       const hb = heartbeatMap.get(node.node_id);
       if (hb) {
         const elapsed = Date.now() - hb.lastSeen;
-        states.set(
-          node.node_id,
-          hb.alive && elapsed < 10000 ? 'Operational' : 'Not Responding',
-        );
+        states.set(node.node_id, hb.alive && elapsed < 10000 ? 'Operational' : 'Not Responding');
       } else {
         states.set(node.node_id, node.nmt_state || 'Unknown');
       }
@@ -127,7 +124,7 @@ export function NetworkTopology() {
       const layout = computeLayout(nodeIds, MASTER_POS);
       setNodePositions(layout);
     }
-  }, [nodes]);
+  }, [nodes, nodePositions.keys]);
 
   // Handle scan
   const handleScan = useCallback(() => {
@@ -135,14 +132,11 @@ export function NetworkTopology() {
   }, [scanMutation]);
 
   // Handle node click
-  const handleNodeClick = useCallback(
-    (nodeId: number) => {
-      useAppStore.setState((s) => ({
-        can: { ...s.can, selectedNode: nodeId },
-      }));
-    },
-    [],
-  );
+  const handleNodeClick = useCallback((nodeId: number) => {
+    useAppStore.setState((s) => ({
+      can: { ...s.can, selectedNode: nodeId },
+    }));
+  }, []);
 
   // Drag handlers
   const handleMouseDown = useCallback(
@@ -193,8 +187,18 @@ export function NetworkTopology() {
   const nmtCommands = [
     { command: 'StartNode', label: 'Start', icon: Power, color: 'bg-green-600 hover:bg-green-700' },
     { command: 'StopNode', label: 'Stop', icon: Square, color: 'bg-red-600 hover:bg-red-700' },
-    { command: 'EnterPreOperational', label: 'Pre-Op', icon: Zap, color: 'bg-yellow-600 hover:bg-yellow-700' },
-    { command: 'ResetNode', label: 'Reset', icon: RotateCw, color: 'bg-orange-600 hover:bg-orange-700' },
+    {
+      command: 'EnterPreOperational',
+      label: 'Pre-Op',
+      icon: Zap,
+      color: 'bg-yellow-600 hover:bg-yellow-700',
+    },
+    {
+      command: 'ResetNode',
+      label: 'Reset',
+      icon: RotateCw,
+      color: 'bg-orange-600 hover:bg-orange-700',
+    },
   ] as const;
 
   return (
@@ -274,15 +278,12 @@ export function NetworkTopology() {
               })}
 
             {/* Master Node */}
-            <g
-              onClick={() => handleNodeClick(1)}
-              className="cursor-pointer"
-            >
+            <g onClick={() => handleNodeClick(1)} className="cursor-pointer">
               <circle
                 cx={MASTER_POS.x}
                 cy={MASTER_POS.y}
                 r={NODE_R}
-                fill={getNodeColor(1) + '20'}
+                fill={`${getNodeColor(1)}20`}
                 stroke={getNodeColor(1)}
                 strokeWidth={selectedNode === 1 ? 3 : 2}
               />
@@ -336,7 +337,7 @@ export function NetworkTopology() {
                       cx={pos.x}
                       cy={pos.y}
                       r={NODE_R}
-                      fill={color + '20'}
+                      fill={`${color}20`}
                       stroke={color}
                       strokeWidth={isSelected ? 3 : 1.5}
                     />

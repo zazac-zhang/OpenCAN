@@ -1,9 +1,9 @@
 // Minimal top bar — connection status, theme toggle
 
-import { useConnected, useAppStore } from '@/lib/store';
+import { Moon, Power, Settings2, Sun } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useConnectBackend, useDisconnect } from '@/hooks/useCommands';
-import { Power, Settings2, Moon, Sun } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useAppStore, useConnected } from '@/lib/store';
 
 export function TopBar() {
   const connected = useConnected();
@@ -17,7 +17,12 @@ export function TopBar() {
 
   // Quick mock connect
   const handleMockConnect = () => {
-    connectMutation.mutate({ backend_type: 'mock', channel: 'mock0', bitrate: dialogBitrate, node_id: 0 });
+    connectMutation.mutate({
+      backend_type: 'mock',
+      channel: 'mock0',
+      bitrate: dialogBitrate,
+      node_id: 0,
+    });
   };
 
   // Format bitrate display

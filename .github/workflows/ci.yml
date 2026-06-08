@@ -113,23 +113,38 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
         working-directory: frontend
 
       - name: Type check
-        run: npm run typecheck
+        run: pnpm run typecheck
         working-directory: frontend
 
       - name: Lint
-        run: npm run lint
+        run: pnpm run lint
         working-directory: frontend
 
       - name: Build
-        run: npm run build
+        run: pnpm run build
         working-directory: frontend
 
   # === vcan test: Linux-only end-to-end with virtual CAN ===

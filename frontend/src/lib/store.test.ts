@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { useAppStore } from '@/lib/store';
 
 describe('useAppStore', () => {
@@ -73,7 +73,13 @@ describe('useAppStore', () => {
     it('can clear frames', () => {
       const state = useAppStore.getState();
       state.frames.addFrames([
-        { cob_id: 0x185, data: [0, 0, 0, 0, 0, 0, 0, 0], dlc: 0, direction: 'rx', timestamp_ms: Date.now() },
+        {
+          cob_id: 0x185,
+          data: [0, 0, 0, 0, 0, 0, 0, 0],
+          dlc: 0,
+          direction: 'rx',
+          timestamp_ms: Date.now(),
+        },
       ]);
       state.frames.clearFrames();
 

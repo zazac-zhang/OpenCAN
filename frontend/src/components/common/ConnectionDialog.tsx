@@ -7,11 +7,11 @@
  * `useConnectBackend`.
  */
 
-import { useEffect, useState, useCallback } from 'react';
-import { useAppStore } from '@/lib/store';
+import { Loader2, Wifi, X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useConnectBackend, useGetBackends } from '@/hooks/useCommands';
+import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
-import { X, Loader2, Wifi } from 'lucide-react';
 
 const BITRATE_OPTIONS = [
   { label: '10k', value: 10000 },
@@ -45,7 +45,14 @@ export function ConnectionDialog() {
       setError(null);
       getBackends.mutate();
     }
-  }, [dialog.visible]);
+  }, [
+    dialog.visible,
+    dialog.channel,
+    getBackends.mutate,
+    dialog.selectedBackend,
+    dialog.nodeId,
+    dialog.bitrate,
+  ]);
 
   // Escape key closes dialog
   const handleKeyDown = useCallback(
@@ -146,11 +153,15 @@ export function ConnectionDialog() {
               className="w-full px-3 py-2 text-sm rounded-md border bg-background"
               type="text"
               placeholder={
-                localBackend === 'socketcan' ? 'e.g. can0, vcan0' :
-                localBackend === 'zlg' ? 'e.g. 4:0:0 (type:index:channel)' :
-                localBackend === 'kvaser' ? 'e.g. 0 (channel number)' :
-                localBackend === 'pcan' ? 'e.g. USBBUS1' :
-                'e.g. can0'
+                localBackend === 'socketcan'
+                  ? 'e.g. can0, vcan0'
+                  : localBackend === 'zlg'
+                    ? 'e.g. 4:0:0 (type:index:channel)'
+                    : localBackend === 'kvaser'
+                      ? 'e.g. 0 (channel number)'
+                      : localBackend === 'pcan'
+                        ? 'e.g. USBBUS1'
+                        : 'e.g. can0'
               }
               value={localChannel}
               onChange={(e) => setLocalChannel(e.target.value)}

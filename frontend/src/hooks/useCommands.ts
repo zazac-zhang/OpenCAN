@@ -1,8 +1,8 @@
 // Hooks for Tauri command mutations using React Query
 
 import { useMutation } from '@tanstack/react-query';
-import * as tauri from '../lib/tauri';
 import { useAppStore } from '../lib/store';
+import * as tauri from '../lib/tauri';
 
 // Connection hooks
 export function useConnectBackend() {
@@ -81,9 +81,11 @@ export function useSdoUpload() {
         is_read: true,
         success: true,
       });
-      useAppStore.getState().ui.setStatusMessage(
-        `SDO read ${result.index.toString(16).padStart(4, '0')}:${result.subindex.toString(16).padStart(2, '0')} = ${result.data.map((b) => b.toString(16).padStart(2, '0')).join(' ')}`
-      );
+      useAppStore
+        .getState()
+        .ui.setStatusMessage(
+          `SDO read ${result.index.toString(16).padStart(4, '0')}:${result.subindex.toString(16).padStart(2, '0')} = ${result.data.map((b) => b.toString(16).padStart(2, '0')).join(' ')}`,
+        );
     },
     onError: (err, params) => {
       useAppStore.getState().sdo.addHistory({
@@ -112,9 +114,11 @@ export function useSdoDownload() {
         is_read: false,
         success: true,
       });
-      useAppStore.getState().ui.setStatusMessage(
-        `SDO write ${params.index.toString(16).padStart(4, '0')}:${params.subindex.toString(16).padStart(2, '0')}`
-      );
+      useAppStore
+        .getState()
+        .ui.setStatusMessage(
+          `SDO write ${params.index.toString(16).padStart(4, '0')}:${params.subindex.toString(16).padStart(2, '0')}`,
+        );
     },
     onError: (err, params) => {
       useAppStore.getState().sdo.addHistory({
@@ -242,7 +246,8 @@ export function useLoadRecording() {
 
 export function useStartPlayback() {
   return useMutation({
-    mutationFn: ({ path, speed }: { path: string; speed: number }) => tauri.startPlayback(path, speed),
+    mutationFn: ({ path, speed }: { path: string; speed: number }) =>
+      tauri.startPlayback(path, speed),
     onSuccess: () => {
       useAppStore.getState().recording.setRecording({ isPlaying: true });
     },

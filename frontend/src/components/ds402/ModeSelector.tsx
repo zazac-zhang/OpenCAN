@@ -6,7 +6,7 @@
  * The selected mode is highlighted with the primary color.
  */
 
-import { ArrowRight, Gauge, Home, Zap, Grid3X3, CircleDot } from 'lucide-react';
+import { ArrowRight, CircleDot, Gauge, Grid3X3, Home, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface ModeSelectorProps {
@@ -30,11 +30,7 @@ const MODES = [
   { value: 10, abbr: 'CST', name: 'Cyclic Sync Torque', icon: Zap },
 ] as const;
 
-export function ModeSelector({
-  selectedMode,
-  onModeChange,
-  disabled = false,
-}: ModeSelectorProps) {
+export function ModeSelector({ selectedMode, onModeChange, disabled = false }: ModeSelectorProps) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-1.5">

@@ -5,10 +5,11 @@
  * Settings can be saved as default (localStorage) and connection
  * history is tracked (last 5 connections, also in localStorage).
  */
-import { useState, useEffect } from 'react';
-import { Settings, Save, Trash2, History, Check, X } from 'lucide-react';
+
+import { Check, History, Save, Settings, Trash2, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useConnectBackend, useDisconnect, useGetBackends } from '@/hooks/useCommands';
 import { useAppStore } from '@/lib/store';
-import { useConnectBackend, useGetBackends, useDisconnect } from '@/hooks/useCommands';
 
 const BACKENDS = ['mock', 'socketcan', 'kvaser', 'pcan', 'zlg'] as const;
 const BITRATES = [10000, 20000, 50000, 125000, 250000, 500000, 800000, 1000000] as const;
@@ -92,11 +93,11 @@ export function ConnectionSettings() {
   // Refresh backend availability on mount
   useEffect(() => {
     getBackends.mutate();
-  }, []);
+  }, [getBackends.mutate]);
 
   const handleConnect = () => {
     const nid = parseInt(nodeId, 10);
-    if (isNaN(nid) || nid < 0 || nid > 127) return;
+    if (Number.isNaN(nid) || nid < 0 || nid > 127) return;
 
     connectBackend.mutate(
       { backend_type: backendType, channel, bitrate, node_id: nid },
@@ -159,7 +160,9 @@ export function ConnectionSettings() {
           className={`h-3 w-3 rounded-full ${connected ? 'bg-green-500' : 'bg-muted-foreground/30'}`}
         />
         <span className="text-sm text-foreground">
-          {connected ? `Connected — ${backendInfo?.backend_type} (${backendInfo?.channel})` : 'Disconnected'}
+          {connected
+            ? `Connected — ${backendInfo?.backend_type} (${backendInfo?.channel})`
+            : 'Disconnected'}
         </span>
         {connected && (
           <button
@@ -197,13 +200,12 @@ export function ConnectionSettings() {
                   } ${available === false ? 'opacity-40 cursor-not-allowed' : ''}`}
                 >
                   {b}
-                  {available !== undefined && (
-                    available ? (
+                  {available !== undefined &&
+                    (available ? (
                       <Check className="h-3 w-3 text-green-400" />
                     ) : (
                       <X className="h-3 w-3 text-red-400" />
-                    )
-                  )}
+                    ))}
                 </button>
               );
             })}
@@ -313,9 +315,7 @@ export function ConnectionSettings() {
                 <span className="font-mono text-muted-foreground">
                   {formatBitrate(entry.bitrate)}
                 </span>
-                <span className="font-mono text-muted-foreground ml-auto">
-                  Node {entry.nodeId}
-                </span>
+                <span className="font-mono text-muted-foreground ml-auto">Node {entry.nodeId}</span>
                 <span className="text-muted-foreground">
                   {new Date(entry.timestamp).toLocaleTimeString()}
                 </span>

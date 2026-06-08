@@ -1,6 +1,6 @@
 // Status bar
 
-import { useAppStore, useConnected, useNodes, useFrames, useErrorFrames } from '@/lib/store';
+import { useAppStore, useConnected, useErrorFrames, useFrames, useNodes } from '@/lib/store';
 
 export function StatusBar() {
   const connected = useConnected();

@@ -93,27 +93,35 @@ frontend-install:
 
 # Run frontend dev server (standalone)
 frontend-dev:
-    cd frontend && pnpm dev
+    cd frontend && pnpm run dev
 
 # Build frontend for production
 frontend-build:
-    cd frontend && pnpm build
+    cd frontend && pnpm run build
 
 # Preview frontend production build
 frontend-preview:
-    cd frontend && pnpm preview
+    cd frontend && pnpm run preview
 
 # Run frontend type check
 frontend-typecheck:
-    cd frontend && pnpm typecheck
+    cd frontend && pnpm run typecheck
 
-# Run frontend lint
+# Run frontend lint (biome)
 frontend-lint:
-    cd frontend && pnpm lint
+    cd frontend && pnpm run lint
+
+# Fix frontend lint issues (biome)
+frontend-lint-fix:
+    cd frontend && pnpm run lint:fix
+
+# Format frontend code (biome)
+frontend-format:
+    cd frontend && pnpm run format
 
 # Run frontend tests
 frontend-test:
-    cd frontend && pnpm test
+    cd frontend && pnpm run test
 
 # === Tauri (GUI app) ===
 

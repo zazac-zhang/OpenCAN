@@ -6,16 +6,11 @@
  * monospace data columns, and a footer with row count.
  */
 
-import { useRef, useState, useMemo } from 'react';
-import {
-  useReactTable,
-  getCoreRowModel,
-  type ColumnDef,
-  type Row,
-} from '@tanstack/react-table';
+import { type ColumnDef, getCoreRowModel, type Row, useReactTable } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { cn } from '@/lib/utils';
 import { ArrowDownUp } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { cn } from '@/lib/utils';
 
 export interface DataTableProps<T> {
   columns: ColumnDef<T, unknown>[];
@@ -34,10 +29,7 @@ export function DataTable<T>({
 }: DataTableProps<T>) {
   const [reversed, setReversed] = useState(false);
 
-  const limitedData = useMemo(
-    () => data.slice(-maxRows),
-    [data, maxRows],
-  );
+  const limitedData = useMemo(() => data.slice(-maxRows), [data, maxRows]);
 
   const tableData = useMemo(
     () => (reversed ? [...limitedData].reverse() : limitedData),
@@ -92,7 +84,7 @@ export function DataTable<T>({
               className="px-3 py-1 truncate"
               style={{ width, minWidth: width === 'auto' ? undefined : width }}
             >
-              {header.column.columnDef.header as string ?? header.id}
+              {(header.column.columnDef.header as string) ?? header.id}
             </div>
           );
         })}
@@ -100,9 +92,7 @@ export function DataTable<T>({
 
       {/* Virtualized body */}
       <div ref={parentRef} className="flex-1 overflow-auto">
-        <div
-          style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}
-        >
+        <div style={{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }}>
           {virtualizer.getVirtualItems().map((virtualRow) => {
             const row = table.getRowModel().rows[virtualRow.index] as Row<T> | undefined;
             if (!row) return null;
@@ -126,14 +116,15 @@ export function DataTable<T>({
                   return (
                     <div
                       key={cell.id}
-                      className={cn(
-                        'px-3 truncate',
-                        isDataCol && 'font-mono',
-                      )}
+                      className={cn('px-3 truncate', isDataCol && 'font-mono')}
                       style={{ width, minWidth: width === 'auto' ? undefined : width }}
                     >
                       {cell.column.columnDef.cell
-                        ? (cell.column.columnDef.cell as (info: { getValue: () => unknown }) => React.ReactNode)({ getValue: cell.getValue })
+                        ? (
+                            cell.column.columnDef.cell as (info: {
+                              getValue: () => unknown;
+                            }) => React.ReactNode
+                          )({ getValue: cell.getValue })
                         : String(cell.getValue() ?? '')}
                     </div>
                   );

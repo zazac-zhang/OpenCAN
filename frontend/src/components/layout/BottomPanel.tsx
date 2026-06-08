@@ -1,20 +1,31 @@
 // Bottom panel — context-aware tabs that switch with the active navigation group
 
-import { useAppStore, useActiveGroup, useBottomPanel, BOTTOM_PANEL_TABS } from '@/lib/store';
-import { ChevronUp, ChevronDown, Gauge, Radio, AlertCircle, Activity, Heart, FileText, Clock, BarChart3 } from 'lucide-react';
-import { useRef, useCallback } from 'react';
+import {
+  Activity,
+  AlertCircle,
+  BarChart3,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  FileText,
+  Gauge,
+  Heart,
+  Radio,
+} from 'lucide-react';
+import { useCallback, useRef } from 'react';
+import { BOTTOM_PANEL_TABS, useActiveGroup, useAppStore, useBottomPanel } from '@/lib/store';
 
 const TAB_ICONS: Record<string, React.ReactNode> = {
-  'Signals': <BarChart3 className="w-3 h-3" />,
+  Signals: <BarChart3 className="w-3 h-3" />,
   'Bus Load': <Gauge className="w-3 h-3" />,
   'Error Log': <AlertCircle className="w-3 h-3" />,
-  'Timing': <Clock className="w-3 h-3" />,
+  Timing: <Clock className="w-3 h-3" />,
   'PDO Stream': <Radio className="w-3 h-3" />,
-  'EMCY': <AlertCircle className="w-3 h-3" />,
+  EMCY: <AlertCircle className="w-3 h-3" />,
   'DS402 State': <Activity className="w-3 h-3" />,
-  'Heartbeat': <Heart className="w-3 h-3" />,
+  Heartbeat: <Heart className="w-3 h-3" />,
   'Session Info': <FileText className="w-3 h-3" />,
-  'Timeline': <Clock className="w-3 h-3" />,
+  Timeline: <Clock className="w-3 h-3" />,
   'OD Entries': <FileText className="w-3 h-3" />,
   'Parse Log': <FileText className="w-3 h-3" />,
 };
@@ -35,9 +46,15 @@ function BottomPanelContent({ tab }: { tab: string }) {
           <div className="flex items-center gap-2">
             <Gauge className="w-3.5 h-3.5 text-muted-foreground" />
             <span className="text-muted-foreground">Load</span>
-            <span className={`font-mono font-bold text-lg ${
-              busStats.bus_load >= 70 ? 'text-red-400' : busStats.bus_load >= 30 ? 'text-yellow-400' : 'text-green-400'
-            }`}>
+            <span
+              className={`font-mono font-bold text-lg ${
+                busStats.bus_load >= 70
+                  ? 'text-red-400'
+                  : busStats.bus_load >= 30
+                    ? 'text-yellow-400'
+                    : 'text-green-400'
+              }`}
+            >
               {busStats.bus_load.toFixed(1)}%
             </span>
           </div>
@@ -74,9 +91,11 @@ function BottomPanelContent({ tab }: { tab: string }) {
             <>
               <span className="text-muted-foreground">Last:</span>
               <span className="font-mono">
-                Node {pdoEntries[pdoEntries.length - 1]?.node_id}
-                {' '}
-                0x{pdoEntries[pdoEntries.length - 1]?.cob_id.toString(16).padStart(3, '0').toUpperCase()}
+                Node {pdoEntries[pdoEntries.length - 1]?.node_id} 0x
+                {pdoEntries[pdoEntries.length - 1]?.cob_id
+                  .toString(16)
+                  .padStart(3, '0')
+                  .toUpperCase()}
               </span>
             </>
           )}
@@ -91,9 +110,11 @@ function BottomPanelContent({ tab }: { tab: string }) {
             <>
               <span className="text-muted-foreground">Last:</span>
               <span className="font-mono">
-                Node {emcyEntries[emcyEntries.length - 1]?.node_id}
-                {' '}
-                0x{emcyEntries[emcyEntries.length - 1]?.error_code.toString(16).padStart(4, '0').toUpperCase()}
+                Node {emcyEntries[emcyEntries.length - 1]?.node_id} 0x
+                {emcyEntries[emcyEntries.length - 1]?.error_code
+                  .toString(16)
+                  .padStart(4, '0')
+                  .toUpperCase()}
               </span>
             </>
           )}
@@ -109,13 +130,15 @@ function BottomPanelContent({ tab }: { tab: string }) {
             Object.entries(ds402States).map(([nodeId, state]) => (
               <div key={nodeId} className="flex items-center gap-2">
                 <span className="font-mono">Node {nodeId}</span>
-                <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                  state.state === 'Operation Enabled'
-                    ? 'bg-green-500/20 text-green-400'
-                    : state.state === 'Fault'
-                      ? 'bg-red-500/20 text-red-400'
-                      : 'bg-yellow-500/20 text-yellow-400'
-                }`}>
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[10px] ${
+                    state.state === 'Operation Enabled'
+                      ? 'bg-green-500/20 text-green-400'
+                      : state.state === 'Fault'
+                        ? 'bg-red-500/20 text-red-400'
+                        : 'bg-yellow-500/20 text-yellow-400'
+                  }`}
+                >
                   {state.state}
                 </span>
               </div>
@@ -135,9 +158,11 @@ function BottomPanelContent({ tab }: { tab: string }) {
               const timedOut = elapsed > 10000;
               return (
                 <div key={hb.node_id} className="flex items-center gap-2">
-                  <span className={`w-1.5 h-1.5 rounded-full ${
-                    timedOut ? 'bg-red-500' : hb.alive ? 'bg-green-500' : 'bg-muted'
-                  }`} />
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      timedOut ? 'bg-red-500' : hb.alive ? 'bg-green-500' : 'bg-muted'
+                    }`}
+                  />
                   <span className="font-mono">Node {hb.node_id}</span>
                   <span className="text-muted-foreground">
                     {elapsed < 1000 ? `${elapsed}ms` : `${(elapsed / 1000).toFixed(1)}s`} ago
@@ -192,25 +217,28 @@ export function BottomPanel() {
   const panelRef = useRef<HTMLDivElement>(null);
   const resizeRef = useRef<{ startY: number; startHeight: number } | null>(null);
 
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    resizeRef.current = { startY: e.clientY, startHeight: height };
+  const handleResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      resizeRef.current = { startY: e.clientY, startHeight: height };
 
-    const handleMove = (e: MouseEvent) => {
-      if (!resizeRef.current) return;
-      const delta = resizeRef.current.startY - e.clientY;
-      setHeight(Math.max(60, Math.min(400, resizeRef.current.startHeight + delta)));
-    };
+      const handleMove = (e: MouseEvent) => {
+        if (!resizeRef.current) return;
+        const delta = resizeRef.current.startY - e.clientY;
+        setHeight(Math.max(60, Math.min(400, resizeRef.current.startHeight + delta)));
+      };
 
-    const handleUp = () => {
-      resizeRef.current = null;
-      document.removeEventListener('mousemove', handleMove);
-      document.removeEventListener('mouseup', handleUp);
-    };
+      const handleUp = () => {
+        resizeRef.current = null;
+        document.removeEventListener('mousemove', handleMove);
+        document.removeEventListener('mouseup', handleUp);
+      };
 
-    document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', handleUp);
-  }, [height, setHeight]);
+      document.addEventListener('mousemove', handleMove);
+      document.addEventListener('mouseup', handleUp);
+    },
+    [height, setHeight],
+  );
 
   if (!visible) {
     return (

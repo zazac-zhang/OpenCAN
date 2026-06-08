@@ -7,10 +7,11 @@
  * - Cyclic send list
  * - SDO Quick Access (node selector, index/sub, read/write)
  */
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { useAppStore, useNodes, useConnected } from '@/lib/store';
-import { useSendFrame, useSdoUpload, useSdoDownload } from '@/hooks/useCommands';
-import { Send, RotateCcw, Plus, Trash2, Play, Square } from 'lucide-react';
+
+import { Play, Plus, RotateCcw, Send, Square, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSdoDownload, useSdoUpload, useSendFrame } from '@/hooks/useCommands';
+import { useAppStore, useConnected, useNodes } from '@/lib/store';
 
 type DataFormat = 'hex' | 'ascii' | 'dec';
 
@@ -55,14 +56,17 @@ export function SendPanel() {
   const cyclicIntervals = useRef<Map<number, ReturnType<typeof setInterval>>>(new Map());
 
   // Parse data from hex string
-  const parseData = useCallback((hex: string): number[] => {
-    return hex
-      .trim()
-      .split(/\s+/)
-      .map((b) => parseInt(b, 16))
-      .filter((b) => !isNaN(b) && b >= 0 && b <= 255)
-      .slice(0, dlc);
-  }, [dlc]);
+  const parseData = useCallback(
+    (hex: string): number[] => {
+      return hex
+        .trim()
+        .split(/\s+/)
+        .map((b) => parseInt(b, 16))
+        .filter((b) => !Number.isNaN(b) && b >= 0 && b <= 255)
+        .slice(0, dlc);
+    },
+    [dlc],
+  );
 
   // Format data to display
   const formatData = useCallback((bytes: number[]): string => {
@@ -71,7 +75,7 @@ export function SendPanel() {
 
   const handleSend = useCallback(() => {
     const cobNum = parseInt(cobId.replace('0x', ''), 16);
-    if (isNaN(cobNum) || cobNum < 0 || cobNum > 0x7FF) return;
+    if (Number.isNaN(cobNum) || cobNum < 0 || cobNum > 0x7ff) return;
 
     const data = parseData(dataHex);
     const frameData = [...data, ...Array(Math.max(0, dlc - data.length)).fill(0)];
@@ -82,20 +86,27 @@ export function SendPanel() {
     setSendHistory((prev) => {
       const entry: SendHistoryEntry = { cobId: cobNum, dlc: frameData.length, data: frameData };
       // Avoid duplicates at the top
-      if (prev.length > 0 && prev[0].cobId === entry.cobId && prev[0].data.join() === entry.data.join()) {
+      if (
+        prev.length > 0 &&
+        prev[0].cobId === entry.cobId &&
+        prev[0].data.join() === entry.data.join()
+      ) {
         return prev;
       }
       return [entry, ...prev].slice(0, 20);
     });
   }, [cobId, dataHex, dlc, parseData, sendFrameMutation]);
 
-  const handleResend = useCallback((entry: SendHistoryEntry) => {
-    sendFrameMutation.mutate({ cobId: entry.cobId, data: entry.data });
-  }, [sendFrameMutation]);
+  const handleResend = useCallback(
+    (entry: SendHistoryEntry) => {
+      sendFrameMutation.mutate({ cobId: entry.cobId, data: entry.data });
+    },
+    [sendFrameMutation],
+  );
 
   const handleAddCyclic = useCallback(() => {
     const cobNum = parseInt(cobId.replace('0x', ''), 16);
-    if (isNaN(cobNum)) return;
+    if (Number.isNaN(cobNum)) return;
     const data = parseData(dataHex);
     setCyclicSends((prev) => [
       ...prev,
@@ -105,9 +116,7 @@ export function SendPanel() {
 
   const handleToggleCyclic = useCallback((index: number) => {
     setCyclicSends((prev) =>
-      prev.map((entry, i) =>
-        i === index ? { ...entry, running: !entry.running } : entry
-      )
+      prev.map((entry, i) => (i === index ? { ...entry, running: !entry.running } : entry)),
     );
   }, []);
 
@@ -147,30 +156,31 @@ export function SendPanel() {
 
   const handleSdoRead = useCallback(() => {
     const idx = parseInt(sdoIndex.replace('0x', ''), 16) || 0;
-    const sub = parseInt(sdoSubindex) || 0;
+    const sub = parseInt(sdoSubindex, 10) || 0;
     sdoUploadMutation.mutate(
       { node_id: sdoNode, index: idx, subindex: sub, data_type: 'UNS32' },
       {
-        onSuccess: (data) => setSdoResult(data?.data.map((b) => b.toString(16).padStart(2, '0')).join(' ') || '—'),
+        onSuccess: (data) =>
+          setSdoResult(data?.data.map((b) => b.toString(16).padStart(2, '0')).join(' ') || '—'),
         onError: () => setSdoResult('Error'),
-      }
+      },
     );
   }, [sdoNode, sdoIndex, sdoSubindex, sdoUploadMutation]);
 
   const handleSdoWrite = useCallback(() => {
     const idx = parseInt(sdoIndex.replace('0x', ''), 16) || 0;
-    const sub = parseInt(sdoSubindex) || 0;
+    const sub = parseInt(sdoSubindex, 10) || 0;
     const bytes = sdoValue
       .split(' ')
       .filter(Boolean)
       .map((b) => parseInt(b, 16))
-      .filter((b) => !isNaN(b));
+      .filter((b) => !Number.isNaN(b));
     sdoDownloadMutation.mutate(
       { node_id: sdoNode, index: idx, subindex: sub, data: bytes },
       {
         onSuccess: () => setSdoResult('OK'),
         onError: () => setSdoResult('Error'),
-      }
+      },
     );
   }, [sdoNode, sdoIndex, sdoSubindex, sdoValue, sdoDownloadMutation]);
 
@@ -220,10 +230,12 @@ export function SendPanel() {
                   <select
                     className="w-12 px-1 py-0.5 text-xs rounded border border-border bg-background"
                     value={dlc}
-                    onChange={(e) => setDlc(parseInt(e.target.value))}
+                    onChange={(e) => setDlc(parseInt(e.target.value, 10))}
                   >
                     {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-                      <option key={n} value={n}>{n}</option>
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -274,11 +286,19 @@ export function SendPanel() {
                 <select
                   className="w-16 px-1.5 py-0.5 text-xs rounded border border-border bg-background"
                   value={sdoNode}
-                  onChange={(e) => setSdoNode(parseInt(e.target.value))}
+                  onChange={(e) => setSdoNode(parseInt(e.target.value, 10))}
                 >
                   {nodes.length > 0
-                    ? nodes.map((n) => <option key={n.node_id} value={n.node_id}>Node {n.node_id}</option>)
-                    : [1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>Node {n}</option>)}
+                    ? nodes.map((n) => (
+                        <option key={n.node_id} value={n.node_id}>
+                          Node {n.node_id}
+                        </option>
+                      ))
+                    : [1, 2, 3, 4, 5].map((n) => (
+                        <option key={n} value={n}>
+                          Node {n}
+                        </option>
+                      ))}
                 </select>
                 <input
                   className="w-16 px-1.5 py-0.5 text-xs font-mono rounded border border-border bg-background"
@@ -356,9 +376,7 @@ export function SendPanel() {
                       className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-mono hover:bg-muted/30 transition-colors"
                     >
                       <span className="w-12">{formatCobId(entry.cobId)}</span>
-                      <span className="flex-1 truncate">
-                        {formatData(entry.data)}
-                      </span>
+                      <span className="flex-1 truncate">{formatData(entry.data)}</span>
                       <button
                         className="p-0.5 text-muted-foreground hover:text-primary transition-colors"
                         onClick={() => handleResend(entry)}
@@ -448,15 +466,15 @@ function MiniFrameTable() {
 
   const getTypeLabel = (cobId: number): { label: string; color: string } => {
     if (cobId === 0x080) return { label: 'SYNC', color: 'text-purple-400' };
-    if (cobId >= 0x700 && cobId <= 0x77F) return { label: 'HB', color: 'text-green-400' };
-    if (cobId >= 0x180 && cobId <= 0x1FF) return { label: 'TPDO1', color: 'text-blue-400' };
-    if (cobId >= 0x200 && cobId <= 0x27F) return { label: 'RPDO1', color: 'text-orange-400' };
-    if (cobId >= 0x280 && cobId <= 0x2FF) return { label: 'TPDO2', color: 'text-blue-400' };
-    if (cobId >= 0x300 && cobId <= 0x37F) return { label: 'RPDO2', color: 'text-orange-400' };
-    if (cobId >= 0x580 && cobId <= 0x5FF) return { label: 'SDO', color: 'text-yellow-400' };
-    if (cobId >= 0x600 && cobId <= 0x67F) return { label: 'SDO', color: 'text-yellow-400' };
-    if (cobId >= 0x081 && cobId <= 0x0FF) return { label: 'NMT', color: 'text-pink-400' };
-    if (cobId >= 0x80 && cobId <= 0x7F) return { label: 'NMT', color: 'text-pink-400' };
+    if (cobId >= 0x700 && cobId <= 0x77f) return { label: 'HB', color: 'text-green-400' };
+    if (cobId >= 0x180 && cobId <= 0x1ff) return { label: 'TPDO1', color: 'text-blue-400' };
+    if (cobId >= 0x200 && cobId <= 0x27f) return { label: 'RPDO1', color: 'text-orange-400' };
+    if (cobId >= 0x280 && cobId <= 0x2ff) return { label: 'TPDO2', color: 'text-blue-400' };
+    if (cobId >= 0x300 && cobId <= 0x37f) return { label: 'RPDO2', color: 'text-orange-400' };
+    if (cobId >= 0x580 && cobId <= 0x5ff) return { label: 'SDO', color: 'text-yellow-400' };
+    if (cobId >= 0x600 && cobId <= 0x67f) return { label: 'SDO', color: 'text-yellow-400' };
+    if (cobId >= 0x081 && cobId <= 0x0ff) return { label: 'NMT', color: 'text-pink-400' };
+    if (cobId >= 0x80 && cobId <= 0x7f) return { label: 'NMT', color: 'text-pink-400' };
     return { label: '—', color: 'text-muted-foreground' };
   };
 
@@ -494,7 +512,9 @@ function MiniFrameTable() {
         {displayFrames.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <p className="text-xs text-muted-foreground">No frames yet</p>
-            <p className="text-[10px] text-muted-foreground">Connect to a CAN bus to start capturing</p>
+            <p className="text-[10px] text-muted-foreground">
+              Connect to a CAN bus to start capturing
+            </p>
           </div>
         ) : (
           <div className="divide-y divide-border/30">
@@ -512,13 +532,13 @@ function MiniFrameTable() {
                     0x{frame.cob_id.toString(16).padStart(3, '0').toUpperCase()}
                   </span>
                   <span className={`w-12 ${typeInfo.color}`}>{typeInfo.label}</span>
-                  <span className={`w-6 ${frame.direction === 'tx' ? 'text-blue-400' : 'text-green-400'}`}>
+                  <span
+                    className={`w-6 ${frame.direction === 'tx' ? 'text-blue-400' : 'text-green-400'}`}
+                  >
                     {frame.direction.toUpperCase()}
                   </span>
                   <span className="w-6 text-muted-foreground">{frame.dlc}</span>
-                  <span className="flex-1 truncate">
-                    {formatData(frame.data)}
-                  </span>
+                  <span className="flex-1 truncate">{formatData(frame.data)}</span>
                 </div>
               );
             })}

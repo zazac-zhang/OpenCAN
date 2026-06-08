@@ -8,8 +8,8 @@
  * The component is compact enough to fit in a detail panel (~300px height).
  */
 
+import { AlertTriangle, ArrowRight, Power, Settings, Zap } from 'lucide-react';
 import { useMemo } from 'react';
-import { ArrowRight, AlertTriangle, Zap, Power, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface StateMachineProps {
@@ -86,13 +86,14 @@ const TRANSITIONS: Record<string, { label: string; target: string; icon: typeof 
   'Fault Reaction Active': [
     { label: 'auto → Not Ready', target: 'Not Ready to Switch On', icon: ArrowRight },
   ],
-  'Fault': [
-    { label: 'fault reset → SW Disabled', target: 'Switch On Disabled', icon: ArrowRight },
-  ],
+  Fault: [{ label: 'fault reset → SW Disabled', target: 'Switch On Disabled', icon: ArrowRight }],
 };
 
 /** Get state-specific styling based on the state key */
-function getStateStyle(stateKey: string, isActive: boolean): { bg: string; border: string; text: string; badge: string } {
+function getStateStyle(
+  stateKey: string,
+  isActive: boolean,
+): { bg: string; border: string; text: string; badge: string } {
   if (isActive) {
     switch (stateKey) {
       case 'Operation Enabled':
@@ -143,15 +144,8 @@ function getStateStyle(stateKey: string, isActive: boolean): { bg: string; borde
   };
 }
 
-export function StateMachine({
-  currentState,
-  onTransition,
-  readOnly = false,
-}: StateMachineProps) {
-  const availableTransitions = useMemo(
-    () => TRANSITIONS[currentState] ?? [],
-    [currentState],
-  );
+export function StateMachine({ currentState, onTransition, readOnly = false }: StateMachineProps) {
+  const availableTransitions = useMemo(() => TRANSITIONS[currentState] ?? [], [currentState]);
 
   return (
     <div className="space-y-2">
@@ -180,12 +174,24 @@ export function StateMachine({
                 isActive && 'ring-1 ring-offset-0',
               )}
             >
-              <Icon className={cn('w-3 h-3 shrink-0', isActive ? style.text : 'text-muted-foreground')} />
-              <span className={cn('font-medium', isActive ? 'text-foreground' : 'text-muted-foreground')}>
+              <Icon
+                className={cn('w-3 h-3 shrink-0', isActive ? style.text : 'text-muted-foreground')}
+              />
+              <span
+                className={cn(
+                  'font-medium',
+                  isActive ? 'text-foreground' : 'text-muted-foreground',
+                )}
+              >
                 {state.key}
               </span>
               {isActive && (
-                <span className={cn('ml-auto px-1.5 py-0.5 rounded text-[10px] font-medium', style.badge)}>
+                <span
+                  className={cn(
+                    'ml-auto px-1.5 py-0.5 rounded text-[10px] font-medium',
+                    style.badge,
+                  )}
+                >
                   ACTIVE
                 </span>
               )}

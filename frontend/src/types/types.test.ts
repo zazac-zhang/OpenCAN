@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 // Test type definitions and data structures
 describe('CAN types', () => {
@@ -64,7 +64,7 @@ describe('DS402 types', () => {
     const state = {
       node_id: 1,
       status_word: 0x0037,
-      control_word: 0x000F,
+      control_word: 0x000f,
       mode: 8,
       target_position: 1000,
       actual_position: 999,

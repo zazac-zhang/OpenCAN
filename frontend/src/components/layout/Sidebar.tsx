@@ -1,27 +1,35 @@
 // Sidebar with collapsible navigation groups and node list
 
-import { useAppStore, useNodes, useSelectedNode, useActiveGroup, useConnected, useSidebarCollapsed, GROUP_TABS } from '@/lib/store';
-import { useNmtCommand, useConnectBackend } from '@/hooks/useCommands';
 import {
+  Activity,
+  AlertCircle,
+  AlertTriangle,
+  BookOpen,
   ChevronDown,
   ChevronRight,
-  Send,
-  Activity,
-  AlertTriangle,
-  Network,
-  Users,
-  Radio,
-  Gauge,
-  AlertCircle,
-  Heart,
-  Wifi,
   CircleDot,
-  Play,
-  RotateCcw,
   FileCode2,
-  BookOpen,
+  Gauge,
+  Heart,
+  Network,
+  Play,
+  Radio,
+  RotateCcw,
+  Send,
+  Users,
+  Wifi,
 } from 'lucide-react';
+import { useConnectBackend, useNmtCommand } from '@/hooks/useCommands';
 import type { NavGroup } from '@/lib/store';
+import {
+  GROUP_TABS,
+  useActiveGroup,
+  useAppStore,
+  useConnected,
+  useNodes,
+  useSelectedNode,
+  useSidebarCollapsed,
+} from '@/lib/store';
 
 const GROUP_ICONS: Record<string, React.ReactNode> = {
   can: <Radio className="w-3.5 h-3.5" />,
@@ -58,7 +66,12 @@ const GROUP_LABELS: Record<NavGroup, string> = {
 // Track which tabs trigger the right detail panel
 const DETAIL_PANEL_TABS = new Set(['Nodes', 'DS402']);
 
-function NavGroupItem({ group, icon, label, tabs }: {
+function NavGroupItem({
+  group,
+  icon,
+  label,
+  tabs,
+}: {
   group: NavGroup;
   icon: React.ReactNode;
   label: string;
@@ -118,7 +131,9 @@ function TabItem({ group, tab }: { group: NavGroup; tab: { key: string; label: s
   const { setCurrentTab, toggleDetailPanel, detailPanelVisible } = useAppStore((s) => s.ui);
   const selectedNode = useSelectedNode();
 
-  const isActive = activeGroup === group && (activeTab === tab.key || (!activeTab && tab.key === GROUP_TABS[group]?.[0]?.key));
+  const isActive =
+    activeGroup === group &&
+    (activeTab === tab.key || (!activeTab && tab.key === GROUP_TABS[group]?.[0]?.key));
 
   const handleClick = () => {
     setActiveGroup(group);
@@ -180,16 +195,22 @@ function NodeListItem() {
                 if (!detailPanelVisible) toggleDetailPanel();
               }}
             >
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                node.nmt_state === 'Operational'
-                  ? 'bg-green-500'
-                  : node.nmt_state === 'PreOperational'
-                    ? 'bg-yellow-500'
-                    : 'bg-red-500'
-              }`} />
+              <span
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  node.nmt_state === 'Operational'
+                    ? 'bg-green-500'
+                    : node.nmt_state === 'PreOperational'
+                      ? 'bg-yellow-500'
+                      : 'bg-red-500'
+                }`}
+              />
               <span className="flex-1 text-left truncate">Node {node.node_id}</span>
               <span className="text-[10px] text-muted-foreground truncate">
-                {node.nmt_state === 'Operational' ? 'OP' : node.nmt_state === 'PreOperational' ? 'Pre' : 'ERR'}
+                {node.nmt_state === 'Operational'
+                  ? 'OP'
+                  : node.nmt_state === 'PreOperational'
+                    ? 'Pre'
+                    : 'ERR'}
               </span>
             </button>
           );
@@ -212,7 +233,12 @@ export function Sidebar() {
   };
 
   const handleQuickConnect = () => {
-    connectMutation.mutate({ backend_type: 'mock', channel: 'mock0', bitrate: dialogBitrate, node_id: 0 });
+    connectMutation.mutate({
+      backend_type: 'mock',
+      channel: 'mock0',
+      bitrate: dialogBitrate,
+      node_id: 0,
+    });
   };
 
   return (

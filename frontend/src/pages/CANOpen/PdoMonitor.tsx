@@ -8,10 +8,11 @@
  * - PDO mapping display toggle (shows decoded fields when mapping info available)
  * - Virtualized list for high-frequency PDO traffic
  */
-import { useState, useRef, useMemo, useEffect } from 'react';
-import { useAppStore } from '@/lib/store';
-import { useReadPdoMapping } from '@/hooks/useCommands';
+
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useReadPdoMapping } from '@/hooks/useCommands';
+import { useAppStore } from '@/lib/store';
 
 const PDO_TYPES = ['all', 'tpdo', 'rpdo'] as const;
 
@@ -21,10 +22,10 @@ const PDO_COB_BASE: Record<string, number[]> = {
   TPDO2: [0x200, 0x280, 0x300, 0x380, 0x400, 0x480, 0x500, 0x580],
   TPDO3: [0x280, 0x300, 0x380, 0x400, 0x480, 0x500, 0x580, 0x600],
   TPDO4: [0x300, 0x380, 0x400, 0x480, 0x500, 0x580, 0x600, 0x680],
-  RPDO1: [0x140, 0x1C0, 0x240, 0x2C0, 0x340, 0x3C0, 0x440, 0x4C0],
-  RPDO2: [0x1C0, 0x240, 0x2C0, 0x340, 0x3C0, 0x440, 0x4C0, 0x540],
-  RPDO3: [0x240, 0x2C0, 0x340, 0x3C0, 0x440, 0x4C0, 0x540, 0x5C0],
-  RPDO4: [0x2C0, 0x340, 0x3C0, 0x440, 0x4C0, 0x540, 0x5C0, 0x640],
+  RPDO1: [0x140, 0x1c0, 0x240, 0x2c0, 0x340, 0x3c0, 0x440, 0x4c0],
+  RPDO2: [0x1c0, 0x240, 0x2c0, 0x340, 0x3c0, 0x440, 0x4c0, 0x540],
+  RPDO3: [0x240, 0x2c0, 0x340, 0x3c0, 0x440, 0x4c0, 0x540, 0x5c0],
+  RPDO4: [0x2c0, 0x340, 0x3c0, 0x440, 0x4c0, 0x540, 0x5c0, 0x640],
 };
 
 function inferPdoLabel(cobId: number): string {
@@ -59,7 +60,12 @@ export function PdoMonitor() {
   const [typeFilter, setTypeFilter] = useState<'all' | 'tpdo' | 'rpdo'>('all');
   const [cobFilter, setCobFilter] = useState('');
   const [showMapping, setShowMapping] = useState(false);
-  const [pdoMappings, setPdoMappings] = useState<Record<string, { cob_id: number; entries: { index: number; subindex: number; bit_length: number }[] }>>({});
+  const [pdoMappings, setPdoMappings] = useState<
+    Record<
+      string,
+      { cob_id: number; entries: { index: number; subindex: number; bit_length: number }[] }
+    >
+  >({});
   const readPdoMapping = useReadPdoMapping();
 
   // Unique node IDs for filter dropdown
@@ -85,12 +91,12 @@ export function PdoMonitor() {
                   setPdoMappings((prev) => ({ ...prev, [key]: data }));
                 }
               },
-            }
+            },
           );
         }
       }
     }
-  }, [showMapping, uniqueNodes]);
+  }, [showMapping, uniqueNodes, readPdoMapping.mutate, pdoMappings]);
 
   // Calculate PDO rates per node
   const pdoStats = useMemo(() => {
@@ -118,8 +124,8 @@ export function PdoMonitor() {
     let result = entries;
 
     if (nodeFilter !== '') {
-      const nid = parseInt(nodeFilter);
-      if (!isNaN(nid)) {
+      const nid = parseInt(nodeFilter, 10);
+      if (!Number.isNaN(nid)) {
         result = result.filter((e) => e.node_id === nid);
       }
     }
@@ -130,7 +136,7 @@ export function PdoMonitor() {
 
     if (cobFilter !== '') {
       const cob = parseInt(cobFilter, 16);
-      if (!isNaN(cob)) {
+      if (!Number.isNaN(cob)) {
         result = result.filter((e) => e.cob_id === cob);
       }
     }
@@ -142,7 +148,7 @@ export function PdoMonitor() {
   const rowVirtualizer = useVirtualizer({
     count: filteredEntries.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => showMapping ? 48 : 28,
+    estimateSize: () => (showMapping ? 48 : 28),
     overscan: 10,
   });
 
@@ -169,8 +175,12 @@ export function PdoMonitor() {
           {Object.entries(pdoStats.rates).map(([nid, rate]) => (
             <div key={nid} className="p-3 border rounded-lg bg-card">
               <div className="text-xs text-muted-foreground">Node {nid} Rate</div>
-              <div className="text-xl font-bold font-mono mt-1">{rate} <span className="text-xs text-muted-foreground">fps</span></div>
-              <div className="text-xs text-muted-foreground">{pdoStats.stats[Number(nid)]?.count || 0} total</div>
+              <div className="text-xl font-bold font-mono mt-1">
+                {rate} <span className="text-xs text-muted-foreground">fps</span>
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {pdoStats.stats[Number(nid)]?.count || 0} total
+              </div>
             </div>
           ))}
         </div>
@@ -185,7 +195,9 @@ export function PdoMonitor() {
         >
           <option value="">All Nodes</option>
           {uniqueNodes.map((nid) => (
-            <option key={nid} value={nid}>Node {nid}</option>
+            <option key={nid} value={nid}>
+              Node {nid}
+            </option>
           ))}
         </select>
         <select
@@ -194,7 +206,9 @@ export function PdoMonitor() {
           className="px-2 py-1 text-xs rounded border border-border bg-card"
         >
           {PDO_TYPES.map((t) => (
-            <option key={t} value={t}>{t === 'all' ? 'All Types' : t.toUpperCase()}</option>
+            <option key={t} value={t}>
+              {t === 'all' ? 'All Types' : t.toUpperCase()}
+            </option>
           ))}
         </select>
         <input
@@ -219,9 +233,7 @@ export function PdoMonitor() {
       {filteredEntries.length === 0 ? (
         <div className="bg-card border border-border rounded-md p-6 text-center">
           <p className="text-sm text-muted-foreground">
-            {entries.length === 0
-              ? 'No PDO data yet'
-              : 'No entries match the current filter'}
+            {entries.length === 0 ? 'No PDO data yet' : 'No entries match the current filter'}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
             PDO frames will appear here when the protocol stack processes them
@@ -265,12 +277,18 @@ export function PdoMonitor() {
                   >
                     <div className="flex items-center gap-2 px-3 text-xs font-mono">
                       <span className="w-12 font-semibold">{entry.node_id}</span>
-                      <span className={`w-16 ${entry.pdo_type === 'tpdo' ? 'text-blue-500' : 'text-orange-500'}`}>
+                      <span
+                        className={`w-16 ${entry.pdo_type === 'tpdo' ? 'text-blue-500' : 'text-orange-500'}`}
+                      >
                         {entry.pdo_type.toUpperCase()}
                       </span>
-                      <span className="w-16">0x{entry.cob_id.toString(16).padStart(3, '0').toUpperCase()}</span>
+                      <span className="w-16">
+                        0x{entry.cob_id.toString(16).padStart(3, '0').toUpperCase()}
+                      </span>
                       <span className="flex-1 truncate">
-                        {entry.data.map((b) => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}
+                        {entry.data
+                          .map((b) => b.toString(16).padStart(2, '0').toUpperCase())
+                          .join(' ')}
                       </span>
                       <span className="w-20 text-muted-foreground text-[10px]">
                         {formatRelativeTime(entry.timestamp_ms)}

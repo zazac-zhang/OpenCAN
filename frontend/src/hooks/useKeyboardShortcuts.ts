@@ -17,7 +17,11 @@ export function useKeyboardShortcuts() {
       const isModifier = e.ctrlKey || e.metaKey;
       const target = e.target as HTMLElement;
       // Don't trigger shortcuts when typing in inputs
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT'
+      ) {
         return;
       }
 
@@ -53,7 +57,7 @@ export function useKeyboardShortcuts() {
       if (isModifier && ['1', '2', '3', '4'].includes(e.key)) {
         e.preventDefault();
         const groups = ['can', 'canopen', 'recording', 'eds'] as const;
-        const idx = parseInt(e.key) - 1;
+        const idx = parseInt(e.key, 10) - 1;
         const group = groups[idx];
         if (group) {
           const { setActiveGroup } = useAppStore.getState().sidebar;
