@@ -20,7 +20,7 @@ const FrameMonitor = lazy(() => import('@/pages/CAN/FrameMonitor').then(m => ({ 
 const SendPanel = lazy(() => import('@/pages/CAN/SendPanel').then(m => ({ default: m.SendPanel })));
 const BusStatistics = lazy(() => import('@/pages/CAN/BusStatistics').then(m => ({ default: m.BusStatistics })));
 const ErrorFrames = lazy(() => import('@/pages/CAN/ErrorFrames').then(m => ({ default: m.ErrorFrames })));
-const NetworkOverview = lazy(() => import('@/pages/CANOpen/NetworkOverview').then(m => ({ default: m.NetworkOverview })));
+const NetworkTopology = lazy(() => import('@/pages/CANOpen/NetworkTopology').then(m => ({ default: m.NetworkTopology })));
 const NodeDetail = lazy(() => import('@/pages/CANOpen/NodeDetail').then(m => ({ default: m.NodeDetail })));
 const PdoMonitor = lazy(() => import('@/pages/CANOpen/PdoMonitor').then(m => ({ default: m.PdoMonitor })));
 const Ds402Control = lazy(() => import('@/pages/CANOpen/Ds402Control').then(m => ({ default: m.Ds402Control })));
@@ -50,7 +50,7 @@ const TAB_COMPONENTS: Record<string, Record<string, React.ComponentType>> = {
     Errors: ErrorFrames,
   },
   canopen: {
-    Network: NetworkOverview,
+    Network: NetworkTopology,
     Nodes: NodeDetail,
     PDO: PdoMonitor,
     DS402: Ds402Control,
