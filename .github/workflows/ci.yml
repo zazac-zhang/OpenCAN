@@ -102,6 +102,36 @@ jobs:
         if: matrix.feature == ''
         run: cargo build --workspace
 
+  # === Frontend: typecheck + lint + build ===
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Type check
+        run: npm run typecheck
+        working-directory: frontend
+
+      - name: Lint
+        run: npm run lint
+        working-directory: frontend
+
+      - name: Build
+        run: npm run build
+        working-directory: frontend
+
   # === vcan test: Linux-only end-to-end with virtual CAN ===
   vcan-test:
     name: vcan E2E (Linux)
